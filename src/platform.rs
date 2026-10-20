@@ -18,7 +18,7 @@ pub fn show_error(s: &str) {
 }
 pub fn clipboard_text() -> Result<String, String> {
     unsafe {
-        if OpenClipboard(ptr::null_mut()) == 0 {
+        if !open_clipboard(0) {
             return Err("Clipboard is busy.".into());
         }
         let h = GetClipboardData(13);
@@ -45,6 +45,9 @@ pub fn clipboard_text() -> Result<String, String> {
     }
 }
 pub fn set_clipboard_text(s: &str) -> Result<(), String> {
+    set_text(s, false)
+}
+fn set_text(s: &str, temporary: bool) -> Result<(), String> {
     unsafe {
         let data = wide(s);
         let h = GlobalAlloc(GMEM_MOVEABLE, data.len() * 2);
@@ -58,12 +61,15 @@ pub fn set_clipboard_text(s: &str) -> Result<(), String> {
         }
         ptr::copy_nonoverlapping(data.as_ptr(), p, data.len());
         GlobalUnlock(h);
-        if OpenClipboard(ptr::null_mut()) == 0 {
+        if !open_clipboard(0) {
             windows_sys::Win32::Foundation::GlobalFree(h);
             return Err("Clipboard is busy.".into());
         }
         EmptyClipboard();
         let result = SetClipboardData(13, h);
+        if temporary {
+            exclude_from_history();
+        }
         CloseClipboard();
         if result.is_null() {
             windows_sys::Win32::Foundation::GlobalFree(h);
@@ -159,55 +165,106 @@ pub fn capture_selection_from(source: usize) -> Result<Vec<PathBuf>, String> {
         .map_err(|e| e.to_string())?;
     serde_json::from_slice(&data).map_err(|_| "Invalid capture response".to_string())?
 }
+pub fn window_class(hwnd: usize) -> String {
+    let mut buffer = [0u16; 128];
+    let n = unsafe { GetClassNameW(hwnd as _, buffer.as_mut_ptr(), buffer.len() as i32) };
+    String::from_utf16_lossy(&buffer[..n.max(0) as usize])
+}
+/// Explorer windows and the desktop answer with file paths; everything else may have text.
+pub fn is_shell_window(hwnd: usize) -> bool {
+    matches!(
+        window_class(hwnd).as_str(),
+        "CabinetWClass" | "ExploreWClass" | "Progman" | "WorkerW"
+    )
+}
+/// Ctrl+C means "interrupt" in terminals, so PieAll never sends it there.
+pub fn is_terminal_window(hwnd: usize) -> bool {
+    matches!(
+        window_class(hwnd).as_str(),
+        "ConsoleWindowClass"
+            | "CASCADIA_HOSTING_WINDOW_CLASS"
+            | "mintty"
+            | "PuTTY"
+            | "VirtualConsoleClass"
+    )
+}
 pub fn capture_selection_direct(source: usize) -> Result<Vec<PathBuf>, String> {
     use windows::{
         core::Interface,
-        Win32::{System::Com::*, UI::Shell::*},
+        Win32::{
+            System::{Com::*, Variant::VARIANT},
+            UI::Shell::*,
+        },
     };
     unsafe {
         let foreground = source as isize;
+        let desktop = matches!(window_class(source).as_str(), "Progman" | "WorkerW");
         let initialized = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
         let result = (|| -> windows::core::Result<Vec<PathBuf>> {
             let shell: IShellWindows = CoCreateInstance(&ShellWindows, None, CLSCTX_LOCAL_SERVER)?;
-            let mut matches = Vec::new();
-            for i in 0..shell.Count()? {
-                let variant = windows::Win32::System::Variant::VARIANT::from(i);
-                let dispatch = match shell.Item(&variant) {
-                    Ok(v) => v,
-                    Err(_) => continue,
-                };
-                let browser = match dispatch.cast::<IWebBrowserApp>() {
-                    Ok(v) => v,
-                    Err(_) => continue,
-                };
-                if browser.HWND()?.0 as isize != foreground {
-                    continue;
+            let mut providers: Vec<IServiceProvider> = Vec::new();
+            if desktop {
+                let mut hwnd = 0i32;
+                let dispatch = shell.FindWindowSW(
+                    &VARIANT::from(CSIDL_DESKTOP as i32),
+                    &VARIANT::default(),
+                    SWC_DESKTOP,
+                    &mut hwnd,
+                    SWFO_NEEDDISPATCH,
+                )?;
+                providers.push(dispatch.cast()?);
+            } else {
+                for i in 0..shell.Count()? {
+                    let variant = VARIANT::from(i);
+                    let Ok(dispatch) = shell.Item(&variant) else {
+                        continue;
+                    };
+                    let Ok(browser) = dispatch.cast::<IWebBrowserApp>() else {
+                        continue;
+                    };
+                    if browser.HWND()?.0 == foreground {
+                        providers.push(browser.cast()?);
+                    }
                 }
-                matches.push(browser);
             }
-            if matches.len() != 1 {
+            // Explorer tabs share one frame window; only the active tab's view is visible.
+            let mut views = Vec::new();
+            for provider in providers {
+                let Ok(browser) = provider.QueryService::<IShellBrowser>(&SID_STopLevelBrowser)
+                else {
+                    continue;
+                };
+                let Ok(view) = browser.QueryActiveShellView() else {
+                    continue;
+                };
+                if view.GetWindow().is_ok_and(|h| IsWindowVisible(h.0) != 0) {
+                    views.push(view);
+                }
+            }
+            if views.len() != 1 {
                 return Ok(vec![]);
             }
-            let provider: IServiceProvider = matches[0].cast()?;
-            let browser: IShellBrowser = provider.QueryService(&SID_STopLevelBrowser)?;
-            let view = browser.QueryActiveShellView()?;
-            let view_hwnd = view.GetWindow()?;
-            if IsWindowVisible(view_hwnd.0) == 0 {
-                return Ok(vec![]);
-            }
-            let folder: IFolderView2 = view.cast()?;
-            let items = folder.GetSelection(false)?;
-            if items.GetCount()? > 256 {
-                return Ok(vec![]);
-            }
-            let mut paths = Vec::new();
-            for i in 0..items.GetCount()? {
-                let item = items.GetItemAt(i)?;
-                let raw = item.GetDisplayName(SIGDN_FILESYSPATH)?;
+            let folder: IFolderView2 = views[0].cast()?;
+            let path_of = |item: IShellItem| -> Option<PathBuf> {
+                let raw = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
                 let text = raw.to_string();
                 CoTaskMemFree(Some(raw.0 as *const _));
-                let p = PathBuf::from(text?);
-                if p.exists() {
+                Some(PathBuf::from(text.ok()?)).filter(|p| p.exists())
+            };
+            let mut paths = Vec::new();
+            if let Ok(items) = folder.GetSelection(false) {
+                if items.GetCount()? > 256 {
+                    return Ok(vec![]);
+                }
+                for i in 0..items.GetCount()? {
+                    if let Some(p) = path_of(items.GetItemAt(i)?) {
+                        paths.push(p);
+                    }
+                }
+            }
+            // Nothing selected: offer the open folder itself.
+            if paths.is_empty() {
+                if let Some(p) = folder.GetFolder::<IShellItem>().ok().and_then(path_of) {
                     paths.push(p);
                 }
             }
@@ -218,6 +275,167 @@ pub fn capture_selection_direct(source: usize) -> Result<Vec<PathBuf>, String> {
         }
         result.map_err(|_| "Selection unavailable. Drop files or use Open files.".into())
     }
+}
+
+/// Marks keystrokes PieAll injects so its own keyboard hook lets them through.
+pub const INJECTED_MARKER: usize = 0x5049_4541;
+pub fn send_chord(modifier: u16, key: u16) {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+    let event = |vk: u16, up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: if up { KEYEVENTF_KEYUP } else { 0 },
+                time: 0,
+                dwExtraInfo: INJECTED_MARKER,
+            },
+        },
+    };
+    let inputs = [
+        event(modifier, false),
+        event(key, false),
+        event(key, true),
+        event(modifier, true),
+    ];
+    unsafe {
+        SendInput(
+            inputs.len() as u32,
+            inputs.as_ptr(),
+            std::mem::size_of::<INPUT>() as i32,
+        );
+    }
+}
+fn open_clipboard(owner: usize) -> bool {
+    for _ in 0..20 {
+        if unsafe { OpenClipboard(owner as _) } != 0 {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    false
+}
+fn exclude_from_history() {
+    // Keeps PieAll's temporary clipboard use out of Win+V history and cloud sync.
+    unsafe {
+        let format =
+            RegisterClipboardFormatW(wide("ExcludeClipboardContentFromMonitorProcessing").as_ptr());
+        let h = GlobalAlloc(GMEM_MOVEABLE, 4);
+        if format != 0 && !h.is_null() && SetClipboardData(format, h).is_null() {
+            windows_sys::Win32::Foundation::GlobalFree(h);
+        }
+    }
+}
+/// A byte copy of every memory-backed clipboard format, so a borrowed clipboard can be put back.
+pub struct ClipboardSnapshot(Vec<(u32, Vec<u8>)>);
+impl ClipboardSnapshot {
+    pub fn take(owner: usize) -> Option<Self> {
+        if !open_clipboard(owner) {
+            return None;
+        }
+        let mut formats = Vec::new();
+        let mut total = 0usize;
+        let mut format = 0;
+        let complete = loop {
+            format = unsafe { EnumClipboardFormats(format) };
+            if format == 0 {
+                break true;
+            }
+            // GDI handles and private handle formats are not memory blocks; Windows
+            // regenerates the standard bitmap/metafile views from their DIB/EMF siblings.
+            if matches!(format, 2 | 3 | 9 | 14 | 0x80..=0x8E | 0x200..=0x3FF) {
+                continue;
+            }
+            unsafe {
+                let h = GetClipboardData(format);
+                if h.is_null() {
+                    continue;
+                }
+                let size = GlobalSize(h);
+                total += size;
+                if total > 64 * 1024 * 1024 {
+                    break false;
+                }
+                let p = GlobalLock(h) as *const u8;
+                if p.is_null() {
+                    continue;
+                }
+                formats.push((format, std::slice::from_raw_parts(p, size).to_vec()));
+                GlobalUnlock(h);
+            }
+        };
+        unsafe { CloseClipboard() };
+        complete.then_some(Self(formats))
+    }
+    pub fn restore(&self, owner: usize) -> Result<(), String> {
+        if !open_clipboard(owner) {
+            return Err("Clipboard is busy.".into());
+        }
+        unsafe {
+            EmptyClipboard();
+            for (format, bytes) in &self.0 {
+                let h = GlobalAlloc(GMEM_MOVEABLE, bytes.len().max(1));
+                if h.is_null() {
+                    continue;
+                }
+                let p = GlobalLock(h) as *mut u8;
+                if p.is_null() {
+                    windows_sys::Win32::Foundation::GlobalFree(h);
+                    continue;
+                }
+                ptr::copy_nonoverlapping(bytes.as_ptr(), p, bytes.len());
+                GlobalUnlock(h);
+                if SetClipboardData(*format, h).is_null() {
+                    windows_sys::Win32::Foundation::GlobalFree(h);
+                }
+            }
+            exclude_from_history();
+            CloseClipboard();
+        }
+        Ok(())
+    }
+}
+/// Copies the source window's text selection with Ctrl+C, then puts the clipboard back.
+/// Returns nothing when the app copied no text, which means nothing was selected.
+pub fn copy_selection(owner: usize) -> Option<(String, ClipboardSnapshot)> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_CONTROL;
+    let snapshot = ClipboardSnapshot::take(owner)?;
+    let before = unsafe { GetClipboardSequenceNumber() };
+    send_chord(VK_CONTROL, b'C' as u16);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(300);
+    while unsafe { GetClipboardSequenceNumber() } == before {
+        if std::time::Instant::now() > deadline {
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    // Apps often write several formats in a row; let them finish.
+    std::thread::sleep(std::time::Duration::from_millis(40));
+    let text = clipboard_text().ok();
+    let _ = snapshot.restore(owner);
+    let text = text.filter(|t| !t.trim().is_empty() && t.len() <= 2 * 1024 * 1024)?;
+    Some((text, snapshot))
+}
+/// Replaces the selection in the foreground window with `text`, then restores the clipboard.
+/// Returns false when focus moved elsewhere; the text is then left on the clipboard.
+pub fn paste_text(
+    source: usize,
+    text: &str,
+    snapshot: &ClipboardSnapshot,
+    owner: usize,
+) -> Result<bool, String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_CONTROL;
+    set_text(text, true)?;
+    std::thread::sleep(std::time::Duration::from_millis(80));
+    if unsafe { GetForegroundWindow() } as usize != source {
+        return Ok(false);
+    }
+    send_chord(VK_CONTROL, b'V' as u16);
+    // Paste is read asynchronously by the target app; give it time before restoring.
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    snapshot.restore(owner)?;
+    Ok(true)
 }
 pub fn window_action(id: &str, raw: usize) -> Result<String, String> {
     use windows_sys::Win32::{Foundation::RECT, Graphics::Gdi::*};
@@ -245,7 +463,11 @@ pub fn window_action(id: &str, raw: usize) -> Result<String, String> {
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
             );
-            return Ok("Always-on-top toggled.".into());
+            return Ok(if on {
+                "Window unpinned from the top.".into()
+            } else {
+                "Window pinned on top.".into()
+            });
         }
         let monitor = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
         let mut info: MONITORINFO = std::mem::zeroed();
@@ -287,7 +509,11 @@ pub fn window_action(id: &str, raw: usize) -> Result<String, String> {
         {
             return Err("Windows refused the window change.".into());
         }
-        Ok("Window updated.".into())
+        Ok(if id == "center_window" {
+            "Window centered.".into()
+        } else {
+            "Window fills the screen.".into()
+        })
     }
 }
 pub fn set_clipboard_image(width: u32, height: u32, bgra: &[u8]) -> Result<(), String> {

@@ -1,5 +1,35 @@
-﻿# PieAll design
+# PieAll design
 Author: Nitish
+
+## Floating ring and toast — 20 October 2026
+
+This supersedes the floating-ring parts of the section below; the dashboard look is unchanged.
+
+- **Gesture.** Hold ` and the ring appears centered on the cursor, already showing what it found. Sliding toward a slice highlights it by angle, so a flick past the rim still counts. Releasing runs it. Releasing in the center (66-unit dead zone) leaves the ring open with "Click an action · Esc closes". While the key is held, the hub hint reads "Release on an action" in warm amber.
+- **Look.** Smoked translucent glass: wedges `rgba(36,29,24,0.66)` with a faint cream edge and a soft drop shadow. The selected wedge is burnt orange `rgba(205,104,48,0.94)` with white text. Gaps and corners are fully transparent, so the desktop shows through. The hub is darker glass with the thumbnail or kind icon, the target name and the hint. No rim disc. It opens in 140 ms with a fade-scale, removed under reduced motion. Forced-colors styling is unchanged. There is still no native blur.
+- **Slices.** Up to eight, sector zero at twelve o'clock, clockwise. Icon above a 12.5 px label, with the hint ("50% width & height", "White background", "Opens more") shown only on the selected slice. Submenus replace the ring in place; the hub becomes Back with the submenu's name.
+- **Keyboard.** Arrows and Tab move a roving selection from nothing selected; Enter or Space runs it; 1–8 run directly; Backspace or Escape leaves a submenu; Escape closes and returns focus to the source window. Slices are `menuitem`s inside a `menu` named for the target, and submenus carry `aria-haspopup`.
+- **Toast.** A 460×88 DIP pill at the bottom center of the cursor's work area, click-through and never focused. Dark glass with a 32 px status mark: green check (saved/copied), red alert (failed), neutral ring (info), spinner (working). A bold title such as "Saved photo-compressed.jpg" sits over a muted detail such as "2.4 MB → 820 KB, 66% smaller". It lingers 3 s, or 6 s for errors. Because the window never takes focus, screen readers may not announce it; the dashboard status line remains the accessible record.
+
+## Current Tauri design — 20 October 2026
+
+The default shell follows Nitish's radial-menu references: rounded separated wedges, warm translucent fills, a quiet center target, local stroke icons and a distinct selected sector. This section and docs/tauri-port.md supersede the historical GDI record below.
+
+Ivory #F5EFE5 page, cream #FCF7EE controls, warm ink #342B23, secondary #756453, divider #DFD3C2, amber wedge #F4D6AF, active wedge #C66A35 and accent #9B4F29. Floating wedges use alpha peach fills and a subtle rim, without native acrylic/Mica or backdrop blur. Segoe UI Variable Text/Segoe UI needs no downloaded fonts; local SVG icons share a 1.7 stroke. web/tokens.css owns tokens. Controls include focus outlines, restrained hover/press states, themed selection/scrollbars, reduced-motion handling and forced-colors sector styles.
+
+The floating ring is 440 DIP with a circular native hit region. SVG sectors use a 440-unit viewBox, 196 outer radius and 82 inner radius, rounded on both edges. Sector zero is centered at twelve o'clock, clockwise, at most six visible; excess actions become All actions after five contextual choices. Convert drills into PNG/JPEG/WebP only, with center/Backspace to return. JPEG uses white behind alpha; its full editor allows another background. Unsupported reference formats are not presented as working features.
+
+The center shows thumbnail/icon, bounded target name/count and an Escape hint. Hover selects; click executes. SVG groups expose button names/roles. Floating arrows/Tab use roving focus, Enter/Space executes, 1–6 activates and Escape backs out/closes. Dashboard Tab remains document navigation. Native focus loss dismisses the floating ring; explicit dismissal restores source focus when its PID matches. The embedded center opens file selection.
+
+Dashboard default 1040×740 DIP, minimum 640×540: brand/Show ring header, category/count sidebar, target/Open files/explicit clipboard row, contextual ring and searchable action list. Narrow layouts visually collapse category text while retaining accessible names. Search supports / outside inputs. Unsupported rows are disabled with eligibility hints. Loading/busy, empty selection, failed capture, connection errors, no matches and action errors have explicit states. A persistent live status line reports progress; selectable results and Copy feedback appear below the ring.
+
+Parameterized actions replace the list with an inline editor. Labelled numeric/text controls remain keyboard-accessible; first-field focus, Enter submit and Escape/Cancel return are provided. Previews approximate crop bounds/invalid rectangles, resize dimensions without upscaling and frame padding/color/corners. Native validation applies to every selected input. Decode failure leaves the editor usable. Updates show accessible plain-text notes, progress, check/download states and separate inline install confirmation. Confirmation names the reviewed version and is rejected if that version changes before installation.
+
+Actual React source was statically rendered at 1040px with an illustrative selection. Native transparency, hit regions, WebView2 keyboard behavior, screen-reader exposure, focus restoration, mixed DPI, text scaling and small work areas remain unverified. The dashboard must remain the keyboard/screen-reader alternative. There are no modifier-drag invocation, pointer crop handles, configurable shortcuts or recent-use ranking yet.
+
+## Historical GDI design (legacy-ui only)
+
+The following applies only to the explicit native fallback. An exact pre-port copy is retained in docs/native-baseline-design.md.
 
 How the native Windows UI (`src/ui.rs`) looks and behaves today. It is a GDI first pass, not the Direct2D target in the plan.
 

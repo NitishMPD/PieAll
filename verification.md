@@ -1,6 +1,64 @@
 ﻿# Verification record
 Author: Nitish
 
+## Hold-to-open, in-place actions — 20 October 2026
+
+Passed after the invocation rework:
+
+- `cargo fmt --all`, `cargo check --workspace --all-targets --locked` and `cargo clippy --workspace --all-targets --locked -- -D warnings`.
+- `cargo test --workspace --locked`: 18 passed (14 library, including smart naming, compress/scale outputs and transparency-preserving compression; 4 shell, including toast summaries).
+- `pnpm run typecheck`, `pnpm run test` (6 passed: geometry, sector-by-angle, menu resolution) and `pnpm run format:check`.
+
+Not verified, user-run: the keyboard hook's tap/hold timing and replay order in real apps, foreground activation from the hook, Explorer COM capture on the desktop and Windows 11 tabs, Ctrl+C/Ctrl+V text round-trips and clipboard restoration in common apps, toast placement and click-through, ring translucency over varied backgrounds, and mixed DPI.
+
+## Release handoff completion — 20 October 2026
+
+The current release tooling supersedes the earlier blocked port check below. The toolchain now completes native source checks; no missing-linker blocker remains for this checkout's checks. An updater async result needed an explicit Result type, which was corrected. The initial combined frontend run discovered the Node test files and failed discovery; Vitest is now scoped to web, with release tools run separately through Node's test runner.
+
+Passed on the final release source:
+
+- `cargo fmt --all -- --check`.
+- `cargo check --workspace --all-targets --locked --features release-tools`.
+- `cargo clippy --workspace --all-targets --locked --features release-tools -- -D warnings`.
+- `cargo test -p pieall --locked --lib actions::tests`: 4 passed.
+- `cargo test -p pieall --locked --lib output::tests`: 2 passed.
+- `cargo test -p pieall --locked --lib boundary_tests`: 5 passed.
+- `cargo test -p pieall --locked --lib concurrency_tests`: 1 passed.
+- `cargo test -p pieall-desktop --locked --bin pieall-desktop shell::tests`: 3 passed, including public-key validity and reviewed-version confirmation.
+- `cargo test -p pieall-desktop --locked --features release-tools --bin release-verify`: 2 passed, including valid authentication, byte/comment tampering, version mismatch, malformed keys/signatures, missing signed version and size rejection. Test vectors contain only a public key/signature from a deliberately non-secret fixture.
+- `pnpm typecheck`, `pnpm test` (2 frontend tests), `pnpm test:release` (7 Node tests), `pnpm format:check` and release-script `node --check` parsing.
+- `node scripts/release-version.cjs --check`: source versions remain 0.1.0; no release bump was applied to this working tree.
+- PowerShell parser accepted package-release.ps1 without executing packaging/signing. Python AST parsing passed; workflow YAML, triggers and shared concurrency were parsed/checked. Installer guard was reviewed statically against pinned Tauri CLI 2.12.3 templates; no NSIS installer compilation/runtime test is claimed.
+- `python scripts/bundle-notices.py`: 303 packages consolidated into 196 distinct full texts in one 655502-byte resource. The original retained-text folders are not separately bundled.
+- `git diff --check` passed.
+
+That is 17 targeted native tests plus 9 JavaScript tests. Unit-test compilation/execution and source checks are not product builds or app launches. No product build, dev server, app/installer launch, production key generation, signing, GitHub write, branch, commit, push, publication or deployment was performed. The workflow was authored, not run.
+
+Unverified acceptance gates remain in docs/releases.md: clean Windows installation/uninstallation; manual-install refusal and bounded updater waiting; native UI/focus/DPI/accessibility; real release key matching; installer/portable signing, upload/readback/publication; restart and output preservation; live retry/recovery; measured artifact size and WebView2 process-tree cost. Dedicated repository signing configuration and the product owner's distribution-license choice remain external setup/decisions.
+
+## Tauri port — 20 October 2026
+
+Current default shell: Tauri 2 + React/TypeScript, package pieall-desktop, with the original Rust action library. The records below this section describe the earlier native implementation and do not certify the new shell.
+
+Passed for the port source:
+
+- `pnpm typecheck`.
+- `pnpm test`: two geometry/context-ranking tests.
+- `pnpm format:check`.
+- `cargo fmt --all -- --check`.
+- `cargo metadata --no-deps --locked --format-version 1`: workspace/lockfile metadata resolves.
+- Production JavaScript/Windows Cargo dependency inventory refreshed: 303 dependencies, zero missing license texts in the generated inventory. Some upstream archives omit texts; commit-pinned upstream copies/standard MPL text are attributed in their license directories.
+- Actual React components rendered to a static illustrative selection at 1040px, with no browser console errors. An initial preview transport was truncated/incorrectly decoded and was corrected before the valid layout inspection. This establishes source layout only; no app/dev server/frontend production bundle was launched. Minimum-width behavior is covered by source CSS, not a verified native screenshot.
+- Tauri CLI configuration inspection and signing/build help were read. Its signer supports app-version binding, and build signs version metadata automatically; no key or signed artifact was generated.
+
+Blocked: `cargo check --workspace --all-targets` failed because MSVC `link.exe` is not installed/available. Rust itself is installed (1.97.1), but not on this terminal's default PATH; checks used its explicit user Cargo directory. Tauri environment inspection also found no Visual Studio/MSVC C++ toolchain. No port Rust type-check, strict Clippy or native test success is claimed. The two new shell-state tests are written but not executed. Earlier native-MVP test results are historical, not proof that the port compiles.
+
+Use an x64 Visual Studio developer terminal with Rust on PATH, then run the source-check commands in docs/tauri-port.md. User-run development command: `pnpm tauri dev`. User-run release executable build: `pnpm tauri build --no-bundle`. Signed NSIS packaging after dedicated key setup: `pnpm package:windows`. These were not executed by the agent.
+
+Unverified: helper dispatch in the packaged executable; all 44 commands through Tauri IPC; file drops and forwarding; tray/shortcut conflicts; selection cancellation/reentry; native focus/transparent corners; screen readers and WebView2 keyboard semantics; preview alignment and memory; mixed DPI/text scaling; clean install/uninstall/restart; signed-version/installer rejection and network retry; artifact size and complete process-tree performance. Follow the expanded acceptance gates in docs/tauri-port.md as well as the native scenarios below. No branch, commit, push, deployment or publication was performed.
+
+## Historical native verification
+
 Date: 19 October 2026. Environment: Windows, Rust 1.92.0 MSVC host. This record describes code checks, not a tested app release.
 
 ## Passed automated checks

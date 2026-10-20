@@ -1,0 +1,36 @@
+{
+  "name": "pieall-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run web",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri",
+    "package:windows": "tauri build --bundles nsis",
+    "format:check": "prettier --check web \"scripts/*.cjs\" \"scripts/fixtures/*.json\" .github/workflows/release.yml package.json src-tauri/tauri.conf.json src-tauri/capabilities/local.json tsconfig.json vite.config.ts index.html",
+    "test:release": "node --test scripts/release-version.test.cjs scripts/release-artifacts.test.cjs",
+    "notices:bundle": "python scripts/bundle-notices.py"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "prettier": "3.9.10",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  },
+  "packageManager": "pnpm@11.10.0",
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

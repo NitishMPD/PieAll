@@ -408,7 +408,16 @@ unsafe fn tray_menu() {
     let m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING, 1, wide("Open PieAll").as_ptr());
     AppendMenuW(m, MF_STRING, 2, wide("Show action ring").as_ptr());
-    AppendMenuW(m, if (*a).update_busy { MF_GRAYED } else { MF_STRING }, 4, wide(update_label()).as_ptr());
+    AppendMenuW(
+        m,
+        if (*a).update_busy {
+            MF_GRAYED
+        } else {
+            MF_STRING
+        },
+        4,
+        wide(update_label()).as_ptr(),
+    );
     AppendMenuW(m, MF_STRING, 3, wide("Exit").as_ptr());
     let mut pt: POINT = zeroed();
     GetCursorPos(&mut pt);
@@ -436,7 +445,9 @@ unsafe fn exit_app() {
     let a = app();
     if (*a).busy > 0 || (*a).resolving || (*a).update_busy || !(*a).editor.is_null() {
         show_dashboard();
-        status("Finish the current action, selection or update, and close the editor before exiting.");
+        status(
+            "Finish the current action, selection or update, and close the editor before exiting.",
+        );
         return;
     }
     DestroyWindow((*a).main);
@@ -445,10 +456,15 @@ unsafe fn exit_app() {
 // All update state belongs to the UI thread; workers deliver owned events only.
 unsafe fn update_label() -> &'static str {
     let a = app();
-    if (*a).update_busy { "Updating…" }
-    else if (*a).update_ready.is_some() { "Install update…" }
-    else if (*a).update_available.is_some() { "Download update" }
-    else { "Check for updates" }
+    if (*a).update_busy {
+        "Updating…"
+    } else if (*a).update_ready.is_some() {
+        "Install update…"
+    } else if (*a).update_available.is_some() {
+        "Download update"
+    } else {
+        "Check for updates"
+    }
 }
 
 unsafe fn update_status(message: &str) {
@@ -469,9 +485,16 @@ fn post_update(main: usize, event: UpdateEvent) {
 
 unsafe fn check_update(manual: bool) {
     let a = app();
-    if (*a).update_busy || (*a).update_ready.is_some() || (!manual && (*a).update_available.is_some()) { return; }
+    if (*a).update_busy
+        || (*a).update_ready.is_some()
+        || (!manual && (*a).update_available.is_some())
+    {
+        return;
+    }
     if !updates::configured() {
-        if manual { update_status("Updates require a signed installed release; see docs/releases.md."); }
+        if manual {
+            update_status("Updates require a signed installed release; see docs/releases.md.");
+        }
         return;
     }
     (*a).update_busy = true;
@@ -482,7 +505,9 @@ unsafe fn check_update(manual: bool) {
 
 unsafe fn update_action() {
     let a = app();
-    if (*a).update_busy { return; }
+    if (*a).update_busy {
+        return;
+    }
     if (*a).update_ready.is_some() {
         if (*a).busy > 0 || (*a).resolving || !(*a).editor.is_null() {
             show_dashboard();
@@ -496,10 +521,14 @@ unsafe fn update_action() {
         let answer = MessageBoxW((*a).dash, wide(&format!("Install PieAll {version}? PieAll will close. The installer will let you reopen it when finished. Your files are preserved.")).as_ptr(), wide("Install PieAll update").as_ptr(), MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
         (*a).busy -= 1;
         (*a).update_busy = false;
-        if answer != IDYES { return; }
+        if answer != IDYES {
+            return;
+        }
         let ready = (*a).update_ready.take().unwrap();
         match ready.install() {
-            Ok(()) => { DestroyWindow((*a).main); }
+            Ok(()) => {
+                DestroyWindow((*a).main);
+            }
             Err(e) => update_status(&format!("Install failed: {e}. Download again to retry.")),
         }
     } else if let Some(release) = (*a).update_available.clone() {
@@ -507,27 +536,45 @@ unsafe fn update_action() {
         update_status("Downloading update…");
         let main = (*a).main as usize;
         std::thread::spawn(move || {
-            let result = updates::download(release, |n| post_update(main, UpdateEvent::Progress(n)));
+            let result =
+                updates::download(release, |n| post_update(main, UpdateEvent::Progress(n)));
             post_update(main, UpdateEvent::Downloaded(result));
         });
-    } else { check_update(true); }
+    } else {
+        check_update(true);
+    }
 }
 
 unsafe fn on_update(event: UpdateEvent) {
     let a = app();
     match event {
-        UpdateEvent::Progress(n) => update_status(&format!("Downloading update: {n}% (signature checked before install).")),
+        UpdateEvent::Progress(n) => update_status(&format!(
+            "Downloading update: {n}% (signature checked before install)."
+        )),
         UpdateEvent::Checked(result) => {
             (*a).update_busy = false;
             match result {
                 Ok(release) => {
                     (*a).update_available = release;
                     if let Some(release) = &(*a).update_available {
-                        update_status(&format!("PieAll {} is available. Choose Download update.", release.version));
-                        tray(NIM_MODIFY, &format!("PieAll — {} available", release.version));
-                    } else { update_status(&format!("PieAll {} is up to date.", env!("CARGO_PKG_VERSION"))); }
+                        update_status(&format!(
+                            "PieAll {} is available. Choose Download update.",
+                            release.version
+                        ));
+                        tray(
+                            NIM_MODIFY,
+                            &format!("PieAll — {} available", release.version),
+                        );
+                    } else {
+                        update_status(&format!(
+                            "PieAll {} is up to date.",
+                            env!("CARGO_PKG_VERSION")
+                        ));
+                    }
                 }
-                Err(e) => update_status(&format!("Update check failed: {e}. Check again to retry.")),
+                Err(e) => {
+                    update_status(&format!("Update check failed: {e}. Check again to retry."))
+                }
             }
         }
         UpdateEvent::Downloaded(result) => {
@@ -535,7 +582,9 @@ unsafe fn on_update(event: UpdateEvent) {
             match result {
                 Ok(download) => {
                     (*a).update_ready = Some(download);
-                    update_status("Update verified and ready. Choose Install update when convenient.");
+                    update_status(
+                        "Update verified and ready. Choose Install update when convenient.",
+                    );
                 }
                 Err(e) => update_status(&format!("Download failed: {e}. Download again to retry.")),
             }
@@ -1204,8 +1253,33 @@ unsafe fn create_dashboard() {
         44,
         0,
     );
-    (*a).c_update = child(hw, "BUTTON", "Check for updates", 0, WS_TABSTOP | BS_PUSHBUTTON as u32, 16, 490, 160, 28, ID_UPDATE);
-    (*a).c_update_status = child(hw, "STATIC", &format!("PieAll {} — updates use signed GitHub releases.", env!("CARGO_PKG_VERSION")), 0, 0, 188, 490, 396, 64, 0);
+    (*a).c_update = child(
+        hw,
+        "BUTTON",
+        "Check for updates",
+        0,
+        WS_TABSTOP | BS_PUSHBUTTON as u32,
+        16,
+        490,
+        160,
+        28,
+        ID_UPDATE,
+    );
+    (*a).c_update_status = child(
+        hw,
+        "STATIC",
+        &format!(
+            "PieAll {} — updates use signed GitHub releases.",
+            env!("CARGO_PKG_VERSION")
+        ),
+        0,
+        0,
+        188,
+        490,
+        396,
+        64,
+        0,
+    );
 }
 
 unsafe fn show_dashboard() {
@@ -2043,7 +2117,9 @@ pub fn run(initial_paths: Vec<PathBuf>) -> Result<(), String> {
         SetWindowRgn((*a).pie, CreateEllipticRgn(0, 0, sz + 1, sz + 1), 1);
         create_dashboard();
         tray(NIM_ADD, "PieAll");
-        if updates::configured() { SetTimer((*a).main, TIMER_UPDATE, 10_000, None); }
+        if updates::configured() {
+            SetTimer((*a).main, TIMER_UPDATE, 10_000, None);
+        }
 
         let hotkey_ok = RegisterHotKey(
             (*a).main,

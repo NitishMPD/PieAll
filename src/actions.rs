@@ -483,7 +483,26 @@ fn image_action(id: &str, path: &Path, p: &BTreeMap<String, String>) -> Result<S
     use image::{DynamicImage, GenericImageView};
     let mut img = load_image(path)?;
     let (w, h) = img.dimensions();
-    let mut ext = "png";
+    // Edits keep the source format; only Convert and Compress choose another one.
+    let mut ext = match path
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("jpg" | "jpeg") => "jpg",
+        Some("webp") => "webp",
+        _ => "png",
+    };
+    let mut label = match id {
+        "rotate_left" | "rotate_right" => "rotated".to_string(),
+        "flip_h" | "flip_v" => "flipped".into(),
+        "strip_metadata" => "clean".into(),
+        "crop" => "cropped".into(),
+        "frame" => "framed".into(),
+        "compress" => "compressed".into(),
+        "convert" => String::new(),
+        other => other.into(),
+    };
     match id {
         "copy_pixels" => {
             let rgba = img.to_rgba8();
@@ -531,12 +550,26 @@ fn image_action(id: &str, path: &Path, p: &BTreeMap<String, String>) -> Result<S
         "grayscale" => img = img.grayscale(),
         "strip_metadata" => {}
         "resize" => {
-            let nw = number(p, "width", 1200, 16384)?;
-            let nh = number(p, "height", 1200, 16384)?;
+            let (nw, nh) = if p.contains_key("scale") {
+                let scale = number(p, "scale", 50, 100)?;
+                if scale == 0 {
+                    return Err("Scale must be 1–100%.".into());
+                }
+                (
+                    (w as u64 * scale as u64 / 100).max(1) as u32,
+                    (h as u64 * scale as u64 / 100).max(1) as u32,
+                )
+            } else {
+                (
+                    number(p, "width", 1200, 16384)?,
+                    number(p, "height", 1200, 16384)?,
+                )
+            };
             if nw == 0 || nh == 0 {
                 return Err("Dimensions must be positive.".into());
             }
             img = img.resize(nw.min(w), nh.min(h), image::imageops::FilterType::Lanczos3);
+            label = format!("{}x{}", img.width(), img.height());
         }
         "crop" => {
             let x = number(p, "x", 0, w)?;
@@ -560,7 +593,14 @@ fn image_action(id: &str, path: &Path, p: &BTreeMap<String, String>) -> Result<S
                 _ => return Err("Choose png, jpg or webp.".into()),
             };
         }
-        "compress" => ext = "jpg",
+        // Transparent images stay PNG so compression never paints over their alpha.
+        "compress" => {
+            ext = if img.color().has_alpha() && img.to_rgba8().pixels().any(|px| px[3] < 255) {
+                "png"
+            } else {
+                "jpg"
+            }
+        }
         "frame" => {
             let padding = number(p, "padding", 64, 2048)?;
             let radius = number(p, "corners", 24, 8192)?.min(w / 2).min(h / 2);
@@ -606,13 +646,21 @@ fn image_action(id: &str, path: &Path, p: &BTreeMap<String, String>) -> Result<S
                 ((c[i] as u32 * a + bg[i] as u32 * (255 - a) + 127) / 255) as u8
             }))
         });
-        let quality = number(p, "quality", 85, 100)?;
+        let quality = number(p, "quality", if id == "compress" { 80 } else { 92 }, 100)?;
         if quality == 0 {
             return Err("Quality must be 1–100.".into());
         }
         image::codecs::jpeg::JpegEncoder::new_with_quality(&mut stage.file, quality as u8)
             .encode_image(&rgb)
             .map_err(|e| e.to_string())?;
+    } else if ext == "png" && id == "compress" {
+        use image::codecs::png::{CompressionType, FilterType, PngEncoder};
+        img.write_with_encoder(PngEncoder::new_with_quality(
+            &mut stage.file,
+            CompressionType::Best,
+            FilterType::Adaptive,
+        ))
+        .map_err(|e| e.to_string())?;
     } else {
         img.write_to(
             &mut stage.file,
@@ -624,16 +672,32 @@ fn image_action(id: &str, path: &Path, p: &BTreeMap<String, String>) -> Result<S
         )
         .map_err(|e| e.to_string())?;
     }
-    if id == "compress"
-        && stage.file.metadata().map_err(|e| e.to_string())?.len()
-            >= fs::metadata(path).map_err(|e| e.to_string())?.len()
-    {
+    let before = fs::metadata(path).map_err(|e| e.to_string())?.len();
+    let after = stage.file.metadata().map_err(|e| e.to_string())?.len();
+    if id == "compress" && after >= before {
         return Ok(format!(
-            "{}: encoding would not reduce size; no output saved.",
+            "Skipped {}: it is already as small as this setting makes it.",
             path.display()
         ));
     }
-    Ok(format!("Saved {}", stage.publish(path, id, ext)?.display()))
+    let saved = stage.publish(path, &label, ext)?;
+    if id == "compress" {
+        return Ok(format!(
+            "Saved {} ({} → {}, {}% smaller)",
+            saved.display(),
+            human_size(before),
+            human_size(after),
+            100 - after * 100 / before.max(1)
+        ));
+    }
+    Ok(format!("Saved {}", saved.display()))
+}
+pub fn human_size(bytes: u64) -> String {
+    match bytes {
+        0..1024 => format!("{bytes} B"),
+        1024..1_048_576 => format!("{:.0} KB", bytes as f64 / 1024.0),
+        _ => format!("{:.1} MB", bytes as f64 / 1_048_576.0),
+    }
 }
 fn file_action(id: &str, path: &Path) -> Result<String, String> {
     match id {
@@ -689,9 +753,12 @@ fn file_action(id: &str, path: &Path) -> Result<String, String> {
             Ok(format!(
                 "Saved {}",
                 stage
-                    .publish(
-                        path,
-                        "copy",
+                    .publish_named(
+                        path.parent().ok_or("No parent")?,
+                        &format!(
+                            "{} - Copy",
+                            path.file_stem().unwrap_or_default().to_string_lossy()
+                        ),
                         path.extension().and_then(|e| e.to_str()).unwrap_or("bin")
                     )?
                     .display()
@@ -825,9 +892,10 @@ fn archive_action(id: &str, path: &Path) -> Result<String, String> {
             let suffix = if n == 0 {
                 String::new()
             } else {
-                format!(" ({n})")
+                format!(" ({})", n + 1)
             };
-            let dest = parent.join(format!("{stem} - extracted{suffix}"));
+            // Named after the archive, like Windows "Extract all".
+            let dest = parent.join(format!("{stem}{suffix}"));
             if dest.exists() {
                 continue;
             }
@@ -876,9 +944,28 @@ fn create_zip(paths: &[PathBuf]) -> Result<String, String> {
         std::io::copy(&mut file, &mut writer).map_err(|e| e.to_string())?;
     }
     writer.finish().map_err(|e| e.to_string())?;
+    // One item zips under its own name; several take their folder's name.
+    let parent = source.parent().ok_or("No parent")?;
+    let base = match paths {
+        [one] => one
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned(),
+        _ => parent
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| {
+                source
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            }),
+    };
     Ok(format!(
         "Saved {}",
-        stage.publish(source, "archive", "zip")?.display()
+        stage.publish_named(parent, &base, "zip")?.display()
     ))
 }
 fn text_action(id: &str, text: &str) -> Result<String, String> {
@@ -926,11 +1013,36 @@ mod tests {
             .unwrap();
         let original = fs::read(&p).unwrap();
         let msg = image_action("rotate_left", &p, &BTreeMap::new()).unwrap();
-        assert!(msg.contains("Saved"));
+        assert!(msg.contains("a-rotated.png"), "{msg}");
         assert_eq!(fs::read(&p).unwrap(), original);
         let mut params = BTreeMap::new();
         params.insert("width".into(), "999".into());
         assert!(image_action("crop", &p, &params).is_err());
+    }
+    #[test]
+    fn compress_and_scale_name_outputs_beside_the_source() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("photo.png");
+        let noisy = image::RgbImage::from_fn(64, 48, |x, y| {
+            image::Rgb([((x * 7) ^ (y * 13)) as u8, (x * y) as u8, (x + y * 3) as u8])
+        });
+        image::DynamicImage::ImageRgb8(noisy).save(&p).unwrap();
+        let mut params = BTreeMap::new();
+        params.insert("quality".into(), "50".into());
+        let msg = image_action("compress", &p, &params).unwrap();
+        assert!(msg.contains("photo-compressed.jpg"), "{msg}");
+        let mut params = BTreeMap::new();
+        params.insert("scale".into(), "50".into());
+        image_action("resize", &p, &params).unwrap();
+        let half = image::open(d.path().join("photo-32x24.png")).unwrap();
+        assert_eq!((half.width(), half.height()), (32, 24));
+        // Transparent pixels must survive compression.
+        let t = d.path().join("logo.png");
+        image::RgbaImage::from_fn(64, 64, |x, _| image::Rgba([x as u8 * 4, 0, 0, x as u8 * 4]))
+            .save(&t)
+            .unwrap();
+        let msg = image_action("compress", &t, &BTreeMap::new()).unwrap();
+        assert!(!msg.contains(".jpg"), "{msg}");
     }
     #[test]
     fn archive_roundtrip() {
@@ -938,11 +1050,11 @@ mod tests {
         let p = d.path().join("a.txt");
         fs::write(&p, "hello").unwrap();
         create_zip(&[p]).unwrap();
-        let z = d.path().join("a - archive.zip");
+        let z = d.path().join("a.zip");
         assert!(archive_action("test_zip", &z).unwrap().contains("Verified"));
         archive_action("extract_zip", &z).unwrap();
         assert_eq!(
-            fs::read_to_string(d.path().join("a - archive - extracted/a.txt")).unwrap(),
+            fs::read_to_string(d.path().join("a/a.txt")).unwrap(),
             "hello"
         );
     }
@@ -973,8 +1085,8 @@ fn contact_sheet(paths: &[PathBuf], params: &BTreeMap<String, String>) -> Result
         .write_to(&mut stage.file, image::ImageFormat::Png)
         .map_err(|e| e.to_string())?;
     Ok(format!(
-        "Saved {} (images in selection order, without labels)",
-        stage.publish(source, "contact sheet", "png")?.display()
+        "Saved {}",
+        stage.publish(source, "contact-sheet", "png")?.display()
     ))
 }
 fn images_pdf(paths: &[PathBuf]) -> Result<String, String> {
@@ -1077,7 +1189,13 @@ fn images_pdf(paths: &[PathBuf]) -> Result<String, String> {
     .map_err(|e| e.to_string())?;
     Ok(format!(
         "Saved {} (A4 pages, white background, selection order)",
-        stage.publish(source, "images", "pdf")?.display()
+        stage
+            .publish_named(
+                source.parent().ok_or("No parent")?,
+                &source.file_stem().unwrap_or_default().to_string_lossy(),
+                "pdf",
+            )?
+            .display()
     ))
 }
 fn folder_report(id: &str, path: &Path) -> Result<String, String> {
@@ -1204,7 +1322,7 @@ mod boundary_tests {
             .save(&p)
             .unwrap();
         images_pdf(std::slice::from_ref(&p)).unwrap();
-        let bytes = fs::read(d.path().join("input - images.pdf")).unwrap();
+        let bytes = fs::read(d.path().join("input.pdf")).unwrap();
         let text = String::from_utf8_lossy(&bytes);
         assert!(text.contains("/Count 1"));
         let marker = b"\nxref\n";
@@ -1221,7 +1339,7 @@ mod boundary_tests {
         }
         assert!(tail.contains(&format!("startxref\n{xref}\n")));
         contact_sheet(std::slice::from_ref(&p), &BTreeMap::new()).unwrap();
-        let sheet = image::open(d.path().join("input - contact sheet.png")).unwrap();
+        let sheet = image::open(d.path().join("input-contact-sheet.png")).unwrap();
         assert_eq!((sheet.width(), sheet.height()), (960, 240));
     }
     #[test]

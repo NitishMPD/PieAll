@@ -1,6 +1,23 @@
 # Windows releases and updater handoff
 Author: Nitish
 
+## Completion — 20 October 2026
+
+The remaining release source work is implemented for the approved Tauri architecture. Use [releases.md](releases.md) for setup, commands, acceptance and recovery, and [tauri-port.md](tauri-port.md) for app ownership. The historical custom-Win32 plan below is superseded, not a current TODO list.
+
+- Version tooling synchronizes the two Cargo packages, Cargo.lock, package.json and Tauri config; preserves dependency resolutions/LF/CRLF; enforces stable Windows bounds; and makes same-run retries idempotent.
+- The per-user Tauri NSIS configuration now has a pinned-CLI process guard that refuses manual install/uninstall while running, waits up to 60 seconds for updater exit and never force-closes workers. The standard installer owns shortcuts, registry/uninstall records and reopening. No startup registration is added.
+- Release-only updater checks validate the public key, show accessible notes/progress and keep download/install separate. Native install confirmation is bound to the reviewed version; the operation lease excludes conflicting capture/jobs/editors. Transport remains bounded; Tauri verifies installer and signed-version metadata.
+- Packaging stages a signed installer, signed portable ZIP, standard latest.json and checksums. The standalone offline verifier authenticates both artifacts and their signed versions without starting the app. Portable updates launch the standard installer rather than replacing the portable executable.
+- The GitHub workflow uses pinned tools/actions, serializes releases, creates a draft, verifies local artifacts, uploads, downloads all six assets back, compares hashes, re-verifies signatures and checks that latest would advance before publishing. Failed gates leave a draft. The origin is NitishMPD/PieAll.
+- One consolidated notices text is distributed instead of hundreds of license folders; the retained source cache/inventory stays available. Generated staging/key paths are ignored.
+
+Source checks and native acceptance results are recorded in [verification.md](../verification.md). This is completion of release tooling, not a claim of an installed/published release. Dedicated production key/secret setup, the owner's product-license decision, Authenticode if desired, native/clean-Windows acceptance and first publication remain external steps. No production key, product build, installer launch, GitHub write, push or deployment was performed by the agent.
+
+## Historical handoff (19 October)
+
+The approved Tauri port supersedes the Win32-only architecture, custom manifest and custom NSIS proposal below. Preserve this as an earlier implementation record.
+
 Paused at Nitish's request on 19 October 2026. This is incomplete source implementation, not a working release pipeline. Resume from this note; do not restart the native MVP or replace its code.
 
 ## Reference and intended behavior

@@ -1,0 +1,34 @@
+[package]
+name = "pieall-desktop"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.92"
+default-run = "pieall-desktop"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+release-tools = ["dep:sha2"]
+
+[[bin]]
+name = "release-verify"
+path = "src/release_verify.rs"
+required-features = ["release-tools"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+pieall = { path = ".." }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-updater = { version = "2.14", default-features = false, features = ["native-tls", "system-proxy"] }
+reqwest = { version = "0.13", default-features = false, features = ["native-tls"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+base64 = "=0.22.1"
+semver = "=1.0.28"
+minisign-verify = "=0.3.0"
+sha2 = { version = "=0.10.9", optional = true }
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Threading"] }

@@ -1,19 +1,21 @@
-﻿# PieAll — native MVP
+# PieAll — Tauri desktop
 
-A Windows radial action utility with **44 implemented commands**, a searchable native action browser, focused image editors and isolated local workers. Built from [the product plan](PieAll-plan.md). This is an early implementation, not a verified release of the full 100-action product.
+A Windows radial action utility with **44 implemented commands**, a searchable action browser, focused image editors and isolated local workers. Built from [the product plan](PieAll-plan.md). This is an early implementation, not a verified release of the full 100-action product.
 
 ## Run it yourself
 
-The implementation session did not build or launch the application, following the project instructions. From this folder:
+The default application is now Tauri 2 + React/TypeScript with Rust-owned commands. The GDI shell is retained as an explicit legacy fallback. See [the port guide](docs/tauri-port.md) for architecture, signing setup and native acceptance gates.
+
+Use Windows 11 x64, Rust MSVC 1.92+, Visual Studio C++ Build Tools/Windows SDK, Node 22.12+ and pnpm. The implementation task did not build or launch the application. Run yourself:
 
 ```powershell
-cargo build --release --locked
-.\target\release\pieall.exe
+pnpm install --frozen-lockfile
+pnpm tauri dev
 ```
 
-Windows 11 x64 and the Rust MSVC toolchain/Windows SDK are required. The tray icon opens the action browser. Select files in Explorer and press **Ctrl + backtick**, or drop files onto the PieAll window, or choose **Open files…**. File arguments are accepted on the first launch. Use **Use clipboard text** explicitly to enable text tools. Close the dashboard to keep the tray running; choose **Exit** in the tray menu to quit.
+To build the executable without installer signing: `pnpm tauri build --no-bundle`. For a signed per-user NSIS installer, configure the PieAll signing variables described in the port guide, then run `pnpm package:windows`. The installer uses the system WebView2 runtime; it does not bundle a fixed browser. Smaller artifacts remain an unmeasured goal.
 
-The image ring offers Convert, Crop, Resize, Frame, Compress and More. Arrow keys/Tab select, Enter/Space runs, Escape cancels. The native list in the action browser is the accessible alternative to the custom ring. All image outputs go beside their source with unique names. Results show output paths and failures and have a Copy button.
+Select files in Explorer and press **Ctrl + backtick**, drop files onto PieAll, or choose **Open files**. **Use clipboard text** is explicit. Closing the dashboard hides it; tray Exit quits when no action/editor/update is active. File arguments work on first and second launches. The image ring offers Convert, Crop, Resize, Add background, Compress and All actions. Convert opens PNG/JPEG/WebP choices. Arrows/Tab, Enter/Space, number keys and Escape work in the floating ring; the searchable dashboard is the alternative keyboard route.
 
 ## Implemented commands
 
@@ -26,8 +28,10 @@ The image ring offers Convert, Crop, Resize, Frame, Compress and More. Arrow key
 
 ## Boundaries
 
-The ring uses warm opaque GDI drawing with rounded separated wedges. It is not the final glass/Direct2D renderer. Image previews approximate results and show only the first selected image; transforms apply to every selected image and report each item. Crop uses numeric coordinates, not draggable handles. Frame currently has solid color/padding/corners, without gradient/shadow/ratio controls. Image detail inspection does not enumerate EXIF. Metadata stripping re-encodes pixels; it is not a claim of comprehensive sanitization.
+The Tauri shell passes workspace all-target Rust checking, strict Clippy, TypeScript and frontend/release-tool source checks. The app and installer have not been launched for runtime acceptance. Native focus, Explorer capture, screen readers, transparency, mixed DPI, previews and update installation remain unverified. See [verification.md](verification.md).
 
-There is no browser extension, optional engine integration, collection database, settings persistence, public hub, signing or installer. The shortcut is fixed and DPI is system-wide. Desktop/Explorer-tab capture needs runtime verification and fails closed on ambiguity. No job cancel control yet; worker jobs time out at 120 seconds, and any outputs already published remain. A hard stop during a job can leave a hidden staging file/folder. Hard-link publication requires filesystem support; it fails rather than falling back to overwriting. Second launches do not forward file arguments.
+The UI uses warm ivory/amber rounded SVG wedges, local stroke icons and translucent fills. It does not implement native acrylic/glass blur. Only the first selected image is previewed; actions still validate and apply to all selected targets. Crop uses numeric fields. Frame has solid color/padding/corners. Metadata stripping re-encodes pixels rather than claiming complete sanitization. There is no browser extension, optional engine integration, persistent collection database, configurable shortcut or public hub.
 
-Screen-reader behavior, focus restoration, protected apps, Explorer tabs, mixed DPI, previews, memory, latency and release size have not been tested in a live app session. See [verification.md](verification.md).
+Workers time out at 120 seconds; there is no job-cancel control. Previously published outputs remain after a timeout. Abrupt termination may leave staging files. Hard-link publication requires filesystem support and fails rather than overwriting. Source-preserving output and ZIP guards remain in the original Rust core.
+
+The new shell uses Tauri's signed updater and NSIS configuration. Checks are release-only with a configured dedicated PieAll public key. Download and install are separate explicit actions. The draft-first GitHub release workflow, versioning and signed-artifact verification are implemented; see [release setup](docs/releases.md). Dedicated production signing keys, optional Authenticode and clean-Windows install/upgrade acceptance remain external setup/verification steps. The previous custom-updater handoff is historical; use the Tauri protocol documented in the port guide.

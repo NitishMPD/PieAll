@@ -87,25 +87,30 @@ impl Staged {
         }
         Err("Could not reserve temporary output.".into())
     }
-    pub fn publish(
+    /// Publishes beside `source` as `<stem>-<label>.<ext>` (or `<stem>.<ext>` for an empty label).
+    pub fn publish(self, source: &Path, label: &str, extension: &str) -> Result<PathBuf, String> {
+        plain_path(source)?;
+        let parent = source.parent().ok_or("Missing parent folder")?;
+        let stem = source.file_stem().unwrap_or_default().to_string_lossy();
+        self.publish_named(parent, &output_stem(&stem, label), extension)
+    }
+    /// Publishes as `<base>.<ext>`, adding Windows-style ` (2)` counters instead of replacing.
+    pub fn publish_named(
         mut self,
-        source: &Path,
-        label: &str,
+        parent: &Path,
+        base: &str,
         extension: &str,
     ) -> Result<PathBuf, String> {
         self.file.flush().map_err(|e| e.to_string())?;
         self.file.sync_all().map_err(|e| e.to_string())?;
-        plain_path(source)?;
-        let parent = source.parent().ok_or("Missing parent folder")?;
         plain_path(parent)?;
-        let stem = source.file_stem().unwrap_or_default().to_string_lossy();
         for n in 0..10000 {
             let suffix = if n == 0 {
                 String::new()
             } else {
-                format!(" ({n})")
+                format!(" ({})", n + 1)
             };
-            let dest = parent.join(format!("{stem} - {label}{suffix}.{extension}"));
+            let dest = parent.join(format!("{base}{suffix}.{extension}"));
             match fs::hard_link(&self.path, &dest) {
                 Ok(()) => return Ok(dest),
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -118,6 +123,38 @@ impl Staged {
         }
         Err("Too many output name collisions.".into())
     }
+}
+fn is_dimensions(s: &str) -> bool {
+    s.split_once('x').is_some_and(|(w, h)| {
+        !w.is_empty() && !h.is_empty() && w.bytes().chain(h.bytes()).all(|b| b.is_ascii_digit())
+    })
+}
+fn strip_counter(s: &str) -> &str {
+    s.strip_suffix(')')
+        .and_then(|rest| rest.rsplit_once(" ("))
+        .filter(|(_, n)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        .map_or(s, |(base, _)| base)
+}
+fn strip_tag<'a>(s: &'a str, label: &str) -> Option<&'a str> {
+    let (base, tail) = s.rsplit_once('-')?;
+    let same = if is_dimensions(label) {
+        is_dimensions(tail)
+    } else {
+        tail.eq_ignore_ascii_case(label)
+    };
+    (same && !base.is_empty()).then_some(base)
+}
+/// Names an output after its source without stacking the same tag:
+/// `photo-compressed (2)` compressed again becomes `photo-compressed`, and
+/// `photo-1920x1080` resized becomes `photo-<new size>`.
+pub fn output_stem(stem: &str, label: &str) -> String {
+    if label.is_empty() {
+        return stem.to_string();
+    }
+    let base = strip_tag(strip_counter(stem), label)
+        .or_else(|| strip_tag(stem, label))
+        .unwrap_or(stem);
+    format!("{base}-{label}")
 }
 impl Drop for Staged {
     fn drop(&mut self) {
@@ -178,7 +215,32 @@ mod tests {
         let b = write(&p, "copy", "txt", b"two").unwrap();
         assert_ne!(a, b);
         assert_eq!(fs::read(p).unwrap(), b"original");
-        assert_eq!(fs::read(a).unwrap(), b"one");
+        assert_eq!(fs::read(&a).unwrap(), b"one");
+        assert!(a.ends_with("source-copy.txt"));
+        assert!(b.ends_with("source-copy (2).txt"));
+    }
+    #[test]
+    fn smart_names_do_not_stack() {
+        assert_eq!(output_stem("photo", "compressed"), "photo-compressed");
+        assert_eq!(
+            output_stem("photo-compressed", "compressed"),
+            "photo-compressed"
+        );
+        assert_eq!(
+            output_stem("photo-compressed (3)", "compressed"),
+            "photo-compressed"
+        );
+        assert_eq!(output_stem("photo-1920x1080", "960x540"), "photo-960x540");
+        assert_eq!(output_stem("photo (2)", "rotated"), "photo (2)-rotated");
+        assert_eq!(output_stem("photo (2)", ""), "photo (2)");
+        assert_eq!(
+            output_stem("-compressed", "compressed"),
+            "-compressed-compressed"
+        );
+        assert_eq!(
+            output_stem("photo-compressed", "rotated"),
+            "photo-compressed-rotated"
+        );
     }
 }
 #[cfg(test)]
