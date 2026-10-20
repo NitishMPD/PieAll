@@ -64,4 +64,10 @@ describe("context menus", () => {
     expect(ring).toHaveLength(8);
     expect(ring[7].children).toHaveLength(4);
   });
+  it("hides conversion to the format the selection already has", () => {
+    const ring = resolve(menus.images, actions(["convert"]), ["cat.PNG"]);
+    expect(
+      ring.find((i) => i.key === "convert")?.children?.map((c) => c.label),
+    ).toEqual(["JPG", "WebP"]);
+  });
 });

@@ -112,14 +112,31 @@ export const menus: Record<string, MenuItem[]> = {
 };
 
 /**
- * Keeps only what the native registry says fits this selection. Empty submenus
+ * Keeps only what the native registry says fits this selection, minus
+ * conversions to the selection's own format. Empty submenus
  * vanish, one-choice submenus collapse into their choice, and overflow beyond
  * eight slices moves into a final "More" slice.
  */
-export function resolve(items: MenuItem[], actions: Action[]): MenuItem[] {
+export function resolve(
+  items: MenuItem[],
+  actions: Action[],
+  names: string[] = [],
+): MenuItem[] {
   const ok = new Set(actions.filter((a) => a.eligible).map((a) => a.id));
+  // Converting to the format every selected file already has would do nothing.
+  const formats = new Set(
+    names.map((n) => {
+      const ext = n.split(".").pop()?.toLowerCase() ?? "";
+      return ext === "jpeg" ? "jpg" : ext;
+    }),
+  );
+  const pointless = (item: MenuItem) =>
+    item.action === "convert" &&
+    formats.size === 1 &&
+    formats.has(item.params?.format ?? "");
   const walk = (list: MenuItem[]): MenuItem[] =>
     list.flatMap((item) => {
+      if (pointless(item)) return [];
       if (item.children) {
         const children = walk(item.children);
         if (children.length < 2) return children;

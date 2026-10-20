@@ -40,6 +40,14 @@ export function wedgePath(index: number, count: number): string {
   );
 }
 
+/** Arc along the outside of one sector, for the hover-to-open progress line. */
+export function arcPath(index: number, count: number, radius = 206): string {
+  const sweep = 360 / count;
+  const [x1, y1] = point(radius, index * sweep - sweep / 2 + 5);
+  const [x2, y2] = point(radius, index * sweep + sweep / 2 - 5);
+  return `M${x1},${y1} A${radius},${radius} 0 0 1 ${x2},${y2}`;
+}
+
 /** Sector under a viewBox point, by angle, so a flick past the rim still counts. */
 export function sectorAt(
   x: number,

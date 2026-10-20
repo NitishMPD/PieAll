@@ -816,19 +816,79 @@ html[data-surface="toast"] body {
   height: 440px;
   position: relative;
 }
-/* Floating ring: smoked translucent glass over whatever is behind it. The gaps
-   between wedges stay fully transparent so the desktop shows through. */
+.ring-body {
+  position: absolute;
+  inset: 0;
+}
+.sector-shell,
+.sector,
+.sectors {
+  transform-box: view-box;
+  transform-origin: 220px 220px;
+}
+.sector {
+  transition: transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.sector.is-selected {
+  transform: translate(var(--pop-x), var(--pop-y));
+}
+.sector-sheen,
+.dwell {
+  display: none;
+  pointer-events: none;
+}
+
+/* Floating ring: neutral liquid glass. Wedges are smoked translucent panes lit
+   from above (bright top edge, faint sheen); gaps stay fully transparent. */
 .radial-standalone {
+  --spring: cubic-bezier(0.18, 0.9, 0.24, 1.12);
+  --glass: rgba(20, 20, 22, 0.56);
+  --glass-ink: #f4f4f6;
   width: 440px;
   height: 440px;
   outline: none;
-  color: #fbf3e6;
-  animation: ring-in 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--glass-ink);
 }
-@keyframes ring-in {
+.radial-standalone .ring-body {
+  opacity: 0;
+  transform: scale(0.9);
+}
+.radial-standalone[data-phase="open"] .ring-body {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.11s ease-out,
+    transform 0.2s var(--spring);
+}
+.radial-standalone[data-phase="closing"] .ring-body {
+  opacity: 0;
+  transform: scale(0.95);
+  transition:
+    opacity 0.1s ease-in,
+    transform 0.1s ease-in;
+}
+.radial-standalone .sector-shell {
+  opacity: 0;
+  transform: scale(0.84) rotate(-5deg);
+}
+.radial-standalone[data-phase="open"] .sector-shell,
+.radial-standalone[data-phase="closing"] .sector-shell {
+  opacity: 1;
+  transform: none;
+}
+.radial-standalone[data-phase="open"] .sector-shell {
+  transition:
+    opacity 0.12s ease-out calc(var(--i) * 14ms),
+    transform 0.24s var(--spring) calc(var(--i) * 14ms);
+}
+/* Moving into or out of a submenu swaps the whole level. */
+.radial-standalone .sectors {
+  animation: level-in 0.2s var(--spring);
+}
+@keyframes level-in {
   from {
     opacity: 0;
-    transform: scale(0.92);
+    transform: scale(0.9) rotate(-8deg);
   }
 }
 .radial-standalone .ring-rim {
@@ -836,109 +896,156 @@ html[data-surface="toast"] body {
   stroke: none;
 }
 .radial-standalone .sector-shape {
-  fill: rgba(36, 29, 24, 0.66);
-  stroke: rgba(255, 240, 220, 0.16);
+  fill: var(--glass);
+  stroke: url(#glass-edge);
   stroke-width: 1;
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28));
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.26));
+  transition: fill 0.09s;
+}
+.radial-standalone .sector-sheen {
+  display: block;
+  fill: url(#glass-sheen);
+  stroke: none;
 }
 .radial-standalone .sector.is-selected .sector-shape {
-  fill: rgba(205, 104, 48, 0.94);
-  stroke: rgba(255, 214, 178, 0.7);
+  fill: rgba(255, 255, 255, 0.2);
+  stroke: rgba(255, 255, 255, 0.72);
 }
 .radial-standalone .sector.is-selected {
   color: #fff;
 }
 .radial-standalone .sector:focus-visible .sector-shape {
-  stroke: #ffd9b3;
-  stroke-width: 2.5;
+  stroke: #fff;
+  stroke-width: 2;
 }
 .radial-standalone .is-placeholder .sector-shape {
-  fill: rgba(36, 29, 24, 0.42);
+  fill: rgba(20, 20, 22, 0.34);
   opacity: 1;
 }
 .radial-standalone .sector text {
   font-size: 12.5px;
+  font-weight: 600;
+  fill: currentColor;
   paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.18);
+  stroke: rgba(0, 0, 0, 0.22);
   stroke-width: 2px;
 }
+.radial-standalone .wedge-icon {
+  color: inherit;
+  opacity: 0.92;
+}
+.radial-standalone .dwell {
+  display: block;
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: dwell var(--dwell) linear forwards;
+}
+@keyframes dwell {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
 .radial-standalone .ring-center {
-  background: rgba(28, 23, 19, 0.82);
-  border: 1px solid rgba(255, 240, 220, 0.2);
-  color: #fbf3e6;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.32);
+  background: rgba(20, 20, 22, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: var(--glass-ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 8px 24px rgba(0, 0, 0, 0.3);
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 .radial-standalone .ring-center:hover:not(:disabled) {
-  background: rgba(40, 33, 27, 0.9);
+  background: rgba(30, 30, 33, 0.7);
+}
+.radial-standalone .ring-center.is-dwelling {
+  border-color: rgba(255, 255, 255, 0.65);
 }
 .radial-standalone .ring-center > span:not(.spinner) {
-  color: rgba(251, 243, 230, 0.72);
+  color: rgba(244, 244, 246, 0.6);
 }
-.radial-standalone.is-held .ring-center > span:not(.spinner) {
-  color: #ffc896;
+.radial-standalone .spinner,
+.toast .spinner {
+  border-color: rgba(255, 255, 255, 0.22);
+  border-top-color: #fff;
 }
-/* Toast: a click-through pill at the bottom of the screen. */
-.toast {
+
+/* Toast: a quiet glass pill where the ring was. */
+.toast-stage {
   position: fixed;
-  inset: 8px 10px;
+  inset: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 18px;
-  border-radius: 16px;
-  background: rgba(28, 23, 19, 0.9);
-  border: 1px solid rgba(255, 240, 220, 0.16);
-  color: #fbf3e6;
+  justify-content: center;
   font-family: var(--font);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  animation: toast-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 16px);
+  height: 36px;
+  padding: 0 14px 0 9px;
+  border-radius: 18px;
+  background: rgba(20, 20, 22, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 6px 18px rgba(0, 0, 0, 0.24);
+  color: #f4f4f6;
+  font-size: 12.5px;
+  animation: toast-in 0.18s cubic-bezier(0.18, 0.9, 0.24, 1.12);
+  transition:
+    opacity 0.12s ease-in,
+    transform 0.12s ease-in;
+}
+.toast.is-leaving {
+  opacity: 0;
+  transform: scale(0.94);
 }
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: scale(0.9);
   }
 }
 .toast-mark {
   flex: none;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(255, 240, 220, 0.12);
+  width: 18px;
+  height: 18px;
+  color: rgba(244, 244, 246, 0.8);
 }
 .toast-ok .toast-mark {
-  background: #3f7d4f;
-  color: #fff;
+  color: #86dca0;
 }
 .toast-error .toast-mark {
-  background: #b5452a;
-  color: #fff;
+  color: #ff917b;
 }
-.toast-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.toast > strong,
+.toast-detail {
   min-width: 0;
-}
-.toast-text strong,
-.toast-text span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.toast-text strong {
-  font-size: 13.5px;
+.toast > strong {
+  flex: 0 1 auto;
   font-weight: 600;
 }
-.toast-text span {
-  font-size: 12px;
-  color: rgba(251, 243, 230, 0.72);
+.toast-detail {
+  flex: 0 2 auto;
+  color: rgba(244, 244, 246, 0.6);
 }
 .toast .spinner {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
 }
 .ring-error {
   position: absolute;

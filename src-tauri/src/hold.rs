@@ -22,7 +22,7 @@ pub enum Hold {
     End,
 }
 
-const HOLD_MS: u32 = 220;
+const HOLD_MS: u32 = 180;
 
 #[derive(Clone, Copy, PartialEq)]
 enum State {

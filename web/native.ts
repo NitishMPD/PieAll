@@ -62,6 +62,9 @@ export const native = {
     listen<[number, number]>("ring-release", (e) => fn(...e.payload)),
   onToast: (fn: (toast: Toast) => void) =>
     listen<Toast>("toast", (e) => fn(e.payload)),
+  /** The native side is about to hide the ring: play the exit. */
+  onClosing: (fn: () => void) => listen("ring-close", fn),
+  onToastHide: (fn: () => void) => listen("toast-hide", fn),
 };
 export interface Toast {
   tone: "ok" | "info" | "error" | "busy";

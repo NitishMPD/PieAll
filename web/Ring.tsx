@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Session } from "./native";
-import { SIZE, point, sectorAt, wedgePath } from "./geometry";
+import { SIZE, arcPath, point, sectorAt, wedgePath } from "./geometry";
 import { menus, resolve, type MenuItem } from "./menus";
 import { native } from "./native";
 import { Icon } from "./Icon";
+
+/** Resting on a "More" slice (or the center, inside a submenu) this long moves level. */
+export const DWELL_MS = 550;
+const DEAD_ZONE = 66;
 
 function useListener(enabled: boolean, subscribe: () => Promise<() => void>) {
   useEffect(() => {
@@ -31,6 +35,8 @@ function targetName(session: Session): string {
   return session.names[0] ?? "Nothing selected";
 }
 
+type Phase = "closed" | "open" | "closing";
+
 export function Ring({
   session,
   thumbnail,
@@ -48,7 +54,9 @@ export function Ring({
   const [selected, setSelected] = useState<number | null>(
     standalone ? null : 0,
   );
+  const [centered, setCentered] = useState(false);
   const [held, setHeld] = useState(false);
+  const [phase, setPhase] = useState<Phase>(standalone ? "closed" : "open");
   const pending = useRef<[number, number] | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
@@ -56,36 +64,48 @@ export function Ring({
 
   const reading = session.busy === "capture";
   const blocked = !!session.busy || !!session.editor;
-  const root = resolve(menus[session.kind] ?? [], session.actions);
+  const root = resolve(
+    menus[session.kind] ?? [],
+    session.actions,
+    session.names,
+  );
   let items = root;
   let parent: MenuItem | null = null;
   for (const key of path) {
     parent = items.find((i) => i.key === key) ?? null;
     items = parent?.children ?? items;
   }
+  const current = selected !== null ? items[selected] : undefined;
 
-  function activate(item: MenuItem) {
-    if (blocked) return;
-    if (item.children) {
-      setPath((p) => [...p, item.key]);
-      setSelected(0);
-      requestAnimationFrame(() => refs.current[0]?.focus());
-    } else if (item.action) onRun(item.action, item.params ?? {});
+  function enter(item: MenuItem) {
+    setPath((p) => [...p, item.key]);
+    setSelected(null);
+    setCentered(false);
   }
   function back() {
     setPath((p) => p.slice(0, -1));
-    setSelected(0);
+    setSelected(null);
+    setCentered(false);
   }
-  // Releasing the held key picks by direction; releasing in the center keeps the
-  // ring open for a click. A release during capture waits for the selection.
+  function activate(item: MenuItem) {
+    if (blocked) return;
+    if (item.children) enter(item);
+    else if (item.action) onRun(item.action, item.params ?? {});
+  }
+  // Releasing the held key runs the slice in the cursor's direction. Releasing
+  // anywhere else cancels. A release during capture waits for the selection.
   function release(x: number, y: number) {
     if (reading) {
       pending.current = [x, y];
       return;
     }
-    const index = sectorAt(x, y, items.length);
-    if (index !== null && items[index]) activate(items[index]);
-    else container.current?.focus();
+    const index = sectorAt(x, y, items.length, DEAD_ZONE);
+    const item = index !== null ? items[index] : undefined;
+    if (!item) onClose();
+    else if (item.children) {
+      enter(item);
+      container.current?.focus();
+    } else activate(item);
   }
   const latest = useRef(release);
   latest.current = release;
@@ -99,10 +119,19 @@ export function Ring({
       setHeld(isHeld);
       setPath([]);
       setSelected(null);
+      setCentered(false);
       pending.current = null;
-      container.current?.focus();
+      // Reset without transition, then animate in on the next frame.
+      setPhase("closed");
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          setPhase("open");
+          container.current?.focus();
+        }),
+      );
     }),
   );
+  useListener(standalone, () => native.onClosing(() => setPhase("closing")));
   useListener(standalone, () =>
     native.onRelease((x, y) => {
       setHeld(false);
@@ -116,35 +145,48 @@ export function Ring({
     latest.current(x, y);
   }, [reading, session.revision]);
 
+  // Hover-to-open: rest on a submenu slice, or on the center to go back.
+  const dwellTarget = current?.children
+    ? `in:${current.key}`
+    : centered && path.length
+      ? "back"
+      : null;
+  useEffect(() => {
+    if (!dwellTarget || blocked) return;
+    const timer = setTimeout(() => {
+      if (dwellTarget === "back") back();
+      else if (current) enter(current);
+    }, DWELL_MS);
+    return () => clearTimeout(timer);
+    // The target key captures everything the timer depends on.
+  }, [dwellTarget, path.join("/"), blocked]);
+
   function track(clientX: number, clientY: number) {
     const box = svg.current?.getBoundingClientRect();
     if (!box || !items.length) return;
-    setSelected(
-      sectorAt(
-        ((clientX - box.left) * SIZE) / box.width,
-        ((clientY - box.top) * SIZE) / box.height,
-        items.length,
-      ),
-    );
+    const x = ((clientX - box.left) * SIZE) / box.width;
+    const y = ((clientY - box.top) * SIZE) / box.height;
+    setCentered(Math.hypot(x - SIZE / 2, y - SIZE / 2) < DEAD_ZONE);
+    setSelected(sectorAt(x, y, items.length, DEAD_ZONE));
   }
 
   const placeholder = items.length === 0;
   const count = placeholder ? 4 : Math.max(items.length, 2);
-  const hint = reading
-    ? "Reading your selection"
-    : held
-      ? "Release on an action"
-      : placeholder
-        ? "Select a file, text or window first"
-        : standalone
-          ? "Click an action · Esc closes"
-          : "Choose an action";
+  const caption = reading
+    ? "Reading…"
+    : placeholder
+      ? "Nothing to do here"
+      : current?.children
+        ? "Rest to open"
+        : (current?.hint ??
+          (parent ? "Center to go back" : standalone && !held ? "Esc" : ""));
 
   return (
     <div
       ref={container}
       tabIndex={-1}
-      className={`radial ${standalone ? "radial-standalone" : ""} ${held ? "is-held" : ""}`}
+      data-phase={phase}
+      className={`radial ${standalone ? "radial-standalone" : ""}`}
       onPointerMove={(e) => track(e.clientX, e.clientY)}
       onKeyDown={(event) => {
         if (
@@ -158,29 +200,25 @@ export function Ring({
           return;
         }
         if (!items.length) return;
-        const current = selected ?? -1;
+        const at = selected ?? -1;
         let next: number;
         if (
           ["ArrowRight", "ArrowDown"].includes(event.key) ||
           (standalone && event.key === "Tab" && !event.shiftKey)
         )
-          next = current + 1;
+          next = at + 1;
         else if (
           ["ArrowLeft", "ArrowUp"].includes(event.key) ||
           (standalone && event.key === "Tab")
         )
-          next = current - 1;
+          next = at - 1;
         else if (/^[1-8]$/.test(event.key)) {
           const item = items[Number(event.key) - 1];
           if (item) activate(item);
           return;
-        } else if (
-          (event.key === "Enter" || event.key === " ") &&
-          selected !== null &&
-          items[selected]
-        ) {
+        } else if ((event.key === "Enter" || event.key === " ") && current) {
           event.preventDefault();
-          activate(items[selected]);
+          activate(current);
           return;
         } else return;
         event.preventDefault();
@@ -189,94 +227,152 @@ export function Ring({
         refs.current[next]?.focus();
       }}
     >
-      <svg
-        ref={svg}
-        viewBox={`0 0 ${SIZE} ${SIZE}`}
-        className="radial-svg"
-        role="menu"
-        aria-label={
-          parent ? parent.label : `Actions for ${targetName(session)}`
-        }
-        aria-busy={reading}
-      >
-        <circle className="ring-rim" cx="220" cy="220" r="202" />
-        {Array.from({ length: count }, (_, index) => {
-          const item = items[index];
-          const [x, y] = point(139, (index * 360) / count);
-          const active = !!item && selected === index;
-          return (
-            <g
-              key={item?.key ?? `empty-${index}`}
-              className={`sector ${active ? "is-selected" : ""} ${item ? "" : "is-placeholder"}`}
-              role={item ? "menuitem" : undefined}
-              aria-label={
-                item
-                  ? [item.label, item.hint].filter(Boolean).join(", ")
-                  : undefined
-              }
-              aria-haspopup={item?.children ? "menu" : undefined}
-              aria-disabled={blocked || undefined}
-              tabIndex={
-                item
-                  ? active || (selected === null && index === 0)
-                    ? 0
-                    : -1
-                  : undefined
-              }
-              ref={(el) => {
-                refs.current[index] = el;
-              }}
-              onFocus={() => item && setSelected(index)}
-              onClick={() => item && activate(item)}
+      <div className="ring-body">
+        <svg
+          ref={svg}
+          viewBox={`0 0 ${SIZE} ${SIZE}`}
+          className="radial-svg"
+          role="menu"
+          aria-label={
+            parent ? parent.label : `Actions for ${targetName(session)}`
+          }
+          aria-busy={reading}
+        >
+          <defs>
+            <linearGradient
+              id="glass-edge"
+              gradientUnits="userSpaceOnUse"
+              x1="0"
+              y1="20"
+              x2="0"
+              y2="420"
             >
-              <path className="sector-shape" d={wedgePath(index, count)} />
-              {item && (
+              <stop offset="0" stopColor="#fff" stopOpacity="0.55" />
+              <stop offset="0.5" stopColor="#fff" stopOpacity="0.14" />
+              <stop offset="1" stopColor="#fff" stopOpacity="0.28" />
+            </linearGradient>
+            <linearGradient
+              id="glass-sheen"
+              gradientUnits="userSpaceOnUse"
+              x1="0"
+              y1="20"
+              x2="0"
+              y2="420"
+            >
+              <stop offset="0" stopColor="#fff" stopOpacity="0.13" />
+              <stop offset="0.55" stopColor="#fff" stopOpacity="0.02" />
+              <stop offset="1" stopColor="#fff" stopOpacity="0.06" />
+            </linearGradient>
+          </defs>
+          <circle className="ring-rim" cx="220" cy="220" r="202" />
+          <g className="sectors" key={path.join("/")}>
+            {Array.from({ length: count }, (_, index) => {
+              const item = items[index];
+              const angle = (index * 360) / count;
+              const [x, y] = point(139, angle);
+              const [px, py] = point(5, angle);
+              const active = !!item && selected === index;
+              return (
                 <g
-                  transform={`translate(${x},${y})`}
-                  className="sector-content"
+                  key={item?.key ?? `empty-${index}`}
+                  className="sector-shell"
+                  style={{ "--i": index } as CSSProperties}
                 >
-                  <foreignObject x="-15" y="-30" width="30" height="30">
-                    <span className="wedge-icon">
-                      <Icon name={item.icon} size={24} />
-                    </span>
-                  </foreignObject>
-                  <text y="16" textAnchor="middle">
-                    {item.label}
-                  </text>
-                  {active && (item.hint || item.children) && (
-                    <text className="sector-hint" y="31" textAnchor="middle">
-                      {item.children ? "Opens more" : item.hint}
-                    </text>
-                  )}
+                  <g
+                    className={`sector ${active ? "is-selected" : ""} ${item ? "" : "is-placeholder"}`}
+                    style={
+                      {
+                        "--pop-x": `${px - SIZE / 2}px`,
+                        "--pop-y": `${py - SIZE / 2}px`,
+                      } as CSSProperties
+                    }
+                    role={item ? "menuitem" : undefined}
+                    aria-label={
+                      item
+                        ? [item.label, item.hint].filter(Boolean).join(", ")
+                        : undefined
+                    }
+                    aria-haspopup={item?.children ? "menu" : undefined}
+                    aria-disabled={blocked || undefined}
+                    tabIndex={
+                      item
+                        ? active || (selected === null && index === 0)
+                          ? 0
+                          : -1
+                        : undefined
+                    }
+                    ref={(el) => {
+                      refs.current[index] = el;
+                    }}
+                    onFocus={() => item && setSelected(index)}
+                    onClick={() => item && activate(item)}
+                  >
+                    <path
+                      className="sector-shape"
+                      d={wedgePath(index, count)}
+                    />
+                    <path
+                      className="sector-sheen"
+                      d={wedgePath(index, count)}
+                    />
+                    {active && item?.children && !blocked && (
+                      <path
+                        key={`dwell-${item.key}`}
+                        className="dwell"
+                        d={arcPath(index, count)}
+                        pathLength={1}
+                        style={{ "--dwell": `${DWELL_MS}ms` } as CSSProperties}
+                      />
+                    )}
+                    {item && (
+                      <g
+                        transform={`translate(${x},${y})`}
+                        className="sector-content"
+                      >
+                        <foreignObject x="-14" y="-29" width="28" height="28">
+                          <span className="wedge-icon">
+                            <Icon name={item.icon} size={22} />
+                          </span>
+                        </foreignObject>
+                        <text y="15" textAnchor="middle">
+                          {item.label}
+                        </text>
+                      </g>
+                    )}
+                  </g>
                 </g>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-      <button
-        className="ring-center"
-        tabIndex={standalone ? -1 : undefined}
-        onClick={() => (path.length ? back() : onClose())}
-        aria-label={
-          path.length ? "Back" : standalone ? "Close action ring" : "Open files"
-        }
-      >
-        {reading ? (
-          <span className="spinner" />
-        ) : parent ? (
-          <Icon name="back" size={24} />
-        ) : thumbnail ? (
-          <img src={thumbnail} alt="" />
-        ) : (
-          <Icon
-            name={session.kind === "empty" ? "ring" : session.kind}
-            size={28}
-          />
-        )}
-        <strong>{parent ? parent.label : targetName(session)}</strong>
-        <span>{parent ? "Back" : hint}</span>
-      </button>
+              );
+            })}
+          </g>
+        </svg>
+        <button
+          className={`ring-center ${centered && path.length ? "is-dwelling" : ""}`}
+          tabIndex={standalone ? -1 : undefined}
+          onClick={() => (path.length ? back() : onClose())}
+          aria-label={
+            path.length
+              ? "Back"
+              : standalone
+                ? "Close action ring"
+                : "Open files"
+          }
+        >
+          {reading ? (
+            <span className="spinner" />
+          ) : parent ? (
+            <Icon name="back" size={22} />
+          ) : thumbnail ? (
+            <img src={thumbnail} alt="" />
+          ) : (
+            <Icon
+              name={session.kind === "empty" ? "ring" : session.kind}
+              size={24}
+            />
+          )}
+          <strong>{parent ? parent.label : targetName(session)}</strong>
+          <span>{caption}</span>
+        </button>
+      </div>
       <p className="sr-only" aria-live="polite">
         {reading ? "Reading your selection." : ""}
       </p>

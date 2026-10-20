@@ -6,7 +6,7 @@ use std::{
     collections::BTreeMap,
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},
         Mutex,
     },
 };
@@ -256,7 +256,45 @@ fn show_dashboard(app: &AppHandle) -> Result<()> {
     window.set_focus().map_err(|e| e.to_string())
 }
 
+// The ring and toast are shown with raw Win32 calls (Tauri's show() always
+// activates), so they must be hidden the same way: Tauri would believe they were
+// never visible and skip the hide.
+fn show_inactive(window: &WebviewWindow) {
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe {
+            ShowWindow(hwnd.0 as _, SW_SHOWNOACTIVATE);
+            SetWindowPos(
+                hwnd.0 as _,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        }
+    }
+}
+fn hide_raw(window: &WebviewWindow) {
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe { ShowWindow(hwnd.0 as _, SW_HIDE) };
+    }
+}
+
+/// Exit animation length; the window hides only after its content has faded out,
+/// so the next show never flashes a stale frame.
+const OUTRO_MS: u64 = 110;
+static RING_OPEN: AtomicBool = AtomicBool::new(false);
+static RING_GENERATION: AtomicU64 = AtomicU64::new(0);
+/// Physical screen point of the last ring's center; results appear there.
+static RING_X: AtomicI32 = AtomicI32::new(i32::MIN);
+static RING_Y: AtomicI32 = AtomicI32::new(i32::MIN);
+
 fn hide_ring(app: &AppHandle, restore: bool) -> Result<()> {
+    if !RING_OPEN.swap(false, Ordering::SeqCst) {
+        return Ok(());
+    }
+    let generation = RING_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     let source = {
         let s = state(app);
         let mut s = s.lock().unwrap();
@@ -267,9 +305,8 @@ fn hide_ring(app: &AppHandle, restore: bool) -> Result<()> {
         }
         (s.source, s.source_pid)
     };
-    if let Some(ring) = app.get_webview_window("ring") {
-        ring.hide().map_err(|e| e.to_string())?;
-    }
+    let _ = app.emit_to("ring", "ring-close", ());
+    // Focus goes back at once so typing resumes while the ring fades.
     if restore && source.0 != 0 {
         unsafe {
             let mut pid = 0;
@@ -279,13 +316,20 @@ fn hide_ring(app: &AppHandle, restore: bool) -> Result<()> {
             }
         }
     }
+    if let Some(ring) = app.get_webview_window("ring") {
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(OUTRO_MS));
+            if RING_GENERATION.load(Ordering::SeqCst) == generation {
+                hide_raw(&ring);
+            }
+        });
+    }
     notify(app);
     Ok(())
 }
 
-fn ring_visible(app: &AppHandle) -> bool {
-    app.get_webview_window("ring")
-        .is_some_and(|ring| ring.is_visible().unwrap_or(false))
+fn ring_visible(_app: &AppHandle) -> bool {
+    RING_OPEN.load(Ordering::SeqCst)
 }
 
 /// Takes focus even when another app is foreground: a keyboard hook, unlike a
@@ -339,6 +383,10 @@ fn place_ring(app: &AppHandle, held: bool) -> Result<()> {
         .map_err(|e| e.to_string())?;
     ring.set_position(tauri::PhysicalPosition::new(x, y))
         .map_err(|e| e.to_string())?;
+    RING_X.store(x + size / 2, Ordering::SeqCst);
+    RING_Y.store(y + size / 2, Ordering::SeqCst);
+    RING_GENERATION.fetch_add(1, Ordering::SeqCst);
+    RING_OPEN.store(true, Ordering::SeqCst);
     let _ = app.emit_to("ring", "ring-opened", held);
     let hwnd = ring.hwnd().map_err(|e| e.to_string())?.0 as HWND;
     unsafe {
@@ -348,17 +396,8 @@ fn place_ring(app: &AppHandle, held: bool) -> Result<()> {
         if !region.is_null() && SetWindowRgn(hwnd, region, 1) == 0 {
             DeleteObject(region);
         }
-        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-        SetWindowPos(
-            hwnd,
-            HWND_TOPMOST,
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-        );
     }
+    show_inactive(&ring);
     Ok(())
 }
 
@@ -367,7 +406,7 @@ fn release_ring(app: &AppHandle) {
     let Some(ring) = app.get_webview_window("ring") else {
         return;
     };
-    if !ring.is_visible().unwrap_or(false) {
+    if !RING_OPEN.load(Ordering::SeqCst) {
         return;
     }
     let mut point = POINT { x: 0, y: 0 };
@@ -607,9 +646,20 @@ async fn run_action(
     notify(&app);
     if from_ring {
         hide_ring(&app, true)?;
-        if !paths.is_empty() {
-            toast(&app, "busy", format!("{title}…"), "");
-        }
+        // Most actions finish before a progress notice would be worth seeing.
+        let slow = app.clone();
+        let ticket = lease.ticket;
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(700));
+            let running = {
+                let s = state(&slow);
+                let s = s.lock().unwrap();
+                s.operation == Some("action") && s.ticket == ticket
+            };
+            if running {
+                toast(&slow, "busy", format!("{title}…"), "");
+            }
+        });
     } else {
         show_dashboard(&app)?;
     }
@@ -725,7 +775,7 @@ struct ToastView {
     detail: String,
 }
 
-/// A click-through notice at the bottom of the cursor's screen that never takes focus.
+/// A small click-through pill where the ring was; it never takes focus.
 fn toast(app: &AppHandle, tone: &'static str, title: impl Into<String>, detail: impl Into<String>) {
     static GENERATION: AtomicU64 = AtomicU64::new(0);
     let Some(window) = app.get_webview_window("toast") else {
@@ -741,11 +791,16 @@ fn toast(app: &AppHandle, tone: &'static str, title: impl Into<String>, detail: 
             detail: detail.into(),
         },
     );
-    let mut point = POINT { x: 0, y: 0 };
+    let mut point = POINT {
+        x: RING_X.load(Ordering::SeqCst),
+        y: RING_Y.load(Ordering::SeqCst),
+    };
+    if point.x == i32::MIN {
+        unsafe { GetCursorPos(&mut point) };
+    }
     let mut info: MONITORINFO = unsafe { std::mem::zeroed() };
     info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
     unsafe {
-        GetCursorPos(&mut point);
         GetMonitorInfoW(MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST), &mut info);
     }
     let scale = window
@@ -753,32 +808,26 @@ fn toast(app: &AppHandle, tone: &'static str, title: impl Into<String>, detail: 
         .ok()
         .flatten()
         .map_or(1.0, |m| m.scale_factor());
-    let (width, height) = (460.0, 88.0);
+    let (width, height) = (360.0, 64.0);
+    let (w, h) = ((width * scale) as i32, (height * scale) as i32);
     let work = info.rcWork;
-    let x = work.left + (work.right - work.left - (width * scale) as i32) / 2;
-    let y = work.bottom - ((height + 20.0) * scale) as i32;
+    let x = (point.x - w / 2).clamp(work.left, (work.right - w).max(work.left));
+    let y = (point.y - h / 2).clamp(work.top, (work.bottom - h).max(work.top));
     let _ = window.set_size(tauri::LogicalSize::new(width, height));
     let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
-    if let Ok(hwnd) = window.hwnd() {
-        unsafe {
-            ShowWindow(hwnd.0 as _, SW_SHOWNOACTIVATE);
-            SetWindowPos(
-                hwnd.0 as _,
-                HWND_TOPMOST,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
-        }
-    }
+    show_inactive(&window);
     if tone != "busy" {
-        let linger = if tone == "error" { 6 } else { 3 };
+        let linger = if tone == "error" { 3200 } else { 1400 };
+        let app = app.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_secs(linger));
+            std::thread::sleep(std::time::Duration::from_millis(linger));
+            if GENERATION.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            let _ = app.emit_to("toast", "toast-hide", ());
+            std::thread::sleep(std::time::Duration::from_millis(OUTRO_MS + 60));
             if GENERATION.load(Ordering::SeqCst) == generation {
-                let _ = window.hide();
+                hide_raw(&window);
             }
         });
     }
@@ -846,19 +895,16 @@ fn summarize(report: &str, failed: bool) -> (&'static str, String, String) {
             }
         }
         ([], _) => ("error", "Couldn't finish".into(), why.unwrap_or_default()),
+        // "2.4 MB → 820 KB, 66% smaller" is trimmed to its point: "66% smaller".
         ([(name, extra)], 0) => (
             "ok",
             format!("Saved {name}"),
-            if extra.is_empty() {
-                "Next to the original".into()
-            } else {
-                extra.clone()
-            },
+            extra.rsplit(", ").next().unwrap_or_default().to_string(),
         ),
-        ([(name, _), rest @ ..], 0) => (
+        ([_, rest @ ..], 0) => (
             "ok",
             format!("Saved {} files", rest.len() + 1),
-            format!("{name} and {} more, next to the originals", rest.len()),
+            String::new(),
         ),
         (done, _) => (
             "error",
@@ -1142,25 +1188,19 @@ pub fn run() {
                     toast(&handle, "error", "PieAll is busy", error);
                 }
             });
-            let startup = app.handle().clone();
-            std::thread::spawn(move || {
-                // Let the toast surface load before its first message.
-                std::thread::sleep(std::time::Duration::from_millis(1500));
-                match hook {
-                    Ok(()) => toast(
-                        &startup,
-                        "info",
-                        "PieAll is ready",
-                        "Select a file, text or window, then hold ` and release on an action.",
-                    ),
-                    Err(error) => toast(
+            if let Err(error) = hook {
+                let startup = app.handle().clone();
+                std::thread::spawn(move || {
+                    // Let the toast surface load before its first message.
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    toast(
                         &startup,
                         "error",
                         "Hold ` is unavailable",
                         format!("{error} Use Ctrl + ` instead."),
-                    ),
-                }
-            });
+                    );
+                });
+            }
             let open =
                 tauri::menu::MenuItem::with_id(app, "open", "Open PieAll", true, None::<&str>)?;
             let ring = tauri::menu::MenuItem::with_id(
@@ -1282,7 +1322,7 @@ mod tests {
         );
         assert_eq!(tone, "ok");
         assert_eq!(title, "Saved cat-compressed (2).jpg");
-        assert_eq!(detail, "2.0 MB → 700 KB, 66% smaller");
+        assert_eq!(detail, "66% smaller");
         let (tone, title, _) = summarize(
             "Completed 2 of 2 targets.\r\n\r\nSaved C:\\a-rotated.png\r\n\r\nSaved C:\\b-rotated.png",
             false,
