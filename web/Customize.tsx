@@ -3,7 +3,7 @@ import { native, type Session, type ShortcutLibrary } from "./native";
 import { libraryActions } from "./action-search";
 import { INNER, OUTER, SIZE, point, wedgePath } from "./geometry";
 import {
-  appItems,
+  appPool,
   defaultLayout,
   kindPool,
   labelLines,
@@ -423,7 +423,7 @@ export function Customize({ session }: { session: Session }) {
     [library, isApp, profile],
   );
   const pool = useMemo(
-    () => (isApp ? appItems(appActions) : kindPool(context, session.actions)),
+    () => (isApp ? appPool(appActions) : kindPool(context, session.actions)),
     [isApp, appActions, context, session.actions],
   );
   const current = library?.profiles.find((p) => p.id === profile);

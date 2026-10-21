@@ -330,6 +330,12 @@
         "title": "Switch to tab 8",
         "keys": "Ctrl+8",
         "category": "Tabs"
+      },
+      {
+        "id": "copy-url",
+        "title": "Copy URL",
+        "keys": "Ctrl+L Ctrl+C Escape",
+        "category": "Navigation"
       }
     ],
     "firefox": [
@@ -662,6 +668,12 @@
         "title": "Web console",
         "keys": "Ctrl+Shift+K",
         "category": "Developer"
+      },
+      {
+        "id": "copy-url",
+        "title": "Copy URL",
+        "keys": "Ctrl+L Ctrl+C Escape",
+        "category": "Navigation"
       }
     ],
     "explorer": [
@@ -3194,6 +3206,54 @@
         "title": "Export",
         "keys": "Ctrl+Shift+E",
         "category": "File"
+      },
+      {
+        "id": "align-left",
+        "title": "Align left",
+        "keys": "Alt+A",
+        "category": "Alignment"
+      },
+      {
+        "id": "align-horizontal-centers",
+        "title": "Align horizontal centers",
+        "keys": "Alt+H",
+        "category": "Alignment"
+      },
+      {
+        "id": "align-right",
+        "title": "Align right",
+        "keys": "Alt+D",
+        "category": "Alignment"
+      },
+      {
+        "id": "align-top",
+        "title": "Align top",
+        "keys": "Alt+W",
+        "category": "Alignment"
+      },
+      {
+        "id": "align-vertical-centers",
+        "title": "Align vertical centers",
+        "keys": "Alt+V",
+        "category": "Alignment"
+      },
+      {
+        "id": "align-bottom",
+        "title": "Align bottom",
+        "keys": "Alt+S",
+        "category": "Alignment"
+      },
+      {
+        "id": "distribute-horizontal",
+        "title": "Distribute horizontal spacing",
+        "keys": "Alt+Shift+H",
+        "category": "Alignment"
+      },
+      {
+        "id": "distribute-vertical",
+        "title": "Distribute vertical spacing",
+        "keys": "Alt+Shift+V",
+        "category": "Alignment"
       }
     ],
     "photoshop": [
@@ -5200,6 +5260,12 @@
         "title": "Underline text",
         "keys": "Ctrl+U",
         "category": "Text"
+      },
+      {
+        "id": "crop",
+        "title": "Crop selection",
+        "keys": "Ctrl+Shift+X",
+        "category": "Image"
       }
     ],
     "terminal": [
@@ -6291,8 +6357,8 @@
       },
       {
         "id": "mute",
-        "title": "Mute",
-        "keys": "Ctrl+Shift+Down",
+        "title": "Mute or unmute",
+        "keys": "M",
         "category": "Audio"
       },
       {
@@ -6340,7 +6406,7 @@
       {
         "id": "preferences",
         "title": "Preferences",
-        "keys": "Ctrl+P",
+        "keys": "Ctrl+Comma",
         "category": "Settings"
       },
       {
@@ -6360,6 +6426,18 @@
         "title": "Paste",
         "keys": "Ctrl+V",
         "category": "Editing"
+      },
+      {
+        "id": "like-song",
+        "title": "Like or dislike song",
+        "keys": "Alt+Shift+B",
+        "category": "Library"
+      },
+      {
+        "id": "queue",
+        "title": "Open queue",
+        "keys": "Alt+Shift+Q",
+        "category": "Navigation"
       }
     ],
     "zoom": [
@@ -7149,13 +7227,13 @@
       },
       {
         "id": "go-to-chat",
-        "title": "Go to chat",
+        "title": "Open second app on app bar",
         "keys": "Ctrl+2",
         "category": "Navigation"
       },
       {
         "id": "go-to-calendar",
-        "title": "Go to calendar",
+        "title": "Open fourth app on app bar",
         "keys": "Ctrl+4",
         "category": "Navigation"
       },
@@ -7230,6 +7308,18 @@
         "title": "Expand compose box",
         "keys": "Ctrl+Shift+X",
         "category": "Chat"
+      },
+      {
+        "id": "find-current-chat",
+        "title": "Find in current chat",
+        "keys": "Ctrl+F",
+        "category": "Search"
+      },
+      {
+        "id": "unread-chats",
+        "title": "Unread chats",
+        "keys": "Ctrl+Alt+U",
+        "category": "Navigation"
       }
     ],
     "notion": [
@@ -7430,6 +7520,12 @@
         "title": "Redo",
         "keys": "Ctrl+Shift+Z",
         "category": "Editing"
+      },
+      {
+        "id": "copy-page-url",
+        "title": "Copy page URL",
+        "keys": "Ctrl+L",
+        "category": "Pages"
       }
     ],
     "gimp": [
@@ -8187,6 +8283,26 @@
         "keys": "F11",
         "category": "View"
       }
+    ],
+    "datagrip": [
+      {
+        "id": "execute-statement",
+        "title": "Execute statement",
+        "keys": "Ctrl+Enter",
+        "category": "SQL"
+      },
+      {
+        "id": "new-query-console",
+        "title": "Open query console",
+        "keys": "F4",
+        "category": "SQL"
+      },
+      {
+        "id": "database-explorer",
+        "title": "Database Explorer",
+        "keys": "Alt+1",
+        "category": "Navigation"
+      }
     ]
   },
   "profiles": [
@@ -8204,10 +8320,10 @@
       "quick": [
         "new-folder",
         "rename",
-        "properties",
-        "address-bar",
         "search-folder",
-        "details-view"
+        "address-bar",
+        "preview-pane",
+        "parent-folder"
       ]
     },
     {
@@ -8222,12 +8338,12 @@
       "source": "https://support.google.com/chrome/answer/157179",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8242,12 +8358,12 @@
       "source": "https://support.google.com/chrome/answer/157179",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8262,12 +8378,12 @@
       "source": "https://support.google.com/chrome/answer/157179",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8282,12 +8398,12 @@
       "source": "https://support.google.com/chrome/answer/157179",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8302,12 +8418,12 @@
       "source": "https://support.google.com/chrome/answer/157179",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8322,12 +8438,12 @@
       "source": "https://support.google.com/chrome/answer/157179",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8342,12 +8458,12 @@
       "source": "https://support.google.com/chrome/answer/157179",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8362,12 +8478,12 @@
       "source": "https://support.mozilla.org/kb/keyboard-shortcuts-perform-firefox-tasks-quickly",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8382,12 +8498,12 @@
       "source": "https://support.mozilla.org/kb/keyboard-shortcuts-perform-firefox-tasks-quickly",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8402,12 +8518,12 @@
       "source": "https://support.mozilla.org/kb/keyboard-shortcuts-perform-firefox-tasks-quickly",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8422,12 +8538,12 @@
       "source": "https://support.mozilla.org/kb/keyboard-shortcuts-perform-firefox-tasks-quickly",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8442,12 +8558,12 @@
       "source": "https://support.mozilla.org/kb/keyboard-shortcuts-perform-firefox-tasks-quickly",
       "capture_text": true,
       "quick": [
-        "new-tab",
+        "copy-url",
         "reopen-closed-tab",
-        "downloads",
+        "new-private-window",
+        "paste-plain-text",
         "find-on-page",
-        "bookmark-page",
-        "new-private-window"
+        "bookmark-page"
       ]
     },
     {
@@ -8464,11 +8580,11 @@
       "source": "https://support.microsoft.com/office/keyboard-shortcuts-in-word",
       "capture_text": true,
       "quick": [
-        "bold",
         "find",
         "replace",
-        "change-case",
+        "clear-character-formatting",
         "insert-comment",
+        "track-changes",
         "word-count"
       ]
     },
@@ -8507,11 +8623,11 @@
       "capture_text": true,
       "quick": [
         "new-slide",
-        "duplicate-selection",
-        "start-slideshow",
-        "present-from-current-slide",
+        "duplicate-slide",
+        "format-object",
         "group-objects",
-        "selection-pane"
+        "selection-pane",
+        "present-from-current-slide"
       ]
     },
     {
@@ -8529,10 +8645,10 @@
       "quick": [
         "find",
         "replace",
-        "go-to-line",
-        "insert-date-and-time",
         "new",
-        "save"
+        "save",
+        "save-as",
+        "go-to-line"
       ]
     },
     {
@@ -8549,10 +8665,10 @@
       "capture_text": false,
       "quick": [
         "resize-and-skew",
-        "image-properties",
-        "undo",
+        "crop",
         "save-as",
-        "copy",
+        "undo",
+        "redo",
         "paste"
       ]
     },
@@ -8589,11 +8705,11 @@
       "capture_text": false,
       "quick": [
         "play-or-pause",
-        "mute",
+        "short-jump-back",
+        "short-jump-forward",
         "subtitle-track",
         "full-screen",
-        "snapshot",
-        "open-file"
+        "mute"
       ]
     },
     {
@@ -8608,12 +8724,12 @@
       "source": "https://help.figma.com/hc/en-us/articles/360040328653-Use-keyboard-shortcuts",
       "capture_text": false,
       "quick": [
-        "frame-tool",
-        "rectangle-tool",
-        "add-auto-layout",
-        "quick-actions",
-        "group-selection",
-        "export"
+        "copy-properties",
+        "paste-properties",
+        "flip-horizontal",
+        "flip-vertical",
+        "create-component",
+        "add-auto-layout"
       ]
     },
     {
@@ -8631,8 +8747,8 @@
         "brush",
         "free-transform",
         "layer-via-copy",
-        "image-size",
-        "select-and-mask",
+        "crop-tool",
+        "deselect",
         "save-a-copy"
       ]
     },
@@ -8648,7 +8764,7 @@
       "source": "https://helpx.adobe.com/illustrator/using/default-keyboard-shortcuts.html",
       "capture_text": false,
       "quick": [
-        "selection-tool",
+        "direct-selection",
         "pen",
         "shape-builder",
         "group",
@@ -8668,11 +8784,11 @@
       "source": "https://helpx.adobe.com/premiere-pro/using/keyboard-shortcuts.html",
       "capture_text": false,
       "quick": [
-        "razor",
+        "selection-tool",
         "add-edit",
+        "ripple-edit",
         "mark-in",
         "mark-out",
-        "speed-and-duration",
         "export-media"
       ]
     },
@@ -8688,12 +8804,12 @@
       "source": "https://helpx.adobe.com/after-effects/using/keyboard-shortcuts-reference.html",
       "capture_text": false,
       "quick": [
-        "new-composition",
         "precompose",
-        "show-position",
+        "duplicate",
+        "split-layer",
         "show-animated-properties",
         "easy-ease",
-        "add-to-render-queue"
+        "graph-editor"
       ]
     },
     {
@@ -8728,12 +8844,12 @@
       "source": "https://code.visualstudio.com/shortcuts/keyboard-shortcuts-windows.pdf",
       "capture_text": true,
       "quick": [
-        "command-palette",
-        "quick-open",
-        "format-document",
+        "format-selection",
         "toggle-line-comment",
-        "search-files",
-        "focus-terminal"
+        "rename-symbol",
+        "select-all-occurrences",
+        "quick-fix",
+        "copy-line-down"
       ]
     },
     {
@@ -8748,12 +8864,12 @@
       "source": "https://code.visualstudio.com/shortcuts/keyboard-shortcuts-windows.pdf",
       "capture_text": true,
       "quick": [
-        "command-palette",
-        "quick-open",
-        "format-document",
+        "format-selection",
         "toggle-line-comment",
-        "search-files",
-        "focus-terminal"
+        "rename-symbol",
+        "select-all-occurrences",
+        "quick-fix",
+        "copy-line-down"
       ]
     },
     {
@@ -8768,12 +8884,12 @@
       "source": "https://code.visualstudio.com/shortcuts/keyboard-shortcuts-windows.pdf",
       "capture_text": true,
       "quick": [
-        "command-palette",
-        "quick-open",
-        "format-document",
+        "format-selection",
         "toggle-line-comment",
-        "search-files",
-        "focus-terminal"
+        "rename-symbol",
+        "select-all-occurrences",
+        "quick-fix",
+        "copy-line-down"
       ]
     },
     {
@@ -8788,12 +8904,12 @@
       "source": "https://code.visualstudio.com/shortcuts/keyboard-shortcuts-windows.pdf",
       "capture_text": true,
       "quick": [
-        "command-palette",
-        "quick-open",
-        "format-document",
+        "format-selection",
         "toggle-line-comment",
-        "search-files",
-        "focus-terminal"
+        "rename-symbol",
+        "select-all-occurrences",
+        "quick-fix",
+        "copy-line-down"
       ]
     },
     {
@@ -8808,12 +8924,12 @@
       "source": "https://code.visualstudio.com/shortcuts/keyboard-shortcuts-windows.pdf",
       "capture_text": true,
       "quick": [
-        "command-palette",
-        "quick-open",
-        "format-document",
+        "format-selection",
         "toggle-line-comment",
-        "search-files",
-        "focus-terminal"
+        "rename-symbol",
+        "select-all-occurrences",
+        "quick-fix",
+        "copy-line-down"
       ]
     },
     {
@@ -8829,11 +8945,11 @@
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
+        "recent-files",
+        "show-intention-actions",
         "rename",
         "reformat-code",
-        "run",
-        "terminal"
+        "run"
       ]
     },
     {
@@ -8849,11 +8965,11 @@
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
+        "recent-files",
+        "show-intention-actions",
         "rename",
         "reformat-code",
-        "run",
-        "terminal"
+        "run"
       ]
     },
     {
@@ -8869,11 +8985,11 @@
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
+        "recent-files",
+        "show-intention-actions",
         "rename",
         "reformat-code",
-        "run",
-        "terminal"
+        "run"
       ]
     },
     {
@@ -8889,11 +9005,11 @@
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
+        "recent-files",
+        "show-intention-actions",
         "rename",
         "reformat-code",
-        "run",
-        "terminal"
+        "run"
       ]
     },
     {
@@ -8909,11 +9025,11 @@
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
+        "recent-files",
+        "show-intention-actions",
         "rename",
         "reformat-code",
-        "run",
-        "terminal"
+        "run"
       ]
     },
     {
@@ -8929,11 +9045,11 @@
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
+        "recent-files",
+        "show-intention-actions",
         "rename",
         "reformat-code",
-        "run",
-        "terminal"
+        "run"
       ]
     },
     {
@@ -8949,11 +9065,11 @@
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
+        "recent-files",
+        "show-intention-actions",
         "rename",
         "reformat-code",
-        "run",
-        "terminal"
+        "run"
       ]
     },
     {
@@ -8969,11 +9085,11 @@
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
+        "recent-files",
+        "show-intention-actions",
         "rename",
         "reformat-code",
-        "run",
-        "terminal"
+        "run"
       ]
     },
     {
@@ -8983,17 +9099,18 @@
         "datagrip64.exe"
       ],
       "sets": [
-        "jetbrains"
+        "jetbrains",
+        "datagrip"
       ],
-      "source": "https://www.jetbrains.com/help/idea/mastering-keyboard-shortcuts.html",
+      "source": "https://www.jetbrains.com/help/datagrip/run-a-query.html",
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
-        "rename",
+        "execute-statement",
+        "new-query-console",
         "reformat-code",
-        "run",
-        "terminal"
+        "database-explorer",
+        "find-action"
       ]
     },
     {
@@ -9009,11 +9126,11 @@
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
+        "recent-files",
+        "show-intention-actions",
         "rename",
         "reformat-code",
-        "run",
-        "terminal"
+        "run"
       ]
     },
     {
@@ -9029,11 +9146,11 @@
       "capture_text": true,
       "quick": [
         "search-everywhere",
-        "find-action",
+        "recent-files",
+        "show-intention-actions",
         "rename",
         "reformat-code",
-        "run",
-        "terminal"
+        "run"
       ]
     },
     {
@@ -9050,9 +9167,9 @@
       "quick": [
         "new-email",
         "reply",
-        "reply-all",
         "forward",
         "search-mailbox",
+        "mark-unread",
         "calendar-view"
       ]
     },
@@ -9091,8 +9208,8 @@
         "jump-to-conversation",
         "all-unread",
         "threads",
-        "search-conversation",
-        "set-status",
+        "search-workspace",
+        "mentions-and-reactions",
         "upload-file"
       ]
     },
@@ -9131,9 +9248,9 @@
         "play-or-pause",
         "next-track",
         "previous-track",
-        "shuffle",
-        "repeat",
-        "search"
+        "search",
+        "like-song",
+        "queue"
       ]
     },
     {
@@ -9151,9 +9268,9 @@
         "mute-or-unmute-audio",
         "start-or-stop-video",
         "open-chat",
+        "start-or-stop-screen-sharing",
         "raise-or-lower-hand",
-        "show-participants",
-        "full-screen"
+        "show-participants"
       ]
     },
     {
@@ -9191,10 +9308,10 @@
       "quick": [
         "find",
         "go-to-page",
-        "fit-page",
         "fit-width",
-        "print",
-        "advanced-search"
+        "previous-view",
+        "rotate-clockwise",
+        "print"
       ]
     },
     {
@@ -9212,7 +9329,7 @@
         "play-or-stop",
         "split",
         "trim-audio",
-        "silence-audio",
+        "undo",
         "fit-selection",
         "import-audio"
       ]
@@ -9252,9 +9369,9 @@
       "quick": [
         "search",
         "new-chat",
+        "find-current-chat",
+        "unread-chats",
         "mute-or-unmute-microphone",
-        "camera-on-or-off",
-        "raise-or-lower-hand",
         "share-screen"
       ]
     },
@@ -9272,10 +9389,10 @@
       "quick": [
         "quick-find",
         "new-page",
-        "toggle-sidebar",
-        "to-do-list",
         "duplicate-block",
-        "comment"
+        "comment",
+        "copy-page-url",
+        "to-do-list"
       ]
     },
     {
@@ -9292,8 +9409,8 @@
       "source": "https://docs.gimp.org/en/gimp-keys.html",
       "capture_text": false,
       "quick": [
-        "paintbrush",
         "crop",
+        "duplicate-layer",
         "new-layer",
         "export-as",
         "scale",
@@ -9334,9 +9451,9 @@
       "quick": [
         "selector",
         "node-tool",
-        "bezier",
-        "object-to-path",
         "fill-and-stroke",
+        "align-and-distribute",
+        "duplicate",
         "export"
       ]
     }

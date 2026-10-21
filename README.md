@@ -2,7 +2,7 @@
 
 <img src="public/brand/pieall.svg" width="80" height="80" alt="PieAll radial mark" />
 
-A Windows radial action utility with **44 local tools and 3,079 app shortcuts**, a searchable action browser, focused image editors and isolated local workers. Built from [the product plan](PieAll-plan.md). This is an early implementation; native app acceptance remains unverified.
+A Windows radial action utility with **44 local tools and 3,108 app shortcuts**, a searchable action browser, focused image editors and isolated local workers. Built from [the product plan](PieAll-plan.md). This is an early implementation; native app acceptance remains unverified.
 
 ## Run it yourself
 
@@ -21,7 +21,7 @@ Select files in Explorer and press **Ctrl + backtick**, drop files onto PieAll, 
 
 ## Implemented commands
 
-The default Tauri shell now also includes **3,079 contextual app shortcuts across 57 profiles**, for **3,123 entries** with the 44 local tools below. Shared browser/editor keymaps are counted separately for each matching app. Hold backtick in a supported app for six direct quick choices and Search actions, or press `/` from the ring to search a flat list of that app's shortcuts in the dashboard. Other apps' shortcuts are excluded; file/text selections keep their own contextual tools. Explorer, everyday browsers, Office, chat/notes/media tools, Figma, Photoshop, Adobe video tools, Blender and specialist editors are covered. Native matching uses the captured window/process and exact executable names; Figma running in a browser currently receives browser shortcuts. App commands use Windows US defaults and depend on the target's editing mode/keymap. Dispatch confirms “shortcut sent,” not app-side completion. See [project behavior](project.md) for ownership and limits.
+The default Tauri shell now also includes **3,108 contextual app shortcuts across 57 profiles**, for **3,152 entries** with the 44 local tools below. Shared browser/editor keymaps are counted separately for each matching app. Hold backtick in a supported app for six direct quick choices and Search actions, or press `/` from the ring to search a flat list of that app's shortcuts in the dashboard. Other apps' shortcuts are excluded. Selected text in a recognized app keeps app actions primary with Text tools secondary; files/images retain their selection tools. Browsers include Copy URL and private browsing. Figma adds an Align group alongside six editing actions, with search/window access in More. Existing customized rings are preserved; Reset adopts the new defaults. Explorer, everyday browsers, Office, chat/notes/media tools, Figma, Photoshop, Adobe video tools, Blender and specialist editors are covered. Native matching uses the captured window/process and exact executable names; Figma running in a browser currently receives browser shortcuts. App commands use Windows US defaults and depend on the target's editing mode/keymap. Dispatch confirms “shortcut sent,” not app-side completion. See [project behavior](project.md) for ownership and limits.
 
 - **14 image tools:** crop; resize within bounds without upscaling; PNG/JPEG/lossless WebP conversion; JPEG compression with size-reduction check; left/right rotation; horizontal/vertical flip; re-encode without source metadata; basic image details; quantized palette; decoded pixels to clipboard; solid-color frame with padding and rounded image corners; grayscale.
 - **2 combined-image tools:** contact sheet (selection order, no labels) and images to PDF (A4, JPEG raster pages, white alpha background).

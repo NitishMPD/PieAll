@@ -103,7 +103,7 @@ describe("context menus", () => {
     expect(keys.length).toBe(274);
     expect(new Set(keys).size).toBe(137);
   });
-  it("gives selection tools precedence and rejects unrelated app shortcuts even if marked eligible", () => {
+  it("keeps app workflows over selected text, file tools over files, and rejects unrelated shortcuts", () => {
     const session = {
       kind: "window",
       app: "figma",
@@ -130,7 +130,14 @@ describe("context menus", () => {
       contextMenu(session).some((item) => item.action === "app:figma:move"),
     ).toBe(true);
     expect(JSON.stringify(contextMenu(session))).not.toContain("photoshop");
-    expect(contextMenu({ ...session, kind: "text" })).toEqual(menus.text);
+    expect(contextMenu({ ...session, kind: "text" })[0].action).toBe(
+      "app:figma:move",
+    );
+    expect(
+      contextMenu({ ...session, kind: "text" }).find(
+        (item) => item.key === "text-tools",
+      )?.children,
+    ).toEqual(menus.text);
     expect(contextMenu({ ...session, kind: "images" })).toEqual(menus.images);
     expect(contextMenu({ ...session, app: null })).toEqual(menus.window);
     expect(contextMenu({ ...session, app: "photoshop" })[0].action).toBe(

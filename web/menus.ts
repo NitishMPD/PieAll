@@ -124,7 +124,7 @@ const FIXED_APP_SLOTS = 6;
 
 /** Context a layout is saved under: a file type, or the captured app. */
 export function contextKey(session: Pick<Session, "kind" | "app">): string {
-  return session.kind === "window" && session.app
+  return (session.kind === "window" || session.kind === "text") && session.app
     ? `app:${session.app}`
     : session.kind;
 }
@@ -146,6 +146,28 @@ export function appItems(actions: Action[]): MenuItem[] {
     .filter((action) => action.shortcut)
     .sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity))
     .map(shortcutItem);
+}
+
+/** Figma's related alignment choices share one slice; individual commands stay customizable. */
+export function appPool(actions: Action[]): MenuItem[] {
+  const items = appItems(actions);
+  const alignment = actions
+    .filter(
+      (action) =>
+        action.id.startsWith("app:figma:") && action.category === "Alignment",
+    )
+    .map(shortcutItem);
+  return alignment.length
+    ? [...items, sub("app:figma:align", "Align", "align-left", alignment)]
+    : items;
+}
+
+function appDefaults(actions: Action[]): MenuItem[] {
+  const pool = appPool(actions);
+  return [
+    ...pool.filter((item) => !item.children).slice(0, FIXED_APP_SLOTS),
+    ...pool.filter((item) => item.children),
+  ];
 }
 
 /** Every slice a file-type ring can hold: its presets, their choices, and plain registry actions. */
@@ -170,9 +192,7 @@ export function kindPool(kind: string, actions: Action[]): MenuItem[] {
 /** The slice keys a context shows before the user edits it. */
 export function defaultLayout(context: string, actions: Action[]): string[] {
   return context.startsWith("app:")
-    ? appItems(actions)
-        .slice(0, FIXED_APP_SLOTS)
-        .map((i) => i.key)
+    ? appDefaults(actions).map((i) => i.key)
     : (menus[context] ?? []).map((i) => i.key);
 }
 
@@ -187,7 +207,7 @@ function custom(
   return layout.flatMap((key) => byKey.get(key) ?? []);
 }
 
-/** Selection tools take precedence; app commands never become category trees. */
+/** Supported apps retain their workflow over text selections; file/image tools stay primary. */
 export function contextMenu(
   session: Session,
   prefs: Prefs = getPrefs(),
@@ -196,11 +216,11 @@ export function contextMenu(
     custom(session.kind, kindPool(session.kind, session.actions), prefs) ??
     menus[session.kind] ??
     [];
-  if (session.kind !== "window") return base;
+  if (session.kind !== "window" && session.kind !== "text") return base;
   const appActions = contextualActions(session.actions, session.app);
   const shortcuts =
-    custom(contextKey(session), appItems(appActions), prefs) ??
-    appItems(appActions).slice(0, FIXED_APP_SLOTS);
+    custom(contextKey(session), appPool(appActions), prefs) ??
+    appDefaults(appActions);
   if (!shortcuts.length) return base;
   return [
     ...shortcuts,
@@ -211,7 +231,18 @@ export function contextMenu(
       browse: true,
       hint: "Search this app's shortcuts",
     },
-    sub("window-tools", "Window", "window", base),
+    ...(session.kind === "text"
+      ? [sub("text-tools", "Text tools", "text", base)]
+      : []),
+    sub(
+      "window-tools",
+      "Window",
+      "window",
+      session.kind === "window"
+        ? base
+        : (custom("window", kindPool("window", session.actions), prefs) ??
+            menus.window),
+    ),
   ];
 }
 

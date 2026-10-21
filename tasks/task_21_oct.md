@@ -14,3 +14,8 @@
 - Added a native Use shortcut tray toggle to pause hold-key and Ctrl+backtick invocation for the current session, preserve manual ring access, and guard hotkey restoration; verified disabled-key passthrough and active-hold release with a focused Rust unit test.
 - Replaced the hand-drawn icon set with Lucide plus a keyword resolver that gives app commands relevant icons (782 of 870 shortcut titles matched, generic fallback for the rest).
 - The ring no longer flashes the previous target's slices while reading the selection: it shows the empty tray and "Reading…" hub, then the real slices fade in once.
+- Added a frameless dashboard with a custom title bar (drag region, minimize/maximize/close to tray).
+- Expanded the product plan with all 72 extracted toolkit workflows, Windows adaptations, current implementation gaps, moodboards, open-source engine candidates and phased acceptance gates; synchronized planned scope and UX in project.md/design.md without changing runtime code.
+
+- Updated 49 default app profiles for repetitive workflows; added browser Copy URL, Figma Align/distribute and app-first selected-text routing while preserving saved layouts and action IDs. Updated research/product/design/verification docs; passed 17 frontend and 3 catalog tests, TypeScript/Rust checks and changed-file formatting. Native target-app acceptance remains user-run.
+- Fixed false "PieAll is busy" after closing the dashboard with an editor open (closing now abandons the editor), stopped toast text clipping (detail wraps under the title) and redrew the submenu dwell progress as a dark bar with a track inside the popped slice.

@@ -412,3 +412,47 @@ body,
     border-top: 1px solid var(--line);
   }
 }
+
+/* Frameless title bar: the header is the drag region, controls sit flush right. */
+.app-header {
+  height: 44px;
+  padding: 0 0 0 16px;
+  user-select: none;
+}
+.app-header .brand {
+  font-size: 15px;
+}
+.app-header .brand-symbol {
+  width: 24px;
+  height: 24px;
+}
+.header-actions {
+  height: 100%;
+  gap: 12px;
+}
+.header-actions > .quiet {
+  padding: 5px 10px;
+}
+.window-controls {
+  display: flex;
+  height: 100%;
+}
+.window-controls button {
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+}
+.window-controls button:hover:not(:disabled) {
+  background: var(--hover);
+}
+.window-controls .close:hover:not(:disabled) {
+  background: #c42b1c;
+  color: #fff;
+}
+.window-controls button:active:not(:disabled) {
+  transform: none;
+}

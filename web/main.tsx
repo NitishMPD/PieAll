@@ -15,6 +15,7 @@ import {
 } from "./action-search";
 import { Ring } from "./Ring";
 import { Toast } from "./Toast";
+import { WindowControls } from "./TitleBar";
 import { Icon, iconFor } from "./Icon";
 import { Customize, applyTrigger } from "./Customize";
 import { TRIGGER_KEYS, usePrefs } from "./prefs";
@@ -256,7 +257,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
   const editor = session.actions.find((a) => a.id === session.editor);
   return (
     <div className="app-shell">
-      <header className="app-header">
+      <header className="app-header" data-tauri-drag-region>
         <a
           className="brand"
           href="#"
@@ -284,6 +285,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
             <Icon name="ring" size={17} />
             Show ring <kbd>Hold {triggerLabel}</kbd>
           </button>
+          <WindowControls />
         </div>
       </header>
       <div className="body-layout">

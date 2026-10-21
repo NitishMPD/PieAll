@@ -986,9 +986,15 @@ html[data-surface="toast"] body {
 .radial-standalone .dwell {
   display: block;
   fill: none;
-  stroke: #fff;
-  stroke-width: 2;
+  stroke-width: 3;
   stroke-linecap: round;
+}
+/* Dark on the white popped slice, so the bar reads against what it sits on. */
+.radial-standalone .dwell-track {
+  stroke: rgba(20, 20, 22, 0.12);
+}
+.radial-standalone .dwell-fill {
+  stroke: rgba(20, 20, 22, 0.72);
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   animation: dwell var(--dwell) linear forwards;
@@ -1034,12 +1040,15 @@ html[data-surface="toast"] body {
   font-family: var(--font);
 }
 .toast {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, auto);
   align-items: center;
-  gap: 8px;
+  column-gap: 8px;
+  row-gap: 1px;
   max-width: calc(100% - 16px);
-  height: 36px;
-  padding: 0 14px 0 9px;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 7px 14px 7px 9px;
   border-radius: 18px;
   background: rgba(20, 20, 22, 0.74);
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -1064,7 +1073,7 @@ html[data-surface="toast"] body {
   }
 }
 .toast-mark {
-  flex: none;
+  grid-row: 1 / span 2;
   display: grid;
   place-items: center;
   width: 18px;
@@ -1077,19 +1086,21 @@ html[data-surface="toast"] body {
 .toast-error .toast-mark {
   color: #ff917b;
 }
-.toast > strong,
-.toast-detail {
+.toast > strong {
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.toast > strong {
-  flex: 0 1 auto;
   font-weight: 600;
 }
+/* Below the title, wrapping to two lines so a reason is never cut mid-word. */
 .toast-detail {
-  flex: 0 2 auto;
+  grid-column: 2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.35;
   color: rgba(244, 244, 246, 0.6);
 }
 .toast .spinner {

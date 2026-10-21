@@ -1,14 +1,14 @@
 # PieAll implementation plan
 Author: Nitish
 
-Date: 19 October 2026  
-Status: proposed implementation plan. No application has been implemented or benchmarked.
+Date: 19 October 2026; expanded 21 October 2026.
+Status: partly implemented. The current Tauri app has 44 local commands plus contextual app shortcuts. Section 13 records the expanded toolkit scope and the implementation gaps. Native acceptance and performance remain unverified; planned tools are not shipped capabilities.
 
 **Goal:** Build a fast Windows radial action menu that understands the selected item, opens with a configurable backtick shortcut, and lets people finish useful tasks without opening a large dashboard.
 
-**Architecture:** A resident Rust Windows application owns invocation, context, the pie, and a small dashboard. Expensive operations run in temporary worker processes. A browser extension supplies browser context. A separate community hub distributes reviewed declarative packs that invoke the same built-in handlers.
+**Architecture:** The current app uses Tauri 2 and React/TypeScript over the existing Rust execution core. Rust owns invocation, immutable context, eligibility, operation exclusion and output safety; React owns presentation. Expensive operations run in temporary worker processes. The planned browser extension supplies browser context. A planned separate community hub distributes reviewed declarative packs that invoke the same built-in handlers. Current behavior in project.md supersedes the original invocation/rendering proposal below.
 
-**Tech stack:** Rust stable, windows-rs, Win32, Direct2D/DirectWrite, optional DirectComposition, Windows Imaging Component, SQLite, Serde, and narrowly enabled image/archive libraries. Chromium Manifest V3 extension in TypeScript. A separate Rust HTTP service and simple web pages for the hub.
+**Tech stack:** Tauri 2, React/TypeScript, Rust, windows-rs, Win32, Serde and narrowly enabled image/archive libraries. SQLite is planned for persistent app data. The initial rendering proposal used Direct2D/DirectWrite, optional DirectComposition and Windows Imaging Component; that proposal remains historical rather than a requirement to replace Tauri. A Chromium Manifest V3 extension in TypeScript and a separate Rust HTTP service with simple web pages remain planned.
 
 **Execution:** Implement sequentially in the existing folder. Do not create branches, commit, push, deploy, start a dev server, run a build, or launch the app under the current working instructions. Checks and targeted tests are allowed. No delegated agents are required.
 
@@ -18,7 +18,7 @@ Status: proposed implementation plan. No application has been implemented or ben
 - The pie is the main surface. The dashboard handles configuration, action discovery, recent jobs, and collections.
 - Use warm translucent surfaces, separate rounded wedges, fine light borders, orange selection, and compact floating editors.
 - Support keyboard invocation on the current selection and modifier-plus-file-drag invocation. Both use one registry and execution path.
-- Target 100 distinct actions for v1.0. Some require an optional engine or browser extension. State that distinction in onboarding and marketing.
+- Preserve the original 100-action catalog as the baseline. Section 13 expands the product with 72 tracked tool workflows, including overlaps and Windows adaptations. Do not advertise 172 distinct actions: workflows, variants and handlers overlap. Release smaller verified groups; some require an optional engine or browser extension. State that distinction in onboarding and marketing.
 - Start with a complete 20-action version, then add actions in tested groups.
 - Default to local processing. The hub receives pack submissions, not users' files, clipboard contents, browsing history, or moodboards.
 - Local actions and browsing packs require no account. Publishing public packs requires an account.
@@ -73,7 +73,7 @@ Availability states: ready, needs input, needs engine, needs permission, unsuppo
 
 For a batch, default to actions supported by every target. A subset action must say Apply to 3 of 5 and identify skipped targets before execution. Combining actions define explicit ordering. Opening a pie must not rearrange slots halfway through an invocation.
 
-## 4. Launch catalog: exactly 100 actions
+## 4. Original baseline catalog: exactly 100 actions
 
 These are user-visible actions, not 100 services. Conversions share a converter panel and handler; image transforms share a pipeline; all output passes through one safety boundary.
 
@@ -435,7 +435,7 @@ Do not include likes, comments, followers, payments, enterprise private packs, o
 
 ## 10. Implementation milestones
 
-This is a planning-only delivery. At implementation start, create project.md and design.md from the appropriate sections, each with Author: Nitish directly under its title. Record completed work in the daily task file only after completion. No application scaffolding or implementation records are needed for this standalone plan.
+The original delivery of this plan was planning-only. Implementation has since started; project.md and design.md exist, each with Author: Nitish directly under its title. Record completed work in the daily task file only after completion. The milestones below retain the original baseline; section 13 supplies the expanded sequence against the current Tauri implementation.
 
 ### Milestone 1 — Native interaction and accessibility proof
 
@@ -572,3 +572,226 @@ Resolve through evidence rather than blocking planning on preference questions:
 7. Hub hosting/authentication and PieAll's own public distribution license. The owner decides its license; third-party notices remain required regardless.
 
 When a gate fails, fix its responsible layer before increasing scope.
+
+## 13. Expanded custom toolkit — 21 October 2026
+
+Build focused tools inside PieAll for image editing, PDFs/documents, conversion, compression, video/audio, text/speech, files, Windows utilities and moodboards. Reuse maintained open-source engines behind PieAll's own controls. A tool opens from the ring when its input is captured, and from the dashboard when the user needs to choose input. It must perform the operation locally; an external-app shortcut does not count as an implemented editor.
+
+This section incorporates the seven supplied screenshots and an extracted catalog of 72 tools, including their individual workflow descriptions. The catalog has 15 video, 5 audio, 8 image, 22 document, 5 text/speech, 2 file and 15 system workflows. All 72 are accounted for below. The 15 system workflows are adapted to Windows; Apple frameworks, phone continuity, Apple Intelligence, Homebrew and macOS settings are not dependencies. The screenshots establish discovery and editor requirements, not permission to copy another application's artwork, brand or performance claims.
+
+T01–T72 are planning identifiers for these workflows. They do not renumber baseline IDs 01–100 or replace existing native command IDs. Multiple workflows can share a handler. The catalog is additional product scope, not a claim that 72 new transformations already exist. Moodboards, archives, original text tools, browser actions, window tools and community packs remain part of the plan even when absent from these 72 workflows.
+
+### 13.1 What exists and what remains
+
+Status below comes from `src/actions.rs`, `src/output.rs`, `src/platform.rs`, `src-tauri/src/shell.rs` and the current React UI. A source implementation is not native acceptance evidence. The existing 44 local commands count individual case, encoding, rotation and flip variants; app shortcut bindings count separately and do not complete tool milestones.
+
+| Area / baseline IDs | Current implementation | Remaining work |
+|---|---|---|
+| Image editing, 01–15 and 17–20 | Numeric crop; bounded resize and native percent preset; PNG/JPEG/lossless WebP conversion; JPEG/transparent-PNG compression with no-shrink result; rotate/flip; metadata re-encoding; details; clipboard pixels; quantized palette; solid frame/corners; grayscale; contact sheet | Pointer and keyboard crop handles/aspect presets; richer resize controls; estimated/actual output preview; metadata/format inspection; swatches; gradient/image backgrounds, shadows and ratios; watermark; OCR; safe SVG rendering; labelled/orderable contact sheets; two-image comparison |
+| Background removal, 16 | No model integration | Explicit optional engine/model install, license/RAM information, mask preview, edge review, alpha/solid output |
+| Files/folders, 21–30 | Copy paths, Reveal, Terminal, duplicate files, SHA-256, folder size, list-only duplicate detection | Quoted path choice; folder duplication; batch rename preview/undo; copy/move destination and conflicts; cancellation, inaccessible-item reports and scan navigation |
+| Archives, 31–40 | ZIP from selected files; extraction into a new sibling folder; entry list; integrity test | Folder traversal for ZIP; previewed merge extraction; selected-entry extraction; itemized integrity failures; 7z encryption, 7z/RAR reading, conversion and split volumes |
+| PDF, 41–50 | Images to raster PDF with fixed A4 pages | Ordered page-size/margin editor; merge/split/extract/reorder/rotate; render/text extraction; structural optimization and inspection; expanded PDF editor features below |
+| Text/data, 51–60 | Case/trim/sort/dedupe/count; JSON format/minify; URL-component and text Base64 encoding/decoding | Sentence case/options/preview; sort direction; counts removed; save output; full-URL mode; binary Base64 export; CSV-to-JSON; QR create/read |
+| Browser, 61–70 and 82 | No browser bridge or extension | Bookmarks, reading list, clean/Markdown links, viewport capture, permitted web-image access, search/translation, sourced quotes and board URLs |
+| Video/audio, 71–80 | No media engine or handlers | FFprobe metadata, conversion/compression/trim/audio/frame/GIF operations, explicit online downloads; expanded workflows T01–T20 |
+| Moodboards, 81–90 | No collection database, asset store or board UI | Managed local images, named boards, notes/tags, provenance, similarity, contact sheet/bundle/palette exports, original-source opening |
+| Windows/screen, 91–100 | Always on top, center, fit-to-work-area, basic title/HWND report | Screen/region capture, OCR, color picker, next-monitor move, executable location, richer details and resizable-window constraints |
+| Cross-cutting product work | Tauri tray/ring/dashboard, contextual app shortcuts, ring layouts and trigger choice, isolated timed workers, collision-safe output, signed updater/release configuration | Versioned SQLite and settings migration; cancel/process-tree cleanup; explicit engine management; typed availability reasons; accessible rich editors; modifier-drag; exclusions; recent jobs/favorites; packs/hub; native acceptance, installer/release and performance evidence |
+
+### 13.2 Video — 15 workflows
+
+Every timeline has numeric start/end controls, keyboard seeking, a preview of the selected segment and explicit output settings. Probe duration, streams and rotation before presenting valid choices. Honor variable frame rates, orientation, audio-only inputs, missing streams and unsupported codecs. Use FFmpeg/FFprobe as optional engines; do not keep codecs loaded in the resident tray process.
+
+| ID | Tool | Required input, controls and result | Existing overlap / status |
+|---|---|---|---|
+| T01 | Download video | Explicit one/many HTTP(S) links; best available, 1080p, 720p or audio-only; compatible-codec preference; destination; progress, retry and cancel; no DRM bypass. Browser capture is optional when the user pastes a URL. | Extends 79–80; missing |
+| T02 | Burn in subtitles | Video plus SRT/WebVTT, or a reviewed local transcript; text size/style/position with preview; encode a captioned copy. Parse subtitles as data and restrict referenced fonts/assets. | New; missing |
+| T03 | Change speed | 0.25×–4×, presets and new-duration readout; preserve pitch by default, optional mute; output preset. | New; missing |
+| T04 | Extract frames | One timestamp, every N seconds or N evenly spaced frames; PNG/JPEG, size and count limits; publish a new frame folder. HEIC is available only after its codec gate. | Extends 78; missing |
+| T05 | Record screen | Display/window/area selection; independent system-audio and microphone toggles; pointer/click highlight options; native/1440p/1080p/720p, 30/60 fps when supported; H.264 MP4/MOV; visible record/pause/stop and recoverable partial recording. | Extends screen work 91–92; missing |
+| T06 | Compress video | High/Balanced/Small quality; optional 1080p/720p/480p cap, audio removal and supported hardware encoding with CPU fallback; show before/after bytes and honest estimated size. Save nothing by default when output is larger. | Extends 73; missing |
+| T07 | Convert video | MP4/MOV/WebM/M4V; compatible codec/quality presets; remux when compatible, otherwise re-encode; disclose which path applies. Availability follows the installed engine's real encoders. | Extends 72; missing |
+| T08 | Resize video | Presets/custom dimensions; fit, pad, crop-to-fill and explicit stretch; aspect lock; resulting dimensions and codec-evenness validation. | New shared video transform; missing |
+| T09 | Crop and rotate video | Playing preview with crop handles and numeric equivalents; free/16:9/9:16/1:1/4:3/4:5; quarter-turn rotation and horizontal/vertical flip; output dimensions. | New shared video transform; missing |
+| T10 | Media info | Streams, duration, dimensions, display rotation, frame rate, codec, bitrate and readable metadata for video/audio; copyable report. Missing values stay unknown. | Same family as 71; missing |
+| T11 | Trim video | Timeline and numeric times; fast keyframe-aligned stream copy or precise re-encode; preview and explain actual cut boundaries. | Extends 74; missing |
+| T12 | Merge videos | Explicit ordered clips with keyboard move controls; output resolution; normalize incompatible streams before joining; combined duration and per-input failures. | New; missing |
+| T13 | Mute video | Remove audio while stream-copying compatible video; a no-audio input gets a clear unchanged result. | Same family as 76; missing |
+| T14 | Replace audio | Primary video plus explicitly chosen audio/second video; replacement track loops to fit or plays once then silence; original/new track volume and preview; video duration remains the boundary. | New; missing |
+| T15 | Video to GIF | Selected interval, width, frame rate, loop option and palette generation; hard duration/frame/pixel/output caps; approximate size warning before export. | Extends 77; missing |
+
+### 13.3 Audio — 5 workflows
+
+| ID | Tool | Required input, controls and result | Existing overlap / status |
+|---|---|---|---|
+| T16 | Clean up audio | Audio/video; Light/Medium/Strong denoise, rumble/hiss filtering, optional loudness normalization and silence removal; A/B playback and peak/clipping indication; explain when silence removal changes timing. | New; missing |
+| T17 | Record audio | Native microphone/device choice and permission guidance; live level, mono/stereo, M4A/WAV when supported; record/pause/stop; retain recording if transcription fails; explicit Transcribe handoff. | New; missing |
+| T18 | Trim audio | Waveform with numeric start/end; playback selection; optional fade-in/out with validated lengths; new audio file. | Extends 74 for audio; missing |
+| T19 | Extract audio | Video/audio stream choice; M4A/MP3/WAV/FLAC and supported bitrate; lossless stream copy when compatible, otherwise explicit encoding. | Extends 75; missing |
+| T20 | Convert audio | MP3/M4A/WAV/FLAC/AIFF when supported; bitrate, sample rate and channel options; original-rate choice; explicit lossy/lossless labeling. | New shared converter; missing |
+
+### 13.4 Images — 8 workflows
+
+Retain the existing source-preserving pipeline and orientation normalization. Preview the first image prominently, but make every batch item reviewable and report its outcome. Automatic detection never guarantees that every face or sensitive detail was found.
+
+| ID | Tool | Required input, controls and result | Existing overlap / status |
+|---|---|---|---|
+| T21 | Blur faces | Local face detection with reviewed model license; editable/addable/removable regions on each image; blur/pixelate/solid cover, strength and before/after preview; explicit no-face and missed-detection states. Solid cover replaces pixels; blur is not a privacy guarantee. | New; missing |
+| T22 | Beautify screenshot | Solid, gradient or local-image background; padding, corner radius, shadow; natural/16:9/4:5/1:1/custom canvas; live dimensions and keyboard controls; full-resolution PNG export. | Extends 13 / `frame`; partial: solid/padding/corners only |
+| T23 | Remove background | Local cutout preview with editable/refinable mask; transparent/white/custom background; optional crop to subject; PNG output and no-subject failure. | Extends 16; missing |
+| T24 | Convert images | PNG/JPEG/WebP initially; quality, alpha flattening and metadata policy. Add TIFF/HEIC reading/writing only after exact Windows codec/license/fixture checks; expose unsupported direction clearly. Safe SVG rasterization remains baseline 18. | Extends 03 / `convert`; partial format coverage |
+| T25 | Compress images | Quality presets plus numeric control; keep format where a real encoder can reduce it, or explicit JPEG/WebP; compare size and visual preview; alpha/metadata policy; no guaranteed invisible loss. | Extends 04 / `compress`; partial |
+| T26 | Resize images | Percentage, longest side or exact size; proportions, explicit enlargement choice, resulting dimensions; preserve the current no-upscale default. | Extends 02 / `resize`; partial UI |
+| T27 | Rotate images | Composable left/right/flip operations, batch preview and final dimensions; normalize orientation first. | Baseline 05–08; separate rotate/flip commands implemented, unified editor missing |
+| T28 | Remove metadata | New re-encoded image with normalized orientation; disclose retained color information and removed metadata classes; inspect output fixtures rather than promise complete sanitization. | Baseline 09 / `strip_metadata`; implemented re-encoding, richer review missing |
+
+### 13.5 Documents and PDF — 22 workflows
+
+PDF editing means page organization, text/annotation overlays, forms, signatures and the operations below. Arbitrary in-place editing of existing PDF text/layout is a separate future capability, not implied by the word editor. PDF-to-Word reconstructs editable content with stated fidelity limits. A drawn signature is a visible mark, not certificate signing. Flattening forms does not make a PDF tamper-proof or perform redaction.
+
+| ID | Tool | Required input, controls and result | Existing overlap / status |
+|---|---|---|---|
+| T29 | Scan document | Local photos or explicit Windows camera/scanner input; detected page quadrilateral with manual corners; perspective/deskew; Color/Grayscale/Black & White; reorder/rotate/delete, paper size and optional OCR layer. No phone-account integration is required. | New; missing |
+| T30 | Redact PDF | Page preview; manual regions and reviewed find-all matches; burn solid regions into bounded raster pages and rebuild a fresh document excluding original streams, attachments, metadata and prior revisions. Optionally OCR only the final visible pixels. Verify hidden text cannot be extracted or recovered from the saved object graph. | New; missing; security acceptance gate |
+| T31 | Fill and flatten forms | List supported AcroForm text/checkbox/choice fields with page numbers; keyboard editing; add positioned text for static forms; keep fields editable or flatten appearances into a copy; show unsupported XFA/signature fields. | New; missing |
+| T32 | Make PDF searchable | Local OCR and selected installed languages; skip pages with existing text or explicitly re-recognize; invisible aligned text layer; progress per page and OCR accuracy review. Re-rendering can enlarge/change pages and must be disclosed. | Extends OCR 17/48; missing |
+| T33 | PDF to Word | DOCX/RTF/TXT output; embedded text first, optional OCR for scans; headings/paragraphs/lists, optional images/page breaks; preview reading order and disclose table/multicolumn limitations. | New; missing |
+| T34 | Sign PDF | Draw/type/import a local signature; position/resize with numeric and keyboard equivalents; optional explicit local signature saving/removal; export a new PDF; report invalidation of existing digital signatures. | New; missing |
+| T35 | Merge PDFs | Ordered PDFs and supported images; thumbnails with keyboard reorder; optional per-source bookmarks, encrypted/invalid input handling; one copy. Mixed inputs reuse images-to-PDF. | Extends 41–42; PDF merge missing |
+| T36 | Split PDF | Every page, every N pages or custom range groups including open-ended ranges; page-count validation, preview of output names/counts; publish bounded new files. | Extends 43; missing |
+| T37 | Organize PDF | Lazy bounded page thumbnails; reorder/rotate/delete with keyboard move controls and undo inside the editor; preserve untouched page content where supported. | Extends 45–46; missing |
+| T38 | Delete pages | Select/remove/invert/keep-all; numeric ranges; preview kept pages; reject deletion of all pages; save a copy. | Shared organizer; missing |
+| T39 | Extract pages | Ordered selection/ranges; one PDF or separate files; reject out-of-range/empty input; explicit duplicate-page behavior. | Extends 44; missing |
+| T40 | Images to PDF | Orderable images; fit-image/A4/Letter, orientation and margins; alpha background and resulting page count. | Baseline 41 / `images_pdf`; partial: fixed A4/selection order |
+| T41 | Compress PDF | Separate lossless structure optimization from image recompression/downsampling; Screen/Balanced/Print presets; retain selectable text when chosen; before/after bytes; save nothing by default if larger. | Extends 49; missing; qpdf alone does not supply image recompression |
+| T42 | Add password | Password and confirmation; modern encryption supported by the selected engine; explicit print/copy permission choices with a warning that viewers may ignore restrictions; no secret persistence/logging. | New; missing |
+| T43 | Remove password | User-supplied known password; validate and export an unlocked copy; no cracking; per-file errors; never place the password in a visible process command line. | New; missing |
+| T44 | PDF to images | Selected/all pages; PNG/JPEG, 72/150/300 dpi; page/pixel/byte quotas and ordered naming; HEIC only with verified codec support. | Extends 47; missing |
+| T45 | Convert documents | DOC/DOCX/ODT/RTF/HTML/TXT/Markdown capability matrix by engine and direction; retain supported styles/lists/links/images; disclose layout, comments and tracked-change losses; bounded asset folder/bundle for HTML/Markdown outputs. | New; missing |
+| T46 | Word to PDF | DOC/DOCX/RTF/TXT to PDF with optional LibreOffice; page size, font/substitution and pagination review; no macros or external-link updates. | New; missing |
+| T47 | PowerPoint to PDF | PPT/PPTX/ODP to PDF with optional LibreOffice; slide/notes export only where supported; preview and missing-font/layout failures. | New; missing |
+| T48 | Excel to PDF | XLS/XLSX/ODS to PDF with optional LibreOffice; sheet choice, print area, scaling and pagination; preview cropped/overflowing content; preserve the source workbook. | New; missing |
+| T49 | Web page to PDF | Explicit HTTP(S) URL, active-tab browser handoff or local HTML; paginated A4/Letter or bounded long page; network/source disclosure, resource limits, no access to arbitrary local files from page content. | Extends browser work; missing |
+| T50 | Markdown to PDF | Local Markdown; Clean/code-friendly styles, paper size, fenced code/tables and local images; sanitize raw HTML, disable scripts and remote resources by default; preview before saving. | New; missing |
+
+### 13.6 Text and speech — 5 workflows
+
+Language models belong in explicit tools after activation, never in selection capture or ring rendering. Downloads are separate from inference: label installed model, supported languages, disk/RAM cost and local-only execution. Do not silently fall back to a cloud provider.
+
+| ID | Tool | Required input, controls and result | Existing overlap / status |
+|---|---|---|---|
+| T51 | Transcribe | Local audio/video/recording, selected language or explicit autodetect, timestamped segment review; TXT, timestamped TXT and SRT export; local speech model, cancellation and retained source recording. | New; missing |
+| T52 | Summarize | Explicit text/document input via shared extractors; Short/Medium/Detailed and Paragraph/Key points/One line; source alongside editable/copyable output; local optional model, context limits/chunking, uncertainty and unsupported-document errors. | New; missing |
+| T53 | Extract text | Images/screenshots/scanned PDFs; embedded text where present, local OCR otherwise; installed language choice, page/file selector, review/copy/TXT/save-all. | Extends 17/48; missing |
+| T54 | Capture text | User-selected screen region, OCR preview, explicit copy or opt-in automatic copy; optional bounded history and delete controls. | Extends 93; missing |
+| T55 | Translate | Explicit text/document/SRT; source/target language and swap; side-by-side review; local downloadable language pair; TXT/SRT output preserves cue timestamps. Document translation initially exports text unless layout preservation is actually supported. | Expands browser-only 69 with a distinct local handler; missing |
+
+### 13.7 Files — 2 workflows, alongside the existing file/archive catalog
+
+| ID | Tool | Required input, controls and result | Existing overlap / status |
+|---|---|---|---|
+| T56 | QR code | Create Link/Text/Wi-Fi codes with size/colors/error correction and capacity/contrast checks; copy pixels, PNG/SVG export; read QR and supported barcodes from bounded images; decoded links are displayed before opening. Wi-Fi secrets stay ephemeral. | Extends 60 with reader and Wi-Fi modes; missing |
+| T57 | Batch rename | Files/folders; replace/add text, template/numbering/date/case modes; deterministic order; before/after names and conflicts; journaled two-step rename for overlaps/case-only names; explicit commit and recoverable undo without overwriting intervening files. | Baseline 24; missing |
+
+The general converter is a single entry point to image, video, audio, PDF and document converters. It lists only supported input→output pairs and names the required engine. It does not promise arbitrary file-to-file conversion. The compressor similarly routes images, PDF, video and archives to the matching implementation; archive compression never implies lossy recompression of its contents.
+
+### 13.8 Windows utilities — 15 adapted workflows
+
+Prefer documented Windows APIs and supported Settings pages. Show unavailable fields and hardware capabilities honestly. System changes need a review of the exact targets, rollback where feasible, and an explicit user action; packs cannot grant themselves elevated privileges or invoke arbitrary shell commands.
+
+| ID | Windows tool | Required behavior and platform boundary | Existing overlap / status |
+|---|---|---|---|
+| T58 | Network speed test | Explicit download/upload/latency test with named endpoint/provider and bounded traffic; sequential/simultaneous modes only if supported; cancel and local opt-in history; disclose data transfer before starting. Select an endpoint/license during implementation; do not reuse an Apple-only command. | New; missing |
+| T59 | Storage explorer | Choose drive/home/folder; cancellable size tree and largest-files view; report inaccessible paths and skip links; reviewed cache/download candidates; Recycle Bin through Windows shell with per-item failures. Exclude system/active app data from generic cleanup. | Extends 28–30; scans partial, explorer/cleanup missing |
+| T60 | Wi-Fi password and QR | Explicit saved-network selection; documented WLAN API and OS access checks; reveal/copy/share only after user activation; manual SSID/password QR remains a complete fallback; no admin-password collection, persistence, history or diagnostics containing credentials. | New; missing |
+| T61 | Battery health | Design/full-charge capacity, charge, cycle count, condition and charger data where exposed by Windows/hardware; supported accessory batteries only; unavailable values remain unavailable. | New; missing |
+| T62 | Keep awake | 15 minutes/1 hour/3 hours/until time/indefinite; optional display awake and AC-only; Windows power request released on stop, expiry, exit or crash; visible active indicator. | New; missing |
+| T63 | Uninstall app | Inventory installed apps and publishers; invoke the registered supported Windows uninstall flow, then separately review confidently attributable leftover user files for Recycle Bin cleanup. Do not delete Program Files/registry trees by guessed name or promise an undo for vendor uninstallers. | New; missing |
+| T64 | Presentation mode | Explicit set of supported desktop/taskbar/privacy/power changes; record each original value; status/stop and restore only owned changes; no forced process termination or hidden automatic screen capture. Unsupported shell toggles remain Settings links. | New; missing |
+| T65 | Clean keyboard | Explicit 30/60/120-second pause, visible countdown and pointer-operable Stop; watchdog releases suppression on timeout/crash; secure attention/power controls untouched; coordinate with PieAll's hold hook and prove accessibility/recovery before enabling. | New; missing |
+| T66 | Eject external drives | Enumerate eligible removable volumes/devices and show exact targets; per-drive/eject-all; Windows veto/open-file errors; never force removal or include the system drive; wait for confirmed ejection. | New; missing |
+| T67 | Startup and background items | Inventory supported Startup folders/Run entries and distinguish services/tasks; publisher/signature details without implying unsigned equals malicious; reversible disable for owned supported types; use Windows management UI for unsupported/elevated types. | New; missing |
+| T68 | App launch diagnostics | Windows equivalent of the damaged-app workflow: inspect PE architecture, signature, downloaded-file marker and launch error; offer official repair/reinstall/settings guidance. Any per-file unblock is a separate reviewed action naming its effect; never disable Defender/SmartScreen globally or call an invalid signature safe. | New Windows adaptation; missing |
+| T69 | App permission help | Inspect available camera/microphone/privacy state and open the matching Windows Settings page; explain restart/regrant steps. Windows has no general equivalent of macOS permission reset; expose a reset only for a specifically documented supported API, never delete permission registry stores. | New Windows adaptation; missing |
+| T70 | Advanced Windows settings | Small allowlist of documented Explorer/taskbar/screenshot/file settings; read actual values, explain scope and restart needs, preserve prior values and offer restore. Unsupported settings route to native UI. | New; missing |
+| T71 | Display control | Per-monitor brightness/contrast/volume only when exposed by internal-display APIs or DDC/CI; query limits, show unsupported controls disabled, debounce writes and recover from disconnect; optional explicit restore of saved levels. | New; missing |
+| T72 | Mouse controls | Per-device wheel direction/speed/smoothing only where device identity is reliable; preserve precision touchpad behavior; test area, enable/disable and restore; uncertain mixed-device events use native Windows settings instead of global rewriting. | New; missing |
+
+### 13.9 Moodboards and collections remain a full workstream
+
+Build baseline 81–90 in the Library, not as files dumped into a generic folder. A board owns its name, ordered items, notes, normalized tags and optional cover. Each item records its import time and local/browser provenance; managed image bytes survive external-original deletion. Show missing external originals without losing the managed copy. Add selected images to an existing/new board or create one from the current selection through the same native revision validation.
+
+- Use versioned SQLite with foreign keys, transactions and serialized writes. Migrate existing `pieall.prefs` settings through an explicit versioned bridge, preserving customization; do not create a second lasting settings owner or delete the old data before a verified import.
+- Stage decoded/validated assets before inserting references. Content-address originals/thumbnails, enforce board/item/storage quotas, deduplicate bytes and reference-count them. Failed DB/file steps leave recoverable orphans, not dangling live references. Deleting a board removes only owned data after reference checks, never external originals.
+- Provide an image grid, zoomed preview, notes/tags/search, keyboard selection and reorder, add/remove with recoverable undo, and optional spatial arrangement with persisted positions. The grid is a complete keyboard-accessible view of every canvas item; pointer dragging is never the only route.
+- Add plain notes, color swatches and HTTP(S) source links. Browser images/pages require the explicit bridge/access permission; never fetch remote content merely because the Library opens.
+- Find similar images using local thumbnail perceptual hashes and a stated visual-distance threshold; distinguish visual similarity from semantic search and let the user review matches.
+- Export an ordered contact sheet, a combined palette as HEX/CSS, and a ZIP bundle of images/notes/source links/JSON. Preview included private paths/URLs/notes; make provenance inclusion explicit. Escape HTML/CSS/Markdown and archive names. Reuse the existing image/contact-sheet/ZIP/output owners.
+- Open original local sources or HTTP(S) URLs after validation; report missing files and reject executable/unsafe URI schemes. Use bounded lazy thumbnails and no idle library scanning.
+
+### 13.10 Shared tool experience
+
+The dashboard gains a Tools discovery view with All, Video, Audio, Images, Documents, Text & Speech, Files, Windows and Boards. Keep the contextual ring as the primary quick-action surface. A tool can be discovered before selecting input; its page explains accepted formats and offers a native picker. Changing input still goes through Rust, increments the revision and invalidates stale editor/preview replies.
+
+Use a compact searchable catalog with meaningful previews and concise descriptions, category counts from registry data, favorites and recent tools. Recent tool IDs are separate from private recent files/text; content history is opt-in, bounded and deletable. Show actual measured compression savings only after completed jobs, never illustrative marketing numbers. Favorites are keyboard-reorderable.
+
+Every tool page follows Input → Preview and settings → Run → Result. Larger editors use a preview area plus an inspector; simple tools keep a compact panel. Include empty/loading/error/unsupported/no-change/cancelled/partial-success states. Format/engine incompatibility has a specific reason and recovery action. Avoid one generic numeric form for timelines, page ordering or signatures, while retaining labelled numeric equivalents for pointer controls.
+
+Each batch has an explicit ordered input list, limits, per-item results and an output-policy summary. Keep smart collision-safe outputs beside the source by default. Offer an explicit destination for user-imported/downloaded/recorded content and board exports; do not silently replace PieAll's sibling-output rule with a Downloads-only policy. Large multi-output operations stage a new named folder and never merge it into existing user content without a reviewed conflict policy.
+
+All editors support keyboard navigation, visible focus, undo for uncommitted edits, Escape/cancel behavior, reduced motion, high contrast and text scaling. Selecting another navigation item cannot silently discard an active edit or leave an invisible native editor lease. Cancel stops the process tree, releases devices/power/input hooks and cleans uncommitted temporary output. Completed published outputs remain listed after cancellation or a later item failure.
+
+### 13.11 Open-source implementation choices
+
+These are candidates/ownership decisions, not installed or vetted binary releases. At integration time choose exact versions, source URLs, hashes, Windows x64 artifacts, build flags, full licenses/notices, measured compressed/installed size and security-update ownership. Never download a floating latest executable or let a pack supply one. Keep source URLs for real dependencies in engine manifests/notices, separate from product inspiration.
+
+| Responsibility | Preferred owner / candidate | Integration boundary |
+|---|---|---|
+| Image pixels and ZIP | Existing `image` and `zip` crates plus `src/output.rs` | Extend the existing bounded worker pipeline; no competing converter or output safety layer |
+| SVG and extra image formats | `resvg`/`usvg` candidates for safe SVG; evaluate TIFF support in `image`; select HEIC decoder/encoder separately | Disable scripts/external resources, cap dimensions/allocation; review HEIC codec/patent/distribution requirements before enabling it |
+| PDF structure/encryption | qpdf, Apache-2.0 upstream license | Typed merge/page/range/rotation/inspection/encryption commands; passwords via a supported protected channel, not argv; preserve object/reference correctness |
+| PDF rendering/forms/text | PDFium, upstream BSD-style license plus bundled dependency notices | Disposable worker, JavaScript/actions disabled, bounded page rendering; form appearance and text extraction fixtures; qpdf is not a renderer or redaction engine |
+| PDF image compression/redaction | Reuse PDFium rasterization, existing image encoders and a PDF writer; evaluate `lopdf` for supported object edits | Separate structural optimization from lossy image rebuilding; remove original sensitive objects during redaction; do not add Ghostscript without reviewing its AGPL/commercial distribution implications |
+| Video/audio codecs | FFmpeg/FFprobe; exact artifact may be LGPL or GPL depending on configuration | Fixed executable paths, typed arguments and detected encoders/filters; no shell interpolation; never label every FFmpeg build LGPL |
+| Online media | yt-dlp plus required JS runtime/FFmpeg for the selected release | Exact executable and dependencies/notices, restricted explicit URLs, no shell, bounded downloads, no DRM bypass; review Windows binary's bundled licenses separately from upstream source license |
+| Speech transcription | `whisper.cpp` candidate, MIT source license; independently licensed model weights | Explicit local model package, language/timestamp/accuracy fixtures, inference cancellation and RAM caps |
+| Local summarization | `llama.cpp` candidate, MIT source license; independently selected licensed model | Optional download; document context/RAM limits and license; grounded input review, no cloud fallback |
+| Local translation | CTranslate2 candidate plus a redistributable language-pair model | Runtime and model licenses reviewed separately; supported language-pair inventory; SRT structure/timing preserved |
+| OCR | Windows OCR for installed supported languages; Tesseract candidate for optional language packs | Select languages explicitly; bounded raster inputs, confidence/review UI; do not promise automatic support for every language |
+| Background/face detection | ONNX Runtime candidate plus separately licensed segmentation/detection models | Verify Windows artifact, model source/hash/license/input normalization; mask/region review and measured RAM; no resident inference |
+| Office conversion | Optional LibreOffice, MPL-2.0 plus third-party notices | Isolated per-job profile, supported headless filters, macros/external links disabled, process-tree cancellation; never hijack the user's existing Office session |
+| Editable document conversion | LibreOffice where fitting; Pandoc candidate for Markdown/HTML/DOCX/ODT directions | Explicit format-direction matrix and fidelity tests; review Pandoc GPL distribution obligations before shipping; no arbitrary filters, scripts or remote includes |
+| HTML/Markdown PDF | Sanitized local HTML rendered through a dedicated WebView2 print path or approved optional Chromium renderer | No existing browser-profile reuse, no arbitrary local-file access, remote resources opt-in, bounded long-page output; current shell window is not the renderer |
+| Archives | Existing ZIP first; optional 7-Zip with its LGPL/BSD/unRAR restrictions reviewed | Existing extraction guards and expansion quotas remain mandatory; no raw extract-to-user-folder subprocess |
+| Storage and QR | SQLite via a narrow Rust binding; evaluate `qrcode` and `rxing`/ZXing-compatible reader | Versioned migration/recovery, bounded decoding, no automatic URL navigation; QR writer must not require a service |
+| Native recording/system tools | Documented Windows Graphics Capture, WASAPI, camera/scanner, WLAN, power, shell, battery and monitor APIs | Use native capability/permission checks; keep device handles and reversible system changes under native ownership |
+
+Engine management has a visible Installed/Available/Update/Remove state and an explicit install action showing size, publisher, license and enabled tools. Verify downloads and safe extraction before atomically switching versions; retain the previous working version for rollback. Uninstall refuses active jobs, removes only owned binaries/models and preserves user results. Refresh eligibility without blocking ring opening. Models and executable engines are never community-pack payloads.
+
+Do not trust whichever executable appears first on PATH or in the current directory. If allowing the user's installed engine, use a native picker, display its identity/version and permission implications, pin the approved canonical path/hash and revalidate before execution. Shared-library lookup and writable install directories are part of that review.
+
+### 13.12 Implementation sequence and ownership
+
+Execute in this checkout without branches, commits, builds, app launches or deployment unless separately instructed. Extend existing owners before introducing modules; split focused native handler modules from `src/actions.rs` as they become real. The following paths describe planned ownership, not files already present. Each stage must leave working tools and source checks, rather than enabled buttons with no handler.
+
+1. **Registry, jobs and engine foundation.** Extend `src/actions.rs`, `src/output.rs`, `src-tauri/src/shell.rs` and `web/native.ts`; introduce `src/jobs.rs`, `src/engines.rs`, `assets/engines.json` and `web/Engines.tsx` when implementing their actual responsibilities. Add typed input cardinality/fields, engine/capability IDs and user-facing availability reasons. Replace parent-only worker termination with Windows Job Object process-tree ownership, cancellation and cleanup records. Test stale revisions, duplicate requests, missing/changed engines, bad hashes, failed install/rollback, hostile extraction, child-process cancellation and no publication after cancellation wins. Preserve the one-operation lease and no-replace output invariants.
+2. **Tools discovery and image workspace.** Add `web/Tools.tsx`, `web/tools.css` and focused image editor components; integrate with `web/main.tsx`, `web/Icon.tsx`, `web/menus.ts` and the existing native registry. Reuse source previews and existing transforms for T22/T24–T28, baseline crop/watermark/compare/contact-sheet improvements. Test numeric/pointer equivalence, orientation, alpha, invalid crop, aspect ratios, batch incompatibility, overflow allocations, no-shrink output and collision safety. T21/T23 remain honestly needs-model until their inference package passes stage 8.
+3. **PDF structure and document workspace.** Introduce `src/actions/pdf.rs`, `web/PdfEditor.tsx` and shared page-range parsing. Deliver T35–T40/T42–T44 plus inspect/lossless optimization first, using qpdf and bounded PDFium previews. Then implement T30/T31/T34/T41 behind separate acceptance gates. Test encrypted/malformed/huge PDFs, ordered/descending/open-ended ranges, duplicate/out-of-range pages, rotations, annotations/forms, digital-signature warnings, password privacy and redaction recovery attempts. Do not claim secure redaction from a screenshot or text search alone.
+4. **Media workspace and recording.** Introduce `src/actions/media.rs`, `src/platform/recording.rs` and `web/MediaEditor.tsx`. Probe once per captured revision; deliver T03/T04/T06–T16/T18–T20 through shared typed FFmpeg transforms, then T02 after subtitle support. Implement T05/T17 with native capture and device cleanup; T01 waits for the download policy and exact yt-dlp/runtime package. Test streamless inputs, variable frame rate, keyframe vs precise trim, codec fallback, A/V sync, mismatched merges, safe subtitle paths, output caps, device revocation, disk-full and cancellation at publication.
+5. **SQLite, Library and boards.** Introduce `src/storage.rs`, `src/collections.rs`, `web/Library.tsx` and collection IPC owned by the shell. Deliver baseline 81/83–90 with the data rules in 13.9; retain 82 as needs-browser until stage 9. Test schema migration/backup recovery, preference import failure, duplicate asset references, external-original deletion, failed DB insert after asset staging, cleanup retries, concurrent imports, quota exhaustion, escaped exports and deleting a shared asset from one board only.
+6. **File/archive breadth and Windows utilities.** Implement T56/T57 and the remaining baseline file/ZIP operations first through the shared output/journal owners. Add `src/actions/system.rs` and `web/SystemTools.tsx` for T58–T72 in verified groups: read-only diagnostics; bounded reversible power/display/settings controls; then reviewed cleanup/uninstall/ejection/input features. Test reparse points, rename cycles/case/collisions/undo conflicts, denied access, Recycle Bin failure, device disconnect, power expiry/crash, keyboard watchdog, system-volume exclusion and rollback after partial setting changes. Do not ship input suppression before its recovery proof.
+7. **Document conversion and OCR.** Introduce `src/actions/documents.rs`, shared extraction/OCR services in workers and `web/DocumentEditor.tsx`. Deliver T29/T32/T33/T45–T50/T53/T54 with explicit engines and supported format directions. Test document macros/external links, hostile embedded resources, font substitution, Office-session isolation, sheet pagination, slide notes, scanned reading order, language absence, HTML file/network boundaries, Markdown escaping and long-page caps.
+8. **Optional local models.** Add `src/actions/inference.rs` and explicit model controls for T21/T23/T51/T52/T55. Share extraction and media conversion; keep each model package independent. Test corrupted/hash-mismatched models, unsupported languages, missing faces/subjects, masks, inference RAM/time limits, cancellation, long-input chunking, SRT timing and no network during inference. Benchmark actual model quality/cost before marking ready.
+9. **Browser and online workflows.** Complete the baseline extension/bridge with profile/tab/frame identity validation and explicit permissions. Deliver baseline 61–70/82 and web inputs to boards, T49 and T01. A directly pasted download URL does not require extension installation. Test stale tabs/profiles, permission denial, restricted pages, redirects, local/private-network targets, maximum download size, partial recovery and explicit source attribution. Review any authenticated download flow separately; do not copy browser cookies by default.
+10. **Packs, hub and release evidence.** Keep baseline milestones 6–7: declarative bounded packs, permissions/version diffs, public submission/moderation, clean-Windows installer/update/uninstall, licensing and measured resource budgets. Extend pack validation to new handlers/capabilities without allowing engines, scripts, secret access or system-change escalation. Deploying the hub remains outside this implementation instruction.
+
+For each group, run the smallest targeted unit/integration tests and source type/lint checks. Record exact passed commands in verification.md and completion bullets in the daily task file only after work lands. A checked plan row must name the handler, callable UI path, tested formats/dependency state and remaining native acceptance boundary. The original unchecked milestones are historical requirements, not an accurate progress dashboard; this current inventory is the starting point for updating them as each stage passes.
+
+### 13.13 Release and verification boundaries
+
+Do not promise full-suite completion in a single release or silently turn the original 100-action goal into a measured coverage claim. Count distinct tools from the registry and separately report supported variants, format pairs and installed engines. The 72 workflow identifiers are coverage requirements, not an implementation count.
+
+Before a tool becomes ready, prove its real handler and frontend route, eligibility reason, malformed input handling, permissions/engine path, original preservation or reviewed system mutation, cancellation/cleanup, output naming, keyboard support and applicable license notices. A rich editor is incomplete if it is only a visual mock or opens an external application instead of carrying out the operation.
+
+Agent-run checks remain TypeScript, formatting, lint and targeted tests. Do not run builds, development servers, apps or the full suite under the current instructions. User-run app command after implementation: `pnpm tauri dev`. User-run executable build: `pnpm tauri build --no-bundle`. Signed package command after signing setup: `pnpm package:windows`. Native keyboard/focus, Narrator, mixed DPI/text scaling, codec/form fidelity, hardware controls, recording consent/device release, real latency/memory and clean-Windows acceptance cannot be established from source alone.

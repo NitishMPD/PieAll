@@ -45,6 +45,7 @@ function useListener(enabled: boolean, subscribe: () => Promise<() => void>) {
 }
 
 function targetName(session: Session): string {
+  if (session.app && session.kind === "text") return session.target;
   if (session.kind === "text") return "Selected text";
   if (session.kind === "window") return session.target;
   if (session.names.length > 1) return `${session.names.length} items`;
@@ -344,15 +345,20 @@ export function Ring({
                       <path className="sector-shape" d={shapes[index]} />
                       <path className="sector-sheen" d={shapes[index]} />
                       {active && item?.children && !blocked && (
-                        <path
-                          key={`dwell-${item.key}`}
-                          className="dwell"
-                          d={arcPath(index, count)}
-                          pathLength={1}
-                          style={
-                            { "--dwell": `${DWELL_MS}ms` } as CSSProperties
-                          }
-                        />
+                        <g key={`dwell-${item.key}`} className="dwell">
+                          <path
+                            className="dwell-track"
+                            d={arcPath(index, count)}
+                          />
+                          <path
+                            className="dwell-fill"
+                            d={arcPath(index, count)}
+                            pathLength={1}
+                            style={
+                              { "--dwell": `${DWELL_MS}ms` } as CSSProperties
+                            }
+                          />
+                        </g>
                       )}
                       {item && (
                         <g

@@ -2,5 +2,13 @@
   "identifier": "local",
   "description": "Local PieAll surfaces receive native state changes only.",
   "windows": ["dashboard", "ring", "toast"],
-  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-is-maximized",
+    "core:window:allow-start-dragging"
+  ]
 }

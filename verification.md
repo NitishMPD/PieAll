@@ -1,6 +1,14 @@
 ﻿# Verification record
 Author: Nitish
 
+## Productivity default profiles - 21 October 2026
+
+The current catalog has 3,108 app bindings across 57 profiles, plus 44 local tools. Updated 49 quick lists, preserved existing action IDs and saved layouts, added browser Copy URL and Figma alignment/distribution, and kept recognized app actions primary over selected text. This supersedes the selected-text precedence statements in older records below.
+
+Passed: `pnpm exec vitest run web/menus.test.ts web/profile-defaults.test.ts web/action-search.test.ts` (17 tests); `cargo test -p pieall --lib shortcuts::tests` (3 tests); `pnpm run typecheck`; `cargo check -p pieall-desktop --all-targets`. Tests cover every profile's six defaults, browser Copy URL/private browsing, Figma's eight alignment choices and reachable services, editor selection routing, generic text fallback and saved customization. Changed-file Prettier and `cargo fmt --all -- --check` also passed. These checks do not prove target-app key delivery.
+
+User-run acceptance: `pnpm tauri dev`. Check Copy URL in supported browsers, including full URL clipboard contents and focus after Escape. In Figma desktop, check property transfer, both flips, component/auto layout and all alignment/distribution choices on eligible layers. Select code in VS Code/Cursor and confirm app actions remain primary and Text tools reachable; check the intended editor pane, since pane detection is not implemented. Verify saved custom layouts remain intact and Reset adopts the defaults. Exercise mouse, number keys, arrows, Enter, Escape and hold navigation through Align/More. No build, app launch or browser automation was run for this update.
+
 ## Context-only shortcut correction ? 21 October 2026
 
 The dashboard now indexes the native captured session, with a shared profile guard for dashboard and ring. Regression cases cover Figma to Photoshop changes, unsupported/missing app context, unrelated entries incorrectly marked eligible, selection-tool precedence, six direct shortcuts and flat Search actions. The former all-app browse fixture below records the earlier implementation and is superseded by this correction.
@@ -11,7 +19,7 @@ User-run acceptance: `pnpm tauri dev`. Invoke from Figma, Photoshop and an unsup
 
 ## Contextual app library — 21 October 2026
 
-The shipped catalog expands shared keymaps into 3,079 action IDs across 57 profiles, plus the existing 44 local tools. Source validation checks unique profile/executable/action IDs, known key grammar, resolvable IDs and six valid quick choices per profile. It does not prove every default binding against installed app versions.
+At the original catalog pass, shared keymaps expanded into 3,079 action IDs across 57 profiles, plus the existing 44 local tools. Source validation checks unique profile/executable/action IDs, known key grammar, resolvable IDs and six valid quick choices per profile. It does not prove every default binding against installed app versions.
 
 Passed for this change:
 

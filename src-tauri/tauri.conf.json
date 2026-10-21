@@ -14,6 +14,7 @@
       {
         "label": "dashboard",
         "title": "PieAll",
+        "decorations": false,
         "width": 1040,
         "height": 740,
         "minWidth": 640,

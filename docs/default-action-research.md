@@ -1,13 +1,19 @@
 # Research: everyday app defaults in PieAll
 Author: Nitish
 
-Research date: 21 October 2026. Proposal only; no defaults or runtime code changed.
+Research date: 21 October 2026. The comparisons below preserve the original pre-change snapshot and proposals; the implementation status here records what shipped in the working tree.
+
+## Implementation status - 21 October 2026
+
+Updated 49 of 57 profiles' quick lists; retained eight existing lists. The catalog now exposes 3,108 app bindings plus 44 local tools. Browser defaults include Copy URL (`Ctrl+L Ctrl+C Escape`) and retain private browsing. Figma uses the six requested editing commands, an eight-choice Align group and More for search/window access. Code editors and other recognized apps retain their app ring over selected text, with generic Text tools secondary. Saved custom layouts and existing action IDs remain intact.
+
+The routing correction belongs in the frontend: native sessions already expose captured-app shortcuts over selected text. Native and ring labels now retain the captured app's name. No active-pane, website or meeting-state detection was added. Copy URL uses existing bounded dispatch; target-app delivery and focus restoration remain native acceptance checks. The original proposals below are research history, not a claim that every tentative recommendation was implemented exactly.
 
 ## Finding and evidence limits
 
 The product goal is to shorten repetitive workflows: turn several clicks or key chords into one invocation, expose buried operations, and keep actions tied to the app where the work happens. Daily frequency helps choose candidates, but the main criterion is work saved. User feedback explicitly prioritizes Figma property transfer, flips, alignment, components and auto layout; browser Copy URL while retaining Incognito; and preserving code-editor context when code is selected. The original frequency-led ranking below has been revised for those requirements.
 
-This review compares all 57 bundled app profiles, grouped below where they share a recommendation. ?Before? is the current working-tree catalog, not a claim about an earlier release. Most initial recommendations use six direct slots, with Search actions and Window in the remaining slots. The revised Figma proposal uses six direct commands, one Align group and one More group; Search actions, Window and secondary commands move into More. This is a proposed interaction change, not a JSON-only reorder. Other initial rankings are provisional until assessed against the workflow-saving criterion.
+This review compares all 57 bundled app profiles, grouped below where they share a recommendation. "Before" is the catalog at the start of this research, not a claim about an earlier release. Most initial recommendations use six direct slots, with Search actions and Window in the remaining slots. The revised Figma proposal uses six direct commands, one Align group and one More group; Search actions, Window and secondary commands move into More. This is a proposed interaction change, not a JSON-only reorder. Other initial rankings are provisional until assessed against the workflow-saving criterion.
 
 Official vendor documentation establishes command meanings, default keymaps and intended workflows. Some vendors label lists ?frequently used,? ?most useful,? or ?most popular?; these are vendor recommendations, not representative independent frequency studies. The proposed rankings are my product judgment from those sources. PieAll has no usage data in this review, and no users or target apps were observed. Confidence is higher for documented semantic mismatches than for choosing one useful command over another.
 
@@ -26,7 +32,7 @@ Examples of the intended improvement:
 
 Native single-key commands can still be useful for pointer-led users. The rule is not to exclude them categorically, but to give stronger workflow savings priority when slots compete.
 
-## What the implementation actually does
+## Pre-change implementation snapshot
 
 - `src/shortcuts.json` owns each profile's ordered `quick` IDs. `src/shortcuts.rs` converts that order to priorities; `web/menus.ts` takes the first six app commands for the default ring.
 - Saved layouts in `web/prefs.ts` override built-ins per app/context. Any eventual default update should preserve them and keep existing action IDs stable.

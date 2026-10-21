@@ -65,12 +65,12 @@ export function wedgePath(index: number, count: number): string {
   return parts.join(" ") + " Z";
 }
 
-/** Arc in the tray gutter just outside a sector, for the hover-to-open progress
- * line. It travels with the popped slice and never crosses the slice's label. */
+/** Arc just inside a sector's outer edge, for the hover-to-open progress bar.
+ * It travels with the popped slice and stays clear of the slice's label. */
 export function arcPath(
   index: number,
   count: number,
-  radius = OUTER + 3,
+  radius = OUTER - 10,
 ): string {
   const sweep = 360 / count;
   const inset = 9 + (Math.asin(GAP / 2 / radius) * 180) / Math.PI;

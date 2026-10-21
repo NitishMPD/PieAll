@@ -149,7 +149,8 @@ impl Session {
             0 if !self.text.is_empty() => format!(
                 "{} · {} characters",
                 if self.selection.is_some() {
-                    "Selected text"
+                    self.source_app
+                        .map_or("Selected text", |profile| profile.name.as_str())
                 } else {
                     "Clipboard text"
                 },
@@ -291,6 +292,14 @@ impl Drop for Lease {
 fn session(window: WebviewWindow, app: AppHandle) -> Result<View> {
     local(&window)?;
     Ok(state(&app).lock().unwrap().view())
+}
+
+/// Hiding the dashboard abandons its open editor; otherwise every later invoke is refused as busy.
+fn close_window(app: &AppHandle, window: &tauri::Window) -> Result<()> {
+    if window.label() == "dashboard" && state(app).lock().unwrap().editor.take().is_some() {
+        notify(app);
+    }
+    window.hide().map_err(|e| e.to_string())
 }
 
 fn show_dashboard(app: &AppHandle) -> Result<()> {
@@ -681,7 +690,7 @@ fn surface(window: WebviewWindow, app: AppHandle, action: String) -> Result<()> 
             if window.label() == "ring" {
                 hide_ring(&app, true)
             } else {
-                window.hide().map_err(|e| e.to_string())
+                close_window(&app, &window.as_ref().window())
             }
         }
         _ => Err("Unknown window action.".into()),
@@ -1101,7 +1110,7 @@ fn toast(app: &AppHandle, tone: &'static str, title: impl Into<String>, detail: 
         .ok()
         .flatten()
         .map_or(1.0, |m| m.scale_factor());
-    let (width, height) = (360.0, 64.0);
+    let (width, height) = (360.0, 112.0);
     let (w, h) = ((width * scale) as i32, (height * scale) as i32);
     let work = info.rcWork;
     let x = (point.x - w / 2).clamp(work.left, (work.right - w).max(work.left));
@@ -1634,7 +1643,7 @@ pub fn run() {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
-                    let _ = window.hide();
+                    let _ = close_window(app, window);
                 }
                 tauri::WindowEvent::Focused(true) if window.label() == "ring" => {
                     if RING_OPEN.load(Ordering::SeqCst) {
