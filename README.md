@@ -17,6 +17,8 @@ pnpm tauri dev
 
 To build the executable without installer signing: `pnpm tauri build --no-bundle`. For a signed per-user NSIS installer, configure the PieAll signing variables described in the port guide, then run `pnpm package:windows`. The installer uses the system WebView2 runtime; it does not bundle a fixed browser. Smaller artifacts remain an unmeasured goal.
 
+The mark is a graphite tile with off-white segments and one orange selected segment; every launch shows a short splash over the desktop: a mini ring swipes through its feature slices and lands on "PieAll". Regenerate the icons with `python scripts/generate-brand.py`.
+
 Select files in Explorer and press **Ctrl + backtick**, drop files onto PieAll, or choose **Open files**. **Use clipboard text** is explicit. Closing the dashboard hides it; tray Exit quits when no action/editor/update is active. File arguments work on first and second launches. The image ring offers Convert, Crop, Resize, Add background, Compress and All actions. Convert opens PNG/JPEG/WebP choices. Arrows/Tab, Enter/Space, number keys and Escape work in the floating ring; the searchable dashboard is the alternative keyboard route.
 
 ## Implemented commands

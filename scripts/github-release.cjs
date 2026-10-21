@@ -34,6 +34,11 @@ function maybeRelease(endpoint) {
     throw error;
   }
 }
+// The tags/<tag> endpoint never returns drafts (they have no tag yet), so look the draft up in the list.
+function findRelease(tag) {
+  const releases = JSON.parse(api(`repos/${REPOSITORY}/releases?per_page=100`));
+  return releases.find((release) => release.tag_name === tag) ?? null;
+}
 function draft(version) {
   assert(
     !process.env.GITHUB_REPOSITORY ||
@@ -47,7 +52,7 @@ function draft(version) {
       cwd: root,
       encoding: "utf8",
     }).trim();
-  let release = maybeRelease(`tags/${tag}`);
+  let release = findRelease(tag);
   if (!release) {
     gh([
       "release",
@@ -60,7 +65,7 @@ function draft(version) {
       "--title",
       `PieAll ${tag}`,
     ]);
-    release = maybeRelease(`tags/${tag}`);
+    release = findRelease(tag);
   }
   assert(
     release?.draft && release.target_commitish === commit,
@@ -78,7 +83,7 @@ function verifyAndPublish(version) {
   const directory = path.join(root, `.release/v${version}/assets`);
   const downloaded = path.join(root, `.release/v${version}/downloaded`);
   validateDirectory(directory, version);
-  const release = maybeRelease(`tags/${tag}`);
+  const release = findRelease(tag);
   const commit =
     process.env.GITHUB_SHA ||
     execFileSync("git", ["rev-parse", "HEAD"], {

@@ -100,7 +100,6 @@ export const menus: Record<string, MenuItem[]> = {
     run("extract_zip", "Extract here", "extract"),
     run("duplicate", "Duplicate", "duplicate"),
     run("terminal", "Terminal here", "terminal"),
-    run("sha256", "Copy SHA-256", "hash"),
     run("folder_size", "Folder size", "files"),
     run("find_duplicates", "Find duplicates", "duplicate"),
     run("list_zip", "List contents", "text"),
@@ -138,6 +137,8 @@ const KIND_GROUPS: Record<string, string[]> = {
   window: ["Window"],
 };
 const FIXED_APP_SLOTS = 6;
+/** File-type submenus: when the selection fits only one, its tools become slices. */
+const TYPE_TOOLS = new Set(["pdf-tools", "media-tools"]);
 
 /** Context a layout is saved under: a file type, or the captured app. */
 export function contextKey(session: Pick<Session, "kind" | "app">): string {
@@ -167,7 +168,17 @@ export function appItems(actions: Action[]): MenuItem[] {
 
 /** Figma's related alignment choices share one slice; individual commands stay customizable. */
 export function appPool(actions: Action[]): MenuItem[] {
-  const items = appItems(actions);
+  const browser = actions.some(
+    (a) =>
+      a.shortcut && a.id.endsWith(":copy-url") && a.category === "Navigation",
+  );
+  const downloads = browser
+    ? [
+        run("download_video", "Download video", "download"),
+        run("download_audio", "Download audio", "audio"),
+      ]
+    : [];
+  const items = [...downloads, ...appItems(actions)];
   const alignment = actions
     .filter(
       (action) =>
@@ -229,6 +240,21 @@ export function contextMenu(
   session: Session,
   prefs: Prefs = getPrefs(),
 ): MenuItem[] {
+  const items = baseMenu(session, prefs);
+  if (!session.pinned) return items;
+  // The pin slice toggles, so a window already on top is offered Unpin.
+  const unpin = (list: MenuItem[]): MenuItem[] =>
+    list.map((item) =>
+      item.action === "always_top"
+        ? { ...item, label: "Unpin", hint: "Stop keeping on top" }
+        : item.children
+          ? { ...item, children: unpin(item.children) }
+          : item,
+    );
+  return unpin(items);
+}
+
+function baseMenu(session: Session, prefs: Prefs): MenuItem[] {
   const base =
     custom(session.kind, kindPool(session.kind, session.actions), prefs) ??
     menus[session.kind] ??
@@ -322,5 +348,12 @@ export function resolve(
       }
       return item.browse || (item.action && ok.has(item.action)) ? [item] : [];
     });
-  return paginate(walk(items));
+  const top = walk(items);
+  const tools = top.filter((item) => TYPE_TOOLS.has(item.key));
+  // A PDF (or media) selection gets its tools directly, not behind a detour slice.
+  return paginate(
+    tools.length === 1
+      ? [...tools[0].children!, ...top.filter((item) => item !== tools[0])]
+      : top,
+  );
 }

@@ -6,9 +6,9 @@ Status: partly implemented. The current Tauri app has 44 local commands plus con
 
 **Goal:** Build a fast Windows radial action menu that understands the selected item, opens with a configurable backtick shortcut, and lets people finish useful tasks without opening a large dashboard.
 
-**Architecture:** The current app uses Tauri 2 and React/TypeScript over the existing Rust execution core. Rust owns invocation, immutable context, eligibility, operation exclusion and output safety; React owns presentation. Expensive operations run in temporary worker processes. The planned browser extension supplies browser context. A planned separate community hub distributes reviewed declarative packs that invoke the same built-in handlers. Current behavior in project.md supersedes the original invocation/rendering proposal below.
+**Architecture:** The current app uses Tauri 2 and React/TypeScript over the existing Rust execution core. Rust owns invocation, immutable context, eligibility, operation exclusion and output safety; React owns presentation. Expensive operations run in temporary worker processes. Native source capture and explicit URL copying supply browser context. A planned separate community hub distributes reviewed declarative packs that invoke the same built-in handlers. Current behavior in project.md supersedes the original invocation/rendering proposal below.
 
-**Tech stack:** Tauri 2, React/TypeScript, Rust, windows-rs, Win32, Serde and narrowly enabled image/archive libraries. SQLite is planned for persistent app data. The initial rendering proposal used Direct2D/DirectWrite, optional DirectComposition and Windows Imaging Component; that proposal remains historical rather than a requirement to replace Tauri. A Chromium Manifest V3 extension in TypeScript and a separate Rust HTTP service with simple web pages remain planned.
+**Tech stack:** Tauri 2, React/TypeScript, Rust, windows-rs, Win32, Serde and narrowly enabled image/archive libraries. SQLite is planned for persistent app data. The initial rendering proposal used Direct2D/DirectWrite, optional DirectComposition and Windows Imaging Component; that proposal remains historical rather than a requirement to replace Tauri. A separate Rust HTTP service with simple web pages remains planned for the community hub; browser tools use native capture.
 
 **Execution:** Implement sequentially in the existing folder. Do not create branches, commit, push, deploy, start a dev server, run a build, or launch the app under the current working instructions. Checks and targeted tests are allowed. No delegated agents are required.
 
@@ -18,7 +18,7 @@ Status: partly implemented. The current Tauri app has 44 local commands plus con
 - The pie is the main surface. The dashboard handles configuration, action discovery, recent jobs, and collections.
 - Use warm translucent surfaces, separate rounded wedges, fine light borders, orange selection, and compact floating editors.
 - Support keyboard invocation on the current selection and modifier-plus-file-drag invocation. Both use one registry and execution path.
-- Preserve the original 100-action catalog as the baseline. Section 13 expands the product with 72 tracked tool workflows, including overlaps and Windows adaptations. Do not advertise 172 distinct actions: workflows, variants and handlers overlap. Release smaller verified groups; some require an optional engine or browser extension. State that distinction in onboarding and marketing.
+- Preserve the original 100-action catalog as the baseline. Section 13 expands the product with 72 tracked tool workflows, including overlaps and Windows adaptations. Do not advertise 172 distinct actions: workflows, variants and handlers overlap. Release smaller verified groups; some require an optional engine or explicit browser input. State that distinction in onboarding and marketing.
 - Start with a complete 20-action version, then add actions in tested groups.
 - Default to local processing. The hub receives pack submissions, not users' files, clipboard contents, browsing history, or moodboards.
 - Local actions and browsing packs require no account. Publishing public packs requires an account.
@@ -43,12 +43,12 @@ Carry these design details into PieAll:
 
 1. Files explicitly dropped onto PieAll.
 2. Files/folders selected in foreground Explorer or the desktop.
-3. Explicit browser image/link/text selection supplied by the extension.
-4. Current webpage supplied by the extension.
+3. Explicit native browser image/link/text targets or supplied URLs (image targeting remains planned).
+4. Current webpage copied through the checked native browser action.
 5. Readable, non-password text selection through UI Automation in supported apps.
 6. Active-window actions, with an explicit Use clipboard option.
 
-Capture context before changing foreground focus. Never silently send Ctrl+C or replace the clipboard to discover selection. UI Automation coverage is incomplete; unsupported applications get a clear fallback.
+Capture context before changing foreground focus. Browser address copying occurs only for an explicit download action and restores the borrowed clipboard; existing text selection capture follows project.md. UI Automation coverage is incomplete; unsupported applications get a clear fallback.
 
 Each invocation creates an immutable snapshot: invocation ID, source HWND/process ID, provider, capture time, target descriptors, and capabilities. Browser snapshots also include connection/profile, browser window/tab/frame identity, origin, and capture time. Discard replies for closed or superseded invocations.
 
@@ -80,9 +80,9 @@ These are user-visible actions, not 100 services. Conversions share a converter 
 Availability labels:
 
 - **Core:** base install, using Windows APIs or small bundled Rust dependencies.
-- **Engine:** explicit optional local engine/model download.
-- **Browser:** Chromium extension, with feature-specific permissions where needed.
-- **Core + Browser:** works locally; browser inputs require the extension.
+- **Engine:** local engine/model; supported media/download dependencies install on first use.
+- **Browser:** native current-page URL or explicit native browser target; no extension setup.
+- **Core + Browser:** works locally; browser input uses native capture or supplied URLs.
 - **Browser + Engine:** requires both.
 
 Transformations preserve originals. Network operations start after user activation. Mutation actions have a preview/conflict step where needed. An action becomes ready only after checking format support, dependencies, and permissions.
@@ -234,7 +234,7 @@ Transformations preserve originals. Network operations start after user activati
 
 ### Packages and format contract
 
-The catalog contains 65 Core/Core + Browser actions, 11 Browser-only actions, 22 Engine-only actions, and 2 Browser + Engine actions. These are catalog classifications, not measured size claims. Browser-dependent inputs to mixed actions still require the extension.
+The catalog contains 65 Core/Core + Browser actions, 11 Browser-only actions, 22 Engine-only actions, and 2 Browser + Engine actions. These are catalog classifications, not measured size claims. Browser-dependent inputs to mixed actions require native capture or supplied URLs.
 
 Optional packages: Archive (7-Zip), PDF structure (qpdf), PDF render/text (PDFium), Media (FFmpeg/FFprobe), Online media (yt-dlp and required runtime), Background removal (ONNX runtime/model). Show each package's actual compressed/installed size, source/publisher, version, license, and uninstall control. Missing engines never masquerade as working built-ins.
 
@@ -319,10 +319,9 @@ Create modules when their milestone needs them; do not scaffold empty extension 
 | src/ui/geometry.rs, radial.rs, tools.rs, dashboard.rs, theme.rs, accessibility.rs | Geometry, rendering, focused forms, native controls, UIA |
 | src/storage.rs | SQLite schema/migrations/settings/boards/jobs/pack metadata |
 | src/engines.rs | Capability inventory and verified engine lifecycle |
-| src/bridge.rs | Native messaging/named-pipe validation and source identity |
+| src/platform.rs, src/downloads.rs | Native source validation, URL copying and download execution |
 | src/packs.rs | Declarative pack validation, installation, revisions |
 | assets/actions.json | Metadata checked against compiled handler IDs |
-| extension/ | Manifest V3 capture/bridge; TypeScript, pnpm lockfile |
 | hub/ | Separate public pack service/pages; no invocation-path dependency |
 | tests/ | Boundary fixtures and integration tests |
 | docs/filee-reuse.md, THIRD-PARTY-NOTICES.md | Provenance and license notices |
@@ -339,7 +338,7 @@ Jobs carry action ID, immutable targets, validated parameters, reserved destinat
 
 Start with one heavy worker and a bounded queue. Add two small I/O jobs only after measurement. Windows Job Objects control child lifetime/resource limits and terminate the engine process tree after a graceful cancellation deadline. A Job Object is not a security sandbox: file parsing still needs trust-boundary limits. Restrict worker privileges where compatible and document the actual security boundary.
 
-The executable supports tray, worker, and native-host modes. Use opaque job IDs and protected pipes rather than placing secrets or selected text on command lines.
+The executable supports tray, capture-helper and worker modes. Use opaque job IDs and protected pipes rather than placing secrets or selected text on command lines.
 
 ## 7. Performance budgets
 
@@ -349,13 +348,13 @@ These are proposed acceptance targets, not measured claims. Reference machine: W
 |---|---|---|
 | Warm invocation to first pie frame | p95 <= 50 ms | Input to presented frame, excluding intentional gesture delay |
 | Local Explorer invocation to ready actions | p95 <= 100 ms | Includes capture; slow/unreachable targets may remain resolving |
-| Browser invocation to ready actions | p95 <= 150 ms | Connected extension; report cold wake separately |
+| Browser invocation to ready actions | p95 <= 150 ms | Native captured browser; report first-use tool setup separately |
 | Pointer-to-highlight | <= one 60 Hz frame | No decoding, COM, or network in render callback |
 | Cold tray-ready startup | <= 750 ms | Process start to registered shortcut/tray; renderer warm-up reported separately |
 | Warm dashboard usability | <= 250 ms | No network/full-thumbnail scan required |
 | Idle CPU | <= 0.1% five-minute average | Entire PieAll process tree, no jobs/dashboard |
 | Idle private committed memory | <= 30 MiB | Resident tray; report working set separately |
-| Connected browser bridge idle | <= 40 MiB | All PieAll processes; separately report incremental extension/browser cost |
+| Native browser action idle | <= 40 MiB | All PieAll processes; no resident bridge |
 | Dashboard private commit | <= 70 MiB | Small seeded library, no active jobs |
 | Base compressed distribution | <= 15 MiB | Actual signed installer/portable payload; engines/symbols separate |
 | Base installed app | <= 30 MiB | All required app/runtime files/assets/notices on clean Windows |
@@ -391,13 +390,10 @@ Use native ETW/WPA or equivalent traces for input/presentation latency, process 
 
 ### Browser and IPC
 
-- Chrome/Edge first; Firefox needs its own pass.
-- Native host registration is per-user and restricted to approved extension IDs. Bound/validate message sizes, schema, version, invocation ID, and allowed handlers.
-- Connect the native host only as needed for responsiveness; measure its resident cost. Reconnect after service-worker suspension.
-- Map capture to the foreground browser/profile/window. A cached last-active tab is insufficient; fail closed on ambiguous profile mapping.
-- activeTab does not automatically grant capture access when a desktop global shortcut invokes PieAll. Support extension/context-menu gestures first, or request narrow optional host permissions explicitly.
-- Restricted pages, cross-origin frames, expiring blobs, and protected images get honest failures. Do not scrape the address bar or bypass access controls.
-- Named pipes use current-user ACLs and peer checks. Do not accept arbitrary executable paths in worker/host protocols.
+- Native browser actions use the captured foreground HWND/PID and bundled browser profile; titles and frontend-supplied handles cannot select targets.
+- Download video/audio copies the current page address through the checked native Copy URL shortcut, validates a fresh clipboard sequence/process owner and restores the clipboard only if unchanged. Capture once before network/setup work. Keep a paste-link fallback.
+- No extension, native-messaging registration, connection bridge, content scripts or idle tab polling. Browser UI changes/focus loss fail explicitly. Open exact video/post pages when a feed does not identify one item.
+- Validate IPC actions, revisions, typed parameters, URLs and destinations natively. Public-only download networking rejects private/local addresses across redirects. Never read browser cookies implicitly.
 
 ### Packs
 
@@ -483,20 +479,16 @@ Add IDs 17–20, 24–30, 33–36, 41, 51–60, 81, 83–100. Browser-only ID 82
 
 Gate: every Core action works on its declared local contexts; configuration requires no manual file editing.
 
-### Milestone 4 — Browser integration
+### Milestone 4 - Native browser integration
 
-Files: extension/package.json, pnpm-lock.yaml, manifest.json, background.ts, content.ts, native.ts; src/bridge.rs; src/actions/browser.rs; tests/bridge_validation.rs.
+Files: `src/platform.rs`, `src/downloads.rs`, `src/web_proxy.rs`, `src-tauri/src/shell.rs`, `web/BrowserTools.tsx`, `web/menus.ts`.
 
-Add IDs 61–70, 82 and browser inputs to 81.
+- [x] Copy the captured browser's current HTTP(S) URL when Download video/audio is chosen, using the native checked shortcut and clipboard restoration.
+- [x] Reuse the one-job owner, saved defaults, public-only networking and collision-safe output.
+- [ ] Implement remaining IDs 61?70/82 and browser inputs to 81 through explicit native targets or supplied URLs.
+- [ ] Exercise real Chromium/Firefox windows, focus loss, changed clipboard, mixed DPI and real-site downloads.
 
-- [ ] Use pnpm and one extension lockfile; pin dependencies.
-- [ ] Implement per-user native host and bounded versioned protocol with invocation/browser identity.
-- [ ] Test oversized/malformed requests, wrong identity, stale replies, multiple profiles, disconnects.
-- [ ] Start with explicit extension gestures, then desktop-shortcut capture with documented optional permissions.
-- [ ] Implement browser actions with restricted-page and image-access failures.
-- [ ] Verify service-worker wake/reconnect and incremental browser/host resource cost.
-
-Gate: no ambiguous profile/tab can silently become an execution target.
+Gate: native copying must fail explicitly on changed source/focus; it must never guess a video from a feed.
 
 ### Milestone 5 — Engines and full 100-action coverage
 
@@ -537,7 +529,7 @@ Files: docs/performance.md, verification.md, privacy.md; THIRD-PARTY-NOTICES.md;
 - [ ] Offer explicit retain/remove choices for local data; never delete external originals.
 - [ ] Measure actual signed distribution/install sizes and optional packages separately.
 - [ ] Verify all 100 actions plus failures, Narrator, keyboard-only use, mixed DPI, text scale, excluded apps, power transitions.
-- [ ] Repeat performance protocol after bridge/library/engine integration.
+- [ ] Repeat performance protocol after native browser/library/engine integration.
 - [ ] Publish tested OS/browser/format boundaries and unsupported cases.
 
 Gate: evidence for performance, safety, accessibility, action coverage, licensing, installer behavior. Do not claim 100 immediately ready offline actions unless the shipped package really supplies that.
@@ -550,7 +542,7 @@ These commands apply after their source/manifests exist, not to today's planning
 - Rust type check: cargo check --all-targets --locked. Expected success after Cargo.lock exists.
 - Rust lint: cargo clippy --all-targets --locked -- -D warnings. Expected no warnings.
 - Targeted tests: cargo test --locked --test output_safety, or the specific test target for the milestone. Expected named cases pass.
-- Extension type check: pnpm --dir extension exec tsc --noEmit. Expected no errors after configuration exists.
+- Native browser URL copying: targeted Rust tests and `pnpm exec vitest run web/menus.test.ts`; live browser acceptance remains required.
 - Hub authorization: cargo test --locked --manifest-path hub/Cargo.toml --test authorization. Expected ownership/role cases pass after its lockfile exists.
 
 Do not run builds, app launches, dev servers, or a broad/full suite under current instructions. Give the user the exact command when needed. Planned examples: release build, cargo build --release --locked; launch, .\target\release\pieall.exe; full desktop suite, cargo test --locked. Installer/signing commands must match the chosen configuration. Static checks cannot prove real latency or screen-reader behavior.
@@ -567,7 +559,7 @@ Resolve through evidence rather than blocking planning on preference questions:
 2. Reliable active Explorer tab/desktop selection including directories. Initially guarantee Explorer and explicit OLE drops, not every third-party file manager.
 3. Plain-backtick typing/layout behavior; modified shortcut remains available.
 4. Exact codec/PDF/model/CLI artifacts meeting size, security, capability, and license requirements.
-5. Global-shortcut browser permissions and profile mapping; explicit extension invocation remains supported.
+5. Native browser focus/URL copying and clipboard restoration across supported browser profiles.
 6. UIA and crop-editor keyboard accessibility. Accessible list/numeric controls are requirements.
 7. Hub hosting/authentication and PieAll's own public distribution license. The owner decides its license; third-party notices remain required regardless.
 
@@ -593,7 +585,7 @@ Status below comes from `src/actions.rs`, `src/output.rs`, `src/platform.rs`, `s
 | Archives, 31–40 | ZIP from selected files; extraction into a new sibling folder; entry list; integrity test | Folder traversal for ZIP; previewed merge extraction; selected-entry extraction; itemized integrity failures; 7z encryption, 7z/RAR reading, conversion and split volumes |
 | PDF, 41–50 | Images to raster PDF with fixed A4 pages | Ordered page-size/margin editor; merge/split/extract/reorder/rotate; render/text extraction; structural optimization and inspection; expanded PDF editor features below |
 | Text/data, 51–60 | Case/trim/sort/dedupe/count; JSON format/minify; URL-component and text Base64 encoding/decoding | Sentence case/options/preview; sort direction; counts removed; save output; full-URL mode; binary Base64 export; CSV-to-JSON; QR create/read |
-| Browser, 61–70 and 82 | No browser bridge or extension | Bookmarks, reading list, clean/Markdown links, viewport capture, permitted web-image access, search/translation, sourced quotes and board URLs |
+| Browser, 61–70 and 82 | Native URL copy/download slice; other browser actions pending | Bookmarks, reading list, clean/Markdown links, viewport capture, permitted web-image access, search/translation, sourced quotes and board URLs |
 | Video/audio, 71–80 | No media engine or handlers | FFprobe metadata, conversion/compression/trim/audio/frame/GIF operations, explicit online downloads; expanded workflows T01–T20 |
 | Moodboards, 81–90 | No collection database, asset store or board UI | Managed local images, named boards, notes/tags, provenance, similarity, contact sheet/bundle/palette exports, original-source opening |
 | Windows/screen, 91–100 | Always on top, center, fit-to-work-area, basic title/HWND report | Screen/region capture, OCR, color picker, next-monitor move, executable location, richer details and resizable-window constraints |
@@ -605,7 +597,7 @@ Every timeline has numeric start/end controls, keyboard seeking, a preview of th
 
 | ID | Tool | Required input, controls and result | Existing overlap / status |
 |---|---|---|---|
-| T01 | Download video | Primary flow: invoke PieAll over an active supported video page/post and choose Download video; use the captured URL and yt-dlp in the background, best available video plus audio by default, with FFmpeg merging when necessary. App settings customize quality/format/codec/audio/destination; per-run overrides are optional. Explicit one/many pasted HTTP(S) links remain available without the extension. See 13.14 for targeting and defaults. | Extends 79–80; missing |
+| T01 | Download video | Primary flow: invoke PieAll over an active supported video page/post and choose Download video; use the captured URL and yt-dlp in the background, best available video plus audio by default, with FFmpeg merging when necessary. App settings customize quality/format/codec/audio/destination; per-run overrides are optional. Explicit one/many pasted HTTP(S) links remain available through the paste-URL fallback. See 13.14 for targeting and defaults. | Extends 79–80; missing |
 | T02 | Burn in subtitles | Video plus SRT/WebVTT, or a reviewed local transcript; text size/style/position with preview; encode a captioned copy. Parse subtitles as data and restrict referenced fonts/assets. | New; missing |
 | T03 | Change speed | 0.25×–4×, presets and new-duration readout; preserve pitch by default, optional mute; output preset. | New; missing |
 | T04 | Extract frames | One timestamp, every N seconds or N evenly spaced frames; PNG/JPEG, size and count limits; publish a new frame folder. HEIC is available only after its codec gate. | Extends 78; missing |
@@ -725,7 +717,7 @@ Build baseline 81–90 in the Library, not as files dumped into a generic folder
 - Use versioned SQLite with foreign keys, transactions and serialized writes. Migrate existing `pieall.prefs` settings through an explicit versioned bridge, preserving customization; do not create a second lasting settings owner or delete the old data before a verified import.
 - Stage decoded/validated assets before inserting references. Content-address originals/thumbnails, enforce board/item/storage quotas, deduplicate bytes and reference-count them. Failed DB/file steps leave recoverable orphans, not dangling live references. Deleting a board removes only owned data after reference checks, never external originals.
 - Provide an image grid, zoomed preview, notes/tags/search, keyboard selection and reorder, add/remove with recoverable undo, and optional spatial arrangement with persisted positions. The grid is a complete keyboard-accessible view of every canvas item; pointer dragging is never the only route.
-- Add plain notes, color swatches and HTTP(S) source links. Browser images/pages require the explicit bridge/access permission; never fetch remote content merely because the Library opens.
+- Add plain notes, color swatches and HTTP(S) source links. Browser images/pages require an explicit native target or supplied URL; never fetch remote content merely because the Library opens.
 - Find similar images using local thumbnail perceptual hashes and a stated visual-distance threshold; distinguish visual similarity from semantic search and let the user review matches.
 - Export an ordered contact sheet, a combined palette as HEX/CSS, and a ZIP bundle of images/notes/source links/JSON. Preview included private paths/URLs/notes; make provenance inclusion explicit. Escape HTML/CSS/Markdown and archive names. Reuse the existing image/contact-sheet/ZIP/output owners.
 - Open original local sources or HTTP(S) URLs after validation; report missing files and reject executable/unsafe URI schemes. Use bounded lazy thumbnails and no idle library scanning.
@@ -783,7 +775,7 @@ Execute in this checkout without branches, commits, builds, app launches or depl
 6. **File/archive breadth and Windows utilities.** Implement T56/T57 and the remaining baseline file/ZIP operations first through the shared output/journal owners. Add `src/actions/system.rs` and `web/SystemTools.tsx` for T58–T72 in verified groups: read-only diagnostics; bounded reversible power/display/settings controls; then reviewed cleanup/uninstall/ejection/input features. Test reparse points, rename cycles/case/collisions/undo conflicts, denied access, Recycle Bin failure, device disconnect, power expiry/crash, keyboard watchdog, system-volume exclusion and rollback after partial setting changes. Do not ship input suppression before its recovery proof.
 7. **Document conversion and OCR.** Introduce `src/actions/documents.rs`, shared extraction/OCR services in workers and `web/DocumentEditor.tsx`. Deliver T29/T32/T33/T45–T50/T53/T54 with explicit engines and supported format directions. Test document macros/external links, hostile embedded resources, font substitution, Office-session isolation, sheet pagination, slide notes, scanned reading order, language absence, HTML file/network boundaries, Markdown escaping and long-page caps.
 8. **Optional local models.** Add `src/actions/inference.rs` and explicit model controls for T21/T23/T51/T52/T55. Share extraction and media conversion; keep each model package independent. Test corrupted/hash-mismatched models, unsupported languages, missing faces/subjects, masks, inference RAM/time limits, cancellation, long-input chunking, SRT timing and no network during inference. Benchmark actual model quality/cost before marking ready.
-9. **Browser and online workflows.** Complete the baseline extension/bridge with profile/tab/frame identity validation and explicit permissions. Deliver baseline 61–70/82 and web inputs to boards, T49 and T01. A directly pasted download URL does not require extension installation. Test stale tabs/profiles, permission denial, restricted pages, redirects, local/private-network targets, maximum download size, partial recovery and explicit source attribution. Review any authenticated download flow separately; do not copy browser cookies by default.
+9. **Browser and online workflows.** Use native current-page URL copying for downloads and explicit native targets or supplied URLs for other browser operations. Deliver baseline 61-70/82 and web inputs to boards/T49/T01 without extension setup. Test changed focus/clipboard, restricted pages, redirects, local/private networks, size limits and collision-safe recovery. Review any authenticated download flow separately; do not copy browser cookies by default.
 10. **Packs, hub and release evidence.** Keep baseline milestones 6–7: declarative bounded packs, permissions/version diffs, public submission/moderation, clean-Windows installer/update/uninstall, licensing and measured resource budgets. Extend pack validation to new handlers/capabilities without allowing engines, scripts, secret access or system-change escalation. Deploying the hub remains outside this implementation instruction.
 
 For each group, run the smallest targeted unit/integration tests and source type/lint checks. Record exact passed commands in verification.md and completion bullets in the daily task file only after work lands. A checked plan row must name the handler, callable UI path, tested formats/dependency state and remaining native acceptance boundary. The original unchecked milestones are historical requirements, not an accurate progress dashboard; this current inventory is the starting point for updating them as each stage passes.
@@ -798,45 +790,43 @@ Agent-run checks remain TypeScript, formatting, lint and targeted tests. Do not 
 
 ### 13.14 Contextual web downloads and image actions — 21 October 2026
 
-The default video workflow is: a YouTube video is playing in the browser → invoke PieAll over that page → choose Download video → the download starts in the background using saved defaults. No URL copying, dashboard navigation or format dialog is required when the browser bridge identifies one supported target and the engine is installed. The same flow applies to X posts and other yt-dlp-supported platforms. Playback itself is not required if a supported video page or explicitly targeted post/link identifies the media. “Any video” means supported accessible media; unavailable, access-restricted, DRM-protected or unsupported sources get a specific failure, never a screen recording silently substituted as a download.
+The default workflow is: open the video/post page -> invoke PieAll -> choose Download video -> PieAll copies the current browser address, installs missing tools and saves the highest available quality using saved defaults. This native flow requires no extension or bridge. Playback is not required. Supported accessible sources depend on yt-dlp; unavailable, restricted, protected or unsupported media gets an error.
 
-**Target capture and action placement**
+**Native source capture**
 
-- Extend the planned browser bridge with invocation-scoped page URL/title and an explicit image/link/video/post target, including browser profile/window/tab/frame identity. Capture before PieAll changes focus. A browser executable name, window title or previously active tab is insufficient to choose the URL.
-- For a single-video watch page, Download video acts on that video. On feeds such as X, a media element, post or link explicitly targeted by the invocation identifies its canonical post/media URL. Prefer that target over the feed URL. Never guess from whichever video happens to be playing elsewhere, download every feed item, or select media in another tab/profile.
-- If several videos belong to the captured post, show a small numbered picker with thumbnails and durations; optionally offer Download all in this post. If no unique target can be captured, ask for a target or pasted link instead of downloading a guessed URL. Missing bridge permission/connection offers its setup route and an explicit paste-link fallback.
-- Eligible contextual actions appear directly in the relevant ring, with Download video as the primary video action and Download audio as an alternative. Images expose Save image, Copy image and Add to board; links/pages expose their relevant save/copy/bookmark/reading-list actions. Reuse existing ring customization and overflow rules. Ordinary browser shortcuts remain reachable without displacing the explicitly selected media tools.
-- Run against the reviewed immutable snapshot; reject a stale response before starting. After a download starts, changing tabs or closing the ring does not retarget or cancel it. Do not scrape tabs or poll playback while idle.
+- Capture foreground HWND/PID/profile before PieAll appears. Choosing Download cancels pending selection capture, restores browser focus and sends the bundled Ctrl+L / Ctrl+C / Escape sequence with source/focus/input validation between chords.
+- Require a fresh browser-owned clipboard URL. Restore borrowed clipboard data only if unchanged. Copy once before installation or download; later browser navigation cannot retarget that URL.
+- The current address identifies the page, not an individual video in a feed. Open the exact video/post first. Native copy failures offer the pasted-URL route. Blob-only players and media pickers remain unsupported in this slice.
+- Download video/audio are browser ring defaults and remain customizable. No extension registration, messaging protocol or browser connection UI is part of the product.
 
 **Download defaults and customization**
 
 - Use maintained yt-dlp as the downloader and FFmpeg for compatible stream merging/post-processing. Default to yt-dlp's best available video and best available audio, with a best combined-stream fallback where needed. Separate high-resolution video/audio streams must be considered; selecting only a precombined stream must not silently cap the quality.
-- Best available has no default resolution cap and no forced H.264/MP4 transcode. Choose a container compatible with the selected streams; preserving source quality takes precedence over a familiar extension. Remux without re-encoding where possible. If FFmpeg is required but missing, offer its explicit installation or a clearly labelled lower-quality combined-stream choice; never silently downgrade.
+- Best available has no default resolution cap and no forced H.264/MP4 transcode. Choose a container compatible with the selected streams; preserving source quality takes precedence over a familiar extension. Remux without re-encoding where possible. If required engines are missing, install them automatically in the same cancellable job; never silently downgrade.
 - App Settings → Downloads owns persistent defaults: Best available or a resolution cap, preferred container, compatibility/codec preference, original audio or an explicit output format/bitrate, subtitle/metadata choices, web-download destination and a policy for handling playlists. Defaults are best available, original audio without lossy re-encoding, no embedded subtitle/metadata extras, single targeted item, and the user's Downloads folder. A playlist URL does not download the entire playlist unless selected explicitly.
 - Add optional Download options in the app/ring to override one job, inspect available formats and choose video-only/audio-only or a supported combination. Ordinary Download video uses saved defaults immediately. User preferences that cap quality or request a transcode remain visible in the job summary; distinguish Highest quality from Most compatible presets.
 - Download audio defaults to the highest available audio stream without an unnecessary lossy re-encode; a saved MP3/M4A/etc. conversion preference is explicit. Show the actual source/output codec and any quality-changing conversion.
 - Use controlled names derived from media title/identity and collision-safe publication; sanitize titles as filenames. Stage video/audio/merge files privately and publish only successful outputs to the configured folder. Provide bounded resource/disk budgets and engine-specific job deadlines appropriate for long downloads; do not apply the current local-transform 120-second timeout unchanged to a large download. Downloads use the shared native job owner and exclusion rules; do not spawn a second unmanaged downloader beside it.
 - The ring closes normally. A non-activating status/toast confirms start/completion/failure; the app's Jobs view shows title/source, actual resolution/codec, bytes/progress when available, processing/merge state, Cancel, Retry, Open file and Reveal. Unknown size/progress stays indeterminate. Do not steal focus, autoplay or open downloaded files automatically.
-- Install/update yt-dlp, its required runtime and FFmpeg through the explicit engine manager. Site changes may require a verified engine update and a retry. Authentication-dependent support needs a separate explicit account/session grant; never silently read browser cookies. No DRM bypass or global security-setting changes.
+- Install missing yt-dlp, Deno and FFmpeg automatically from fixed publisher releases with verified digests; expose manual paths in Advanced. Automatic updating remains planned. Site changes may require a verified engine update and a retry. Authentication-dependent support needs a separate explicit account/session grant; never silently read browser cookies. No DRM bypass or global security-setting changes.
 
 **Save/copy images and related web actions**
 
 - Save image targets the explicitly selected/context-targeted image. Resolve the best page-provided original/full-resolution candidate when deterministically available and permitted; otherwise use the selected resource's actual resolution. Handle picture/srcset and lazy-loaded images without inventing an original URL or claiming preview pixels are full resolution.
 - One action saves to the configured web-download folder using the shared safe writer and collision naming. Save image as provides an optional native destination/format editor. Preserve the original supported image bytes/format by default after validation; format conversion, metadata stripping and recompression are separate explicit choices. Do not upscale to manufacture a higher-resolution result.
 - Copy image fetches and bounded-decodes the same target into clipboard pixels. Add to board imports permitted bytes into the managed collection store and records source page/image URLs and capture time; it does not rely on a fragile remote-only thumbnail. A default board can make this direct; otherwise use an accessible board chooser/create flow.
-- Cross-origin access requires the bridge's declared permission. Authenticated/blob/canvas resources may be inaccessible: use an explicit supported page-context export when available or explain the restriction. A screenshot fallback is a distinct user-selected action. Animated images retain original bytes when saved; pixel copying/editing requires an explicit frame choice when applicable. SVG content is saved/rendered with its existing active-content/external-resource restrictions.
+- Web-image input requires an explicit native image/link target or supplied URL. Authenticated/blob/canvas resources may be inaccessible: explain the restriction or accept a user-provided local file. A screenshot fallback is a distinct user-selected action. Animated images retain original bytes when saved; pixel copying/editing requires an explicit frame choice when applicable. SVG content is saved/rendered with its existing active-content/external-resource restrictions.
 - Copy image URL, Copy page/link URL, Copy clean URL, Copy Markdown link, Bookmark, Save for later and Save quote with source share the captured browser identity and existing baseline handlers. Download a linked file only for an explicit link target and supported scheme; the URL must not be executed as a command or opened automatically.
 
 **Implementation and proof**
 
-Implement this as the first vertical browser/media workflow in stage 9, reusing stage 1 engine/job ownership and stage 4 media probing. Planned owners: `extension/background.ts`, `extension/content.ts`, `extension/native.ts`, `src/bridge.rs`, `src/actions/browser.rs`, `src/actions/media.rs`, `src/engines.rs`, `src/jobs.rs`, `src/storage.rs`, `web/menus.ts`, `web/Tools.tsx`, `web/MediaEditor.tsx` and the settings/jobs UI. Settings remain under the versioned native store rather than an independent frontend download-preference store.
+The implemented owners are `src/platform.rs`, `src/downloads.rs`, `src/web_proxy.rs`, `src/engine_install.rs`, `src/engines.rs`, `src/actions.rs`, `src-tauri/src/shell.rs`, `web/menus.ts`, `web/BrowserTools.tsx` and `web/Engines.tsx`. Native settings own download preferences and engine records.
 
-Targeted tests must prove active-tab/profile/window matching; stale snapshot rejection; single video vs playlist selection; a targeted X post inside a feed; multi-video ambiguity; best separate streams plus audio selection; missing-FFmpeg no-silent-downgrade behavior; resolution/codec preference overrides; URL/argument/path validation; malicious media titles; redirects and private/local-network handling; size/disk/time limits; cancellation during download/merge/publication; partial-file cleanup and collision-safe retry. Image fixtures cover srcset/lazy loading, unavailable originals, permission denial, corrupt/huge images, animated input, SVG restrictions, clipboard decode and board provenance. Live platform/browser/download acceptance remains user-run and must record tested sites and engine versions rather than assert universal support.
-
+Tests cover fixed release source/digest validation, archive escape, cancellation before setup, atomic records, custom media pairs, typed download options, URL/path/name validation, collision-safe publication, public-only networking and browser ring customization. Live acceptance must still cover browser focus/clipboard copying, actual installation and real-site downloads, cancellation during transfer/merge and accessible notices. Planned image tools need native targeting, bounded decode, provenance and explicit fallback tests when implemented.
 
 ### 13.15 Implementation checkpoint ? 21 October 2026
 
-The registry contains 66 local command IDs. This checkpoint records implemented code; native UI and real-codec acceptance remain open. It does not mark all 72 workflows or the original 100 product IDs complete.
+The registry contains 68 command IDs (including two URL-download commands). This checkpoint records implemented code; native UI and real-codec acceptance remain open. It does not mark all 72 workflows or the original 100 product IDs complete.
 
 | Area | Implemented now | Still required by the plan |
 | --- | --- | --- |
@@ -846,8 +836,19 @@ The registry contains 66 local command IDs. This checkpoint records implemented 
 | Media | 15 optional FFmpeg/FFprobe handlers for conversion, compression, trim, resize, rotate, mute, GIF/frame/audio extraction, volume, single-pass normalization and inspection | Timeline/waveform editors, stream/track selection, recording, subtitles, concatenation, further catalog workflows and real-codec acceptance |
 | Engines/settings | Native-selected FFmpeg/FFprobe paths and pinned hashes in schema-1 SQLite; missing-engine guidance | Verified install/update/removal of managed binaries, dependency/license/version UX, persistent conversion/download defaults and further engines |
 | Archives | File/folder ZIP with empty directories, Store/Deflate level, bounded traversal/streaming | Other archive formats and remaining file-manager workflows |
-| Browser/downloads | Planned behavior and acceptance requirements in 13.14 | Browser extension/native host, exact tab/frame/post capture, yt-dlp/runtime management, highest-quality background download, settings and web-image tools |
+| Browser/downloads | Native current-page URL copying, highest-quality downloads, saved preferences, first-use tools | Real-site/native acceptance, exact in-feed media targeting, web-image actions and richer presets |
 | Boards/Library | Product and interaction specification | Storage/assets, collection/board UI, notes/tags/provenance, canvas/grid, imports and exports |
 | Remaining catalog | Extracted 72-workflow requirements retained above | Speech/model tools, recording, advanced Windows utilities and other unimplemented rows |
 
-The current setup deliberately uses trusted user-installed FFmpeg/FFprobe instead of an unfinished automatic installer. Media jobs use their own one-hour deadline rather than the earlier 120-second image/file limit. The SQLite database currently owns engine records only; ring preferences retain their existing store until the planned migration. No browser or board implementation is implied by the engine/media work.
+The initial media checkpoint used manually selected FFmpeg/FFprobe; section 13.16 supersedes that setup with verified automatic first-use installation. Media jobs use their own one-hour deadline rather than the earlier 120-second image/file limit. SQLite owns engine records and download defaults; ring preferences retain their existing store until the planned migration. Boards remain unimplemented.
+
+
+### 13.16 Native download and automatic tools checkpoint - 21 October 2026
+
+Download video/audio now copy the captured native browser address and use the existing downloader/job owner, highest-quality defaults, persistent settings and safe publication. Browser ring defaults include both downloads; customization remains available. Extension assets, registration commands and connection UI have been removed.
+
+Media/download dependencies install automatically from fixed GitHub publisher release assets, requiring expected SHA-256 and size. The BtbN win64 GPL package supplies the H.264 encoder used by existing media tools. All distribution files/notices are retained with release provenance. Extraction and downloads are bounded/cancellable; one settings transaction publishes complete engine groups, preserving existing custom paths. Tool setup has one preinstall action, compact status rows and Advanced manual paths.
+
+Still planned: automatic engine updating, exact in-feed media targeting/pickers, web-image save/copy/board actions, format inspection, codec/bitrate/subtitle presets, batches and the unfinished catalog/Library/editors above. Current code checks do not establish real-site support, successful live installation, native clipboard/focus behavior or accessibility acceptance.
+
+Background job notices now anchor to the bottom-right monitor work area instead of the cursor; foreground dashboard jobs use the existing footer. Managed downloads share the desktop reqwest/Tokio stack with native TLS, a 15-minute overall limit, a 30-second read-stall timeout and cancellable network awaits. Winget is not required.

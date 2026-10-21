@@ -43,6 +43,7 @@ export interface Session {
   names: string[];
   kind: "images" | "files" | "text" | "window" | "empty";
   app?: string | null;
+  pinned?: boolean;
   busy: string | null;
   editor: string | null;
   status: string;
@@ -58,6 +59,21 @@ export interface Session {
   };
 }
 export const native = {
+  setupTools: () => invoke<void>("setup_tools"),
+  downloadSettings: () => invoke<DownloadSettings>("download_settings"),
+  configureDownloads: (
+    preferences: DownloadPreferences,
+    chooseFolder = false,
+  ) =>
+    invoke<DownloadSettings>("configure_downloads", {
+      preferences,
+      chooseFolder,
+    }),
+  downloadUrl: (
+    id: "download_video" | "download_audio",
+    url: string,
+    preferences: DownloadPreferences,
+  ) => invoke<void>("download_url", { id, url, preferences }),
   engines: () => invoke<Engine[]>("tool_engines"),
   configureEngine: (name: string, remove = false) =>
     invoke<void>("configure_engine", { name, remove }),
@@ -99,6 +115,15 @@ export interface Engine {
   name: string;
   path: string | null;
   sha256: string | null;
+}
+export interface DownloadPreferences {
+  quality: string;
+  container: string;
+  audio: string;
+}
+export interface DownloadSettings {
+  destination: string;
+  preferences: DownloadPreferences;
 }
 export interface Toast {
   id: number;

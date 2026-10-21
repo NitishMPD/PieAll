@@ -85,6 +85,38 @@ pub fn pick_files() -> Result<Vec<PathBuf>, String> {
 pub fn pick_engine() -> Result<Vec<PathBuf>, String> {
     pick_paths("Choose a trusted tool executable for PieAll", false)
 }
+pub fn pick_download_folder() -> Result<Option<PathBuf>, String> {
+    use windows::Win32::{System::Com::*, UI::Shell::*};
+    unsafe {
+        let initialized = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
+        let result = (|| -> windows::core::Result<Option<PathBuf>> {
+            let dialog: IFileOpenDialog =
+                CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)?;
+            dialog.SetOptions(
+                dialog.GetOptions()?
+                    | FOS_PICKFOLDERS
+                    | FOS_FORCEFILESYSTEM
+                    | FOS_PATHMUSTEXIST
+                    | FOS_NOCHANGEDIR,
+            )?;
+            dialog.SetTitle(windows::core::w!("Choose a folder for PieAll downloads"))?;
+            if let Err(e) = dialog.Show(None) {
+                if e.code().0 as u32 == 0x800704c7 {
+                    return Ok(None);
+                }
+                return Err(e);
+            }
+            let raw = dialog.GetResult()?.GetDisplayName(SIGDN_FILESYSPATH)?;
+            let text = raw.to_string();
+            CoTaskMemFree(Some(raw.0 as *const _));
+            Ok(Some(PathBuf::from(text?)))
+        })();
+        if initialized {
+            CoUninitialize();
+        }
+        result.map_err(|e| e.to_string())
+    }
+}
 fn pick_paths(title: &str, multiple: bool) -> Result<Vec<PathBuf>, String> {
     unsafe {
         let mut buffer = vec![0u16; 65536];
@@ -515,6 +547,23 @@ impl ClipboardSnapshot {
         if !open_clipboard(owner) {
             return Err("Clipboard is busy.".into());
         }
+        self.restore_opened();
+        Ok(())
+    }
+    fn restore_if_unchanged(&self, owner: usize, sequence: u32) -> Result<(), String> {
+        if !open_clipboard(owner) {
+            return Err("Clipboard is busy.".into());
+        }
+        if unsafe { GetClipboardSequenceNumber() } != sequence {
+            unsafe {
+                CloseClipboard();
+            }
+            return Err("Clipboard changed. Choose Download again.".into());
+        }
+        self.restore_opened();
+        Ok(())
+    }
+    fn restore_opened(&self) {
         unsafe {
             EmptyClipboard();
             for (format, bytes) in &self.0 {
@@ -536,18 +585,66 @@ impl ClipboardSnapshot {
             exclude_from_history();
             CloseClipboard();
         }
-        Ok(())
     }
 }
+/// Borrow the captured browser's address bar only after the user chooses Download.
+pub fn copy_browser_url(source: usize, pid: u32) -> Result<String, String> {
+    let profile = window_profile(source, pid)?
+        .filter(|p| p.sets.iter().any(|s| s == "browser" || s == "firefox"))
+        .ok_or("Invoke Download video from a supported browser, or paste its URL in Browser downloads.")?;
+    let shortcut = crate::shortcuts::find(&format!("app:{}:copy-url", profile.id))
+        .ok_or("This browser has no Copy URL shortcut. Paste the URL in Browser downloads.")?;
+    let snapshot = ClipboardSnapshot::take(source).ok_or("Clipboard is busy. Try again.")?;
+    let before = unsafe { GetClipboardSequenceNumber() };
+    let sent = send_app_shortcut(source, pid, shortcut);
+    if sent.is_err() && unsafe { GetClipboardSequenceNumber() } == before {
+        return sent.map(|_| String::new());
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+    while unsafe { GetClipboardSequenceNumber() } == before {
+        if std::time::Instant::now() >= deadline {
+            return Err(
+                "The browser did not copy its address. Paste the URL in Browser downloads.".into(),
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let copied = unsafe { GetClipboardSequenceNumber() };
+    let mut clipboard_pid = 0;
+    unsafe {
+        GetWindowThreadProcessId(GetClipboardOwner(), &mut clipboard_pid);
+    }
+    if clipboard_pid != pid {
+        return Err("Another app changed the clipboard. Choose Download again.".into());
+    }
+    let text = clipboard_text();
+    snapshot.restore_if_unchanged(source, copied)?;
+    sent?;
+    if unsafe { GetForegroundWindow() } as usize != source {
+        return Err("Browser focus changed. Choose Download again.".into());
+    }
+    let text = text?;
+    Ok(crate::web_proxy::web_url(text.trim())?.to_string())
+}
+
 /// Copies the source window's text selection with Ctrl+C, then puts the clipboard back.
 /// Returns nothing when the app copied no text, which means nothing was selected.
-pub fn copy_selection(owner: usize) -> Option<(String, ClipboardSnapshot)> {
+/// `cancelled` lets a ring that already ran something else stop waiting; the
+/// clipboard is still restored.
+pub fn copy_selection(
+    owner: usize,
+    cancelled: impl Fn() -> bool,
+) -> Option<(String, ClipboardSnapshot)> {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_CONTROL;
     let snapshot = ClipboardSnapshot::take(owner)?;
     let before = unsafe { GetClipboardSequenceNumber() };
     send_chord(VK_CONTROL, b'C' as u16);
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(300);
     while unsafe { GetClipboardSequenceNumber() } == before {
+        if cancelled() {
+            let _ = snapshot.restore(owner);
+            return None;
+        }
         if std::time::Instant::now() > deadline {
             return None;
         }
@@ -717,6 +814,7 @@ mod shortcut_tests {
     #[test]
     fn invalid_source_is_rejected_before_input_is_sent() {
         assert!(super::window_profile(0, 0).is_err());
+        assert!(super::copy_browser_url(0, 0).is_err());
         let action = crate::shortcuts::find("app:figma:frame-tool").unwrap();
         assert!(super::send_app_shortcut(0, 0, action).is_err());
     }

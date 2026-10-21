@@ -34,6 +34,44 @@ const actions = (eligible: string[]) =>
   }));
 
 describe("context menus", () => {
+  it("puts native video and audio downloads in browser defaults and allows customization", () => {
+    const browserActions = [
+      {
+        id: "app:firefox:copy-url",
+        title: "Copy URL",
+        group: "Apps",
+        shortcut: "Ctrl+L Ctrl+C Escape",
+        category: "Navigation",
+        eligible: true,
+        fields: [],
+        priority: 0,
+      },
+      ...["download_video", "download_audio"].map((id) => ({
+        id,
+        title: id,
+        group: "Browser",
+        eligible: true,
+        fields: [],
+      })),
+    ];
+    const session = {
+      kind: "window",
+      app: "firefox",
+      names: [],
+      actions: browserActions,
+    } as unknown as Session;
+    const defaults = resolve(contextMenu(session), browserActions);
+    expect(defaults.slice(0, 2).map((i) => i.action)).toEqual([
+      "download_video",
+      "download_audio",
+    ]);
+    const prefs = {
+      layouts: { "app:firefox": ["download_audio"] },
+    } as unknown as Prefs;
+    const customized = resolve(contextMenu(session, prefs), browserActions);
+    expect(customized[0].action).toBe("download_audio");
+    expect(customized.some((i) => i.action === "download_video")).toBe(false);
+  });
   it("offers six direct app actions and flat search instead of nested shortcut menus", () => {
     const shortcuts = Array.from({ length: 12 }, (_, n) => ({
       id: `app:test:${n}`,
@@ -215,6 +253,30 @@ describe("context menus", () => {
       "folder_size",
     ]);
     expect(resolve(menus.files, actions([]))).toEqual([]);
+  });
+  it("offers Unpin for a window that is already on top", () => {
+    const session = {
+      kind: "window",
+      pinned: true,
+      actions: [],
+      names: [],
+    } as unknown as Session;
+    const pin = contextMenu(session).find((i) => i.action === "always_top");
+    expect(pin?.label).toBe("Unpin");
+  });
+  it("puts a single file type's tools straight on the ring", () => {
+    const pdf = ["pdf_rotate", "pdf_compress", "pdf_text", "copy_paths"];
+    const ring = resolve(
+      menus.files,
+      pdf.map((id) => ({
+        id,
+        title: id,
+        group: "",
+        fields: [],
+        eligible: true,
+      })),
+    );
+    expect(ring.map((i) => i.action)).toEqual(pdf);
   });
   it("moves overflow beyond eight slices into More", () => {
     const many = Array.from({ length: 11 }, (_, n) => ({

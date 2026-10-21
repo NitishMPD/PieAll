@@ -92,7 +92,12 @@ export function Ring({
   useEffect(() => {
     if (!session.busy) settled.set(appKey, session);
   }, [session, appKey]);
-  const view = reading ? (settled.get(appKey) ?? session) : session;
+  const cached = reading ? settled.get(appKey) : undefined;
+  // Pin state is read live on every open; the cached menu would show the old toggle.
+  const view = useMemo(
+    () => (cached ? { ...cached, pinned: session.pinned } : session),
+    [cached, session],
+  );
   const root = useMemo(
     () => resolve(contextMenu(view, prefs), view.actions, view.names),
     [view, prefs],
@@ -128,6 +133,14 @@ export function Ring({
   // then goes by the point alone: the highlight was on the cached slices.
   function release(x: number, y: number, byHighlight = true) {
     if (reading) {
+      // App shortcuts and window actions don't need the selection: run them now.
+      const index = selected ?? sectorAt(x, y, items.length, DEAD_ZONE);
+      const item = index !== null ? items[index] : undefined;
+      const group = session.actions.find((a) => a.id === item?.action)?.group;
+      if (item?.action && (group === "Apps" || group === "Window")) {
+        onRun(item.action, item.params ?? {});
+        return;
+      }
       pending.current = [x, y];
       return;
     }

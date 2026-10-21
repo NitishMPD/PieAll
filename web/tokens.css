@@ -1,11 +1,12 @@
 :root {
   --font: "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  --paper: #f5efe5;
-  --cream: #fcf7ee;
-  --ink: #342b23;
-  --muted: #756453;
-  --line: #dfd3c2;
-  --accent: #9b4f29;
-  --hover: #eddfca;
-  --wedge: #f4d6af;
+  --paper: #f5f5f6;
+  --cream: #ffffff;
+  --ink: #1c1c1e;
+  --muted: #6c6c70;
+  --line: #e1e1e4;
+  --accent: #1c1c1e;
+  --hover: #ebebed;
+  --wedge: #e4e4e7;
+  --select: #ff8a3d;
 }

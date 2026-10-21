@@ -10,9 +10,9 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent.parent
 BRAND = ROOT / "public" / "brand"
 ICONS = ROOT / "src-tauri" / "icons"
-BACKGROUND = "#342b23"
-CREAM = "#fcf7ee"
-COPPER = "#e99c62"
+BACKGROUND = "#1c1c1e"
+CREAM = "#f4f4f6"
+COPPER = "#ff8a3d"
 SIZE = 80
 RADIUS = 25
 STROKE = 10
@@ -46,11 +46,11 @@ def artwork(size):
 def main():
     BRAND.mkdir(parents=True, exist_ok=True)
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">',
-             f'<rect width="80" height="80" rx="19" fill="{BACKGROUND}"/>']
+             f'<rect width="80" height="80" rx="19" fill="var(--pieall-tile, {BACKGROUND})"/>']
     for index in range(6):
         x1, y1 = point(-105 + index * 60)
         x2, y2 = point(-75 + index * 60)
-        color = COPPER if index == 1 else CREAM
+        color = f"var(--pieall-accent, {COPPER})" if index == 1 else f"var(--pieall-segment, {CREAM})"
         parts.append(f'<path d="M{x1:.4f} {y1:.4f} A25 25 0 0 1 {x2:.4f} {y2:.4f}" '
                      f'stroke="{color}" stroke-width="{STROKE}" stroke-linecap="round"/>')
     parts.append('</svg>')

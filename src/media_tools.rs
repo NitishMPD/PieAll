@@ -1,14 +1,10 @@
 //! Typed FFmpeg jobs. All paths come from native captures and engine selection.
-use crate::{
-    engines::{Engine, Engines},
-    jobs, output,
-};
+use crate::{engines::Engines, jobs, output};
 use std::{
     collections::BTreeMap,
     fs::File,
-    io::{BufRead, Read, Write},
+    io::{Read, Write},
     path::Path,
-    process::{Command, Stdio},
     time::{Duration, Instant},
 };
 
@@ -232,117 +228,6 @@ fn conversion(id: &str, p: &BTreeMap<String, String>) -> Result<Conversion, Stri
     Ok(c)
 }
 
-/// Drain both pipes even after display limits; never let a verbose codec block.
-fn process(
-    engine: &Engine,
-    args: &[String],
-    timeout: Duration,
-    destination: Option<&Path>,
-    mut line: impl FnMut(&str),
-) -> Result<String, String> {
-    jobs::check()?;
-    let _engine_guard = engine.validated_file()?;
-    let mut command = Command::new(&engine.path);
-    command
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
-    let mut child = command
-        .spawn()
-        .map_err(|e| format!("Cannot start engine: {e}"))?;
-    let stdout = child.stdout.take().ok_or("Engine output unavailable")?;
-    let stderr = child.stderr.take().ok_or("Engine errors unavailable")?;
-    let (tx, rx) = std::sync::mpsc::sync_channel(64);
-    let out = std::thread::spawn(move || {
-        let mut reader = std::io::BufReader::new(stdout);
-        let mut result = String::new();
-        loop {
-            let mut s = String::new();
-            match reader.by_ref().take(8192).read_line(&mut s) {
-                Ok(0) | Err(_) => break,
-                _ => {}
-            }
-            if result.len() + s.len() <= 128 * 1024 {
-                result.push_str(&s);
-            }
-            let _ = tx.try_send(s);
-        }
-        result
-    });
-    let err = std::thread::spawn(move || {
-        let mut reader = stderr;
-        let mut tail = Vec::new();
-        let mut chunk = [0u8; 4096];
-        loop {
-            match reader.read(&mut chunk) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    tail.extend_from_slice(&chunk[..n]);
-                    if tail.len() > 16384 {
-                        tail.drain(..tail.len() - 16384);
-                    }
-                }
-            }
-        }
-        String::from_utf8_lossy(&tail).into_owned()
-    });
-    let started = Instant::now();
-    let status = loop {
-        for s in rx.try_iter() {
-            line(&s);
-        }
-        if let Err(e) = jobs::check() {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = out.join();
-            let _ = err.join();
-            return Err(e);
-        }
-        let too_large = destination
-            .and_then(|p| p.metadata().ok())
-            .is_some_and(|m| m.len() > 2 * 1024 * 1024 * 1024);
-        if started.elapsed() > timeout || too_large {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = out.join();
-            let _ = err.join();
-            return Err(if too_large {
-                "Media output exceeded 2 GiB."
-            } else {
-                "Media engine exceeded its time limit."
-            }
-            .into());
-        }
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {}
-            Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = out.join();
-                let _ = err.join();
-                return Err(e.to_string());
-            }
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    };
-    let stdout = out.join().map_err(|_| "Engine output reader stopped")?;
-    let stderr = err.join().map_err(|_| "Engine error reader stopped")?;
-    for s in rx.try_iter() {
-        line(&s);
-    }
-    if !status.success() {
-        return Err(format!("Engine failed. {}", stderr.trim()));
-    }
-    jobs::check()?;
-    Ok(stdout)
-}
 fn input_args(path: &Path) -> Result<Vec<String>, String> {
     Ok(vec![
         "-protocol_whitelist".into(),
@@ -378,7 +263,8 @@ pub fn run(
         "json".into(),
     ];
     probe_args.extend(input_args(path)?);
-    let info = process(probe, &probe_args, Duration::from_secs(30), None, |_| {})?;
+    let info =
+        crate::engine_process::run(probe, &probe_args, Duration::from_secs(30), None, |_| {})?;
     if id == "media_details" {
         return Ok(format!("{}\r\n{info}", path.display()));
     }
@@ -425,7 +311,7 @@ pub fn run(
             .into(),
     );
     let mut last = Instant::now() - Duration::from_secs(1);
-    process(
+    crate::engine_process::run(
         engine,
         &args,
         Duration::from_secs(3600),

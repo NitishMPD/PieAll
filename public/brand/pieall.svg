@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
-<rect width="80" height="80" rx="19" fill="#342b23"/>
-<path d="M33.5295 15.8519 A25 25 0 0 1 46.4705 15.8519" stroke="#fcf7ee" stroke-width="10" stroke-linecap="round"/>
-<path d="M57.6777 22.3223 A25 25 0 0 1 64.1481 33.5295" stroke="#e99c62" stroke-width="10" stroke-linecap="round"/>
-<path d="M64.1481 46.4705 A25 25 0 0 1 57.6777 57.6777" stroke="#fcf7ee" stroke-width="10" stroke-linecap="round"/>
-<path d="M46.4705 64.1481 A25 25 0 0 1 33.5295 64.1481" stroke="#fcf7ee" stroke-width="10" stroke-linecap="round"/>
-<path d="M22.3223 57.6777 A25 25 0 0 1 15.8519 46.4705" stroke="#fcf7ee" stroke-width="10" stroke-linecap="round"/>
-<path d="M15.8519 33.5295 A25 25 0 0 1 22.3223 22.3223" stroke="#fcf7ee" stroke-width="10" stroke-linecap="round"/>
+<rect width="80" height="80" rx="19" fill="var(--pieall-tile, #1c1c1e)"/>
+<path d="M33.5295 15.8519 A25 25 0 0 1 46.4705 15.8519" stroke="var(--pieall-segment, #f4f4f6)" stroke-width="10" stroke-linecap="round"/>
+<path d="M57.6777 22.3223 A25 25 0 0 1 64.1481 33.5295" stroke="var(--pieall-accent, #ff8a3d)" stroke-width="10" stroke-linecap="round"/>
+<path d="M64.1481 46.4705 A25 25 0 0 1 57.6777 57.6777" stroke="var(--pieall-segment, #f4f4f6)" stroke-width="10" stroke-linecap="round"/>
+<path d="M46.4705 64.1481 A25 25 0 0 1 33.5295 64.1481" stroke="var(--pieall-segment, #f4f4f6)" stroke-width="10" stroke-linecap="round"/>
+<path d="M22.3223 57.6777 A25 25 0 0 1 15.8519 46.4705" stroke="var(--pieall-segment, #f4f4f6)" stroke-width="10" stroke-linecap="round"/>
+<path d="M15.8519 33.5295 A25 25 0 0 1 22.3223 22.3223" stroke="var(--pieall-segment, #f4f4f6)" stroke-width="10" stroke-linecap="round"/>
 </svg>

@@ -6,3 +6,4 @@
 /.release/
 *.key
 *.key.pub
+/verification/tool-setup.html

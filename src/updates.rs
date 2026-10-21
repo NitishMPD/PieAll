@@ -36,6 +36,11 @@ pub fn configured() -> bool {
 
 fn agent(timeout: u64) -> ureq::Agent {
     ureq::Agent::config_builder()
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .provider(ureq::tls::TlsProvider::NativeTls)
+                .build(),
+        )
         .https_only(true)
         .timeout_global(Some(Duration::from_secs(timeout)))
         .timeout_connect(Some(Duration::from_secs(15)))

@@ -15,7 +15,7 @@ pub struct Engine {
     pub sha256: String,
 }
 pub type Engines = BTreeMap<String, Engine>;
-pub const NAMES: &[&str] = &["ffmpeg", "ffprobe"];
+pub const NAMES: &[&str] = &["ffmpeg", "ffprobe", "yt-dlp", "deno"];
 fn fingerprint(path: &Path) -> Result<String, String> {
     crate::output::plain_path(path)?;
     let mut file = File::open(path).map_err(|e| e.to_string())?;
@@ -81,7 +81,7 @@ impl Engine {
         Ok(file)
     }
 }
-fn database(path: &Path) -> Result<Connection, String> {
+pub(crate) fn database(path: &Path) -> Result<Connection, String> {
     let parent = path.parent().ok_or("Missing settings folder")?;
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     crate::output::plain_path(parent)?;
@@ -92,12 +92,22 @@ fn database(path: &Path) -> Result<Connection, String> {
     let version: u32 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .map_err(|e| e.to_string())?;
-    if version > 1 {
+    if version > 3 {
         return Err("Settings were created by a newer PieAll version.".into());
     }
     if version == 0 {
         let tx = db.transaction().map_err(|e| e.to_string())?;
         tx.execute_batch("CREATE TABLE IF NOT EXISTS engines (name TEXT PRIMARY KEY, path TEXT NOT NULL, sha256 TEXT NOT NULL); PRAGMA user_version=1;").map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())?;
+    }
+    if version < 2 {
+        let tx = db.transaction().map_err(|e| e.to_string())?;
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS download_settings (id INTEGER PRIMARY KEY CHECK(id=1), value TEXT NOT NULL); PRAGMA user_version=2;").map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())?;
+    }
+    if version < 3 {
+        let tx = db.transaction().map_err(|e| e.to_string())?;
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS browser_hosts (browser TEXT PRIMARY KEY, extension TEXT NOT NULL); CREATE TABLE IF NOT EXISTS browser_requests (id TEXT PRIMARY KEY, captured_at INTEGER NOT NULL); PRAGMA user_version=3;").map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())?;
     }
     Ok(db)
@@ -140,9 +150,66 @@ pub fn store(path: &Path, name: &str, engine: Option<&Engine>) -> Result<(), Str
     }
     Ok(())
 }
+/// Commit a complete setup together; a failed download never leaves half a media pair.
+pub fn store_all(path: &Path, engines: &Engines) -> Result<(), String> {
+    let mut db = database(path)?;
+    let tx = db.transaction().map_err(|e| e.to_string())?;
+    for (name, engine) in engines {
+        if !NAMES.contains(&name.as_str()) {
+            return Err("Unknown engine.".into());
+        }
+        tx.execute("INSERT INTO engines(name,path,sha256) VALUES(?1,?2,?3) ON CONFLICT(name) DO UPDATE SET path=excluded.path,sha256=excluded.sha256",
+            params![name, engine.path.to_str().ok_or("Engine path must be Unicode")?, engine.sha256]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn upgrades_engine_settings_without_dropping_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.sqlite3");
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch("CREATE TABLE engines(name TEXT PRIMARY KEY,path TEXT NOT NULL,sha256 TEXT NOT NULL); INSERT INTO engines VALUES('ffmpeg','C:/tools/ffmpeg.exe','hash'); PRAGMA user_version=1;").unwrap();
+        drop(db);
+        assert_eq!(load(&path).unwrap()["ffmpeg"].sha256, "hash");
+        let db = database(&path).unwrap();
+        assert_eq!(
+            db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
+                .unwrap(),
+            3
+        );
+        db.pragma_update(None, "user_version", 4).unwrap();
+        assert!(load(&path).is_err());
+    }
+    #[test]
+    fn engine_group_commit_rolls_back_if_any_record_is_invalid() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.sqlite3");
+        let original = Engine {
+            path: dir.path().join("ffmpeg.exe"),
+            sha256: "original".into(),
+        };
+        store(&path, "ffmpeg", Some(&original)).unwrap();
+        let mut next = Engines::new();
+        next.insert(
+            "ffmpeg".into(),
+            Engine {
+                sha256: "changed".into(),
+                ..original
+            },
+        );
+        next.insert(
+            "invalid".into(),
+            Engine {
+                path: dir.path().join("bad.exe"),
+                sha256: "bad".into(),
+            },
+        );
+        assert!(store_all(&path, &next).is_err());
+        assert_eq!(load(&path).unwrap()["ffmpeg"].sha256, "original");
+    }
     #[test]
     fn settings_roundtrip_and_changed_engine_refusal() {
         let dir = tempfile::tempdir().unwrap();

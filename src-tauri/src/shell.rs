@@ -75,6 +75,8 @@ struct Session {
 
 #[derive(Clone, Serialize)]
 struct JobView {
+    #[serde(skip)]
+    action: String,
     id: u64,
     title: String,
     detail: String,
@@ -119,6 +121,8 @@ struct View {
     names: Vec<String>,
     kind: &'static str,
     app: Option<&'static str>,
+    /// The captured window is always-on-top, so its pin slice offers Unpin.
+    pinned: bool,
     busy: Option<&'static str>,
     editor: Option<String>,
     status: String,
@@ -129,6 +133,18 @@ struct View {
 }
 
 impl Session {
+    fn browser_source(&self) -> bool {
+        self.source != 0
+            && self
+                .source_app
+                .is_some_and(|p| p.sets.iter().any(|s| s == "browser" || s == "firefox"))
+    }
+    fn cancel_capture(&mut self) {
+        if self.operation == Some("capture") {
+            self.ticket += 1;
+            self.operation = None;
+        }
+    }
     fn idle(&self) -> Result<()> {
         if self.operation.is_some() || self.editor.is_some() {
             Err("Finish the current action or close its editor first.".into())
@@ -187,6 +203,10 @@ impl Session {
             revision: self.revision,
             target,
             app: self.source_app.map(|p| p.id.as_str()),
+            pinned: self.source != 0
+                && unsafe { GetWindowLongPtrW(self.source as _, GWL_EXSTYLE) }
+                    & WS_EX_TOPMOST as isize
+                    != 0,
             names,
             kind: if images {
                 "images"
@@ -206,8 +226,8 @@ impl Session {
             actions: actions::catalog()
                 .into_iter()
                 .map(|a| ActionView {
-                    eligible: actions::eligible(&a, &self.paths, !self.text.is_empty())
-                        && actions::missing_engine(a.id, &self.engines).is_none()
+                    eligible: (actions::eligible(&a, &self.paths, !self.text.is_empty())
+                        || (pieall::downloads::is_download(a.id) && self.browser_source()))
                         && (a.input != actions::InputKind::Window || self.source != 0),
                     id: a.id,
                     title: a.title,
@@ -215,7 +235,7 @@ impl Session {
                     shortcut: None,
                     category: None,
                     priority: None,
-                    unavailable: actions::missing_engine(a.id, &self.engines),
+                    unavailable: None,
                     fields: a
                         .fields
                         .into_iter()
@@ -365,6 +385,30 @@ fn hide_raw(window: &WebviewWindow) {
 /// so the next show never flashes a stale frame.
 const OUTRO_MS: u64 = 60;
 static RING_OPEN: AtomicBool = AtomicBool::new(false);
+/// Selection reads still running. A cancelled read keeps going until its Ctrl+C
+/// settles and the clipboard is restored; keys sent before then could interleave.
+static CAPTURING: AtomicU64 = AtomicU64::new(0);
+struct Capturing;
+impl Capturing {
+    fn start() -> Self {
+        CAPTURING.fetch_add(1, Ordering::SeqCst);
+        Self
+    }
+    /// Waits (bounded) for every selection read to finish touching the clipboard.
+    fn wait() {
+        for _ in 0..200 {
+            if CAPTURING.load(Ordering::SeqCst) == 0 {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+}
+impl Drop for Capturing {
+    fn drop(&mut self) {
+        CAPTURING.fetch_sub(1, Ordering::SeqCst);
+    }
+}
 static RING_GENERATION: AtomicU64 = AtomicU64::new(0);
 /// Generation of the ring that last gained focus. Focus loss only closes that ring;
 /// Windows delivers a hidden ring's focus loss late, after the next one has opened.
@@ -374,7 +418,7 @@ static RING_HELD: AtomicBool = AtomicBool::new(false);
 /// Generation of the ring whose hold is confirmed (not a typed backtick). Text
 /// capture sends Ctrl+C, so it waits for this.
 static RING_CONFIRMED: AtomicU64 = AtomicU64::new(u64::MAX);
-/// Physical screen point of the last ring's center; results appear there.
+/// Physical screen point of the last ring; selects the monitor for notices.
 static RING_X: AtomicI32 = AtomicI32::new(i32::MIN);
 static RING_Y: AtomicI32 = AtomicI32::new(i32::MIN);
 
@@ -638,6 +682,7 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
     let generation = RING_GENERATION.load(Ordering::SeqCst);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let _capturing = wants_text.then(Capturing::start);
         // A held ` may still turn out to be typing; never send Ctrl+C for that.
         // A tap closes the ring, which bumps the ticket and ends the wait.
         if held && wants_text {
@@ -655,7 +700,11 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
         let result = if shell {
             platform::capture_selection_from(source).map(|paths| (paths, None))
         } else if wants_text {
-            Ok((Vec::new(), platform::copy_selection(owner)))
+            let ticket = lease.ticket;
+            Ok((
+                Vec::new(),
+                platform::copy_selection(owner, || state(&app).lock().unwrap().ticket != ticket),
+            ))
         } else {
             Ok((Vec::new(), None))
         };
@@ -768,6 +817,75 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf> {
         .map_err(|e| e.to_string())?
         .join("settings.sqlite3"))
 }
+fn download_defaults(app: &AppHandle) -> Result<pieall::downloads::Settings> {
+    pieall::downloads::load(
+        &settings_path(app)?,
+        &app.path().download_dir().map_err(|e| e.to_string())?,
+    )
+}
+#[tauri::command]
+fn download_settings(window: WebviewWindow, app: AppHandle) -> Result<pieall::downloads::Settings> {
+    dashboard_only(&window)?;
+    download_defaults(&app)
+}
+#[tauri::command]
+async fn configure_downloads(
+    window: WebviewWindow,
+    app: AppHandle,
+    preferences: pieall::downloads::Preferences,
+    choose_folder: bool,
+) -> Result<pieall::downloads::Settings> {
+    dashboard_only(&window)?;
+    preferences.validate()?;
+    let lease = Lease::acquire(&app, "download setup")?;
+    notify(&app);
+    tauri::async_runtime::spawn_blocking(move || {
+        let _lease = lease;
+        let mut settings = download_defaults(&app)?;
+        settings.preferences = preferences;
+        if choose_folder {
+            let Some(folder) = platform::pick_download_folder()? else {
+                return download_defaults(&app);
+            };
+            settings.destination = folder;
+        }
+        pieall::downloads::store(&settings_path(&app)?, &settings)?;
+        Ok(settings)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn download_url(
+    window: WebviewWindow,
+    app: AppHandle,
+    id: String,
+    url: String,
+    preferences: pieall::downloads::Preferences,
+) -> Result<()> {
+    dashboard_only(&window)?;
+    if !pieall::downloads::is_download(&id) {
+        return Err("Unknown download action.".into());
+    }
+    preferences.validate()?;
+    let url = pieall::web_proxy::web_url(&url)?.to_string();
+    let revision = {
+        let state = state(&app);
+        let mut s = state.lock().unwrap();
+        s.idle()?;
+        s.replace(vec![], url);
+        s.source = 0;
+        s.source_pid = 0;
+        s.source_app = None;
+        s.revision
+    };
+    let params = BTreeMap::from([
+        ("quality".into(), preferences.quality),
+        ("container".into(), preferences.container),
+        ("audio".into(), preferences.audio),
+    ]);
+    run_action(window, app, id, revision, params).await
+}
 #[tauri::command]
 fn tool_engines(window: WebviewWindow, app: AppHandle) -> Result<Vec<EngineView>> {
     dashboard_only(&window)?;
@@ -784,6 +902,12 @@ fn tool_engines(window: WebviewWindow, app: AppHandle) -> Result<Vec<EngineView>
             }
         })
         .collect())
+}
+#[tauri::command]
+async fn setup_tools(window: WebviewWindow, app: AppHandle) -> Result<()> {
+    dashboard_only(&window)?;
+    let revision = state(&app).lock().unwrap().revision;
+    run_action(window, app, "setup_tools".into(), revision, BTreeMap::new()).await
 }
 #[tauri::command]
 async fn configure_engine(
@@ -868,6 +992,9 @@ async fn run_action(
     mut params: BTreeMap<String, String>,
 ) -> Result<()> {
     local(&window)?;
+    if id == "setup_tools" {
+        dashboard_only(&window)?;
+    }
     if id.starts_with("app:") {
         if !params.is_empty() {
             return Err("App shortcuts do not accept parameters.".into());
@@ -880,7 +1007,7 @@ async fn run_action(
     let from_ring = window.label() == "ring";
     let lease;
     let cancel = Arc::new(AtomicBool::new(false));
-    let (paths, text, selection, source) = {
+    let (paths, text, selection, source, browser_source) = {
         let s = state(&app);
         let mut s = s.lock().unwrap();
         if revision != s.revision {
@@ -889,14 +1016,27 @@ async fn run_action(
         let action = actions::catalog()
             .into_iter()
             .find(|a| a.id == id)
+            .or_else(|| {
+                (id == "setup_tools").then(|| actions::Action {
+                    id: "setup_tools",
+                    title: "Set up tools",
+                    group: "Tools",
+                    input: actions::InputKind::Text,
+                    fields: vec![],
+                })
+            })
             .ok_or("Unknown action")?;
-        if let Some(reason) = actions::missing_engine(action.id, &s.engines) {
-            return Err(reason.into());
-        }
-        if !actions::eligible(&action, &s.paths, !s.text.is_empty())
+        let browser_source = pieall::downloads::is_download(&id) && s.browser_source();
+        if !(actions::eligible(&action, &s.paths, !s.text.is_empty())
+            || browser_source
+            || id == "setup_tools")
             || (action.input == actions::InputKind::Window && s.source == 0)
         {
             return Err("This action does not support the selected target.".into());
+        }
+        // Window actions don't need the selection: a release mid-read runs at once.
+        if action.input == actions::InputKind::Window || browser_source {
+            s.cancel_capture();
         }
         if s.operation.is_some() || s.editor.as_ref().is_some_and(|e| e != &id) {
             return Err("Finish the current action first.".into());
@@ -920,6 +1060,7 @@ async fn run_action(
         s.cancel = Some(cancel.clone());
         s.dismissed_job = None;
         s.job = Some(JobView {
+            action: id.clone(),
             id: s.ticket,
             title: action.title.into(),
             detail: "Starting…".into(),
@@ -929,7 +1070,13 @@ async fn run_action(
             fraction: None,
         });
         let selection = if from_ring { s.selection.take() } else { None };
-        (s.paths.clone(), s.text.clone(), selection, s.source)
+        (
+            s.paths.clone(),
+            s.text.clone(),
+            selection,
+            s.source,
+            browser_source.then_some((s.source, s.source_pid)),
+        )
     };
     notify(&app);
     if from_ring {
@@ -939,52 +1086,83 @@ async fn run_action(
         let ticket = lease.ticket;
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(700));
-            let running = {
-                let s = state(&slow);
-                let s = s.lock().unwrap();
-                s.operation == Some("action") && s.ticket == ticket
-            };
-            if running {
+            if shows_progress(&slow, ticket) {
                 show_job_toast(&slow);
             }
         });
+    } else if let Some((source, _)) = browser_source {
+        window.hide().map_err(|e| e.to_string())?;
+        unsafe {
+            SetForegroundWindow(source as _);
+        }
     } else {
         show_dashboard(&app)?;
     }
     tauri::async_runtime::spawn_blocking(move || {
         let _lease = lease;
+        Capturing::wait();
         let started = std::time::Instant::now();
         let ticket = _lease.ticket;
-        let engines = state(&app).lock().unwrap().engines.clone();
-        let result =
-            actions::execute_with_engines(&id, &paths, &text, &params, &engines, &cancel, |p| {
-                {
-                    let state = state(&app);
-                    let mut s = state.lock().unwrap();
-                    let status = if let Some(job) = s.job.as_mut().filter(|j| j.id == ticket) {
-                        job.completed = p.completed.min(p.total);
-                        job.total = p.total;
-                        job.detail = p.item;
-                        job.fraction = p
-                            .fraction
-                            .filter(|f| f.is_finite())
-                            .map(|f| f.clamp(0., 1.));
-                        Some(format!(
-                            "{} · {} of {} · {}",
-                            job.title, job.completed, job.total, job.detail
-                        ))
-                    } else {
-                        None
-                    };
-                    if let Some(status) = status {
-                        s.status = status;
-                    }
+        let progress = |p: pieall::jobs::Progress| {
+            {
+                let state = state(&app);
+                let mut s = state.lock().unwrap();
+                let status = if let Some(job) = s.job.as_mut().filter(|j| j.id == ticket) {
+                    job.completed = p.completed.min(p.total);
+                    job.total = p.total;
+                    job.detail = p.item;
+                    job.fraction = p
+                        .fraction
+                        .filter(|f| f.is_finite())
+                        .map(|f| f.clamp(0., 1.));
+                    Some(format!(
+                        "{} · {} of {} · {}",
+                        job.title, job.completed, job.total, job.detail
+                    ))
+                } else {
+                    None
+                };
+                if let Some(status) = status {
+                    s.status = status;
                 }
-                notify(&app);
-                if started.elapsed().as_millis() >= 700 {
-                    show_job_toast(&app);
-                }
-            });
+            }
+            notify(&app);
+            if started.elapsed().as_millis() >= 700 && shows_progress(&app, ticket) {
+                show_job_toast(&app);
+            }
+        };
+        let result = (|| {
+            if cancel.load(Ordering::SeqCst) {
+                return Err("Cancelled. Nothing was started.".into());
+            }
+            let text = match browser_source {
+                Some((hwnd, pid)) => platform::copy_browser_url(hwnd, pid)?,
+                None => text,
+            };
+            if pieall::downloads::is_download(&id) {
+                pieall::web_proxy::web_url(&text)?;
+            }
+            let mut engines = state(&app).lock().unwrap().engines.clone();
+            pieall::engine_install::ensure(
+                &settings_path(&app)?,
+                &id,
+                &mut engines,
+                &cancel,
+                &progress,
+            )?;
+            state(&app).lock().unwrap().engines = engines.clone();
+            if id == "setup_tools" {
+                Ok("Tools ready. Video, audio and downloads are available.".into())
+            } else if pieall::downloads::is_download(&id) {
+                let mut settings = download_defaults(&app)?;
+                settings.preferences = settings.preferences.with_overrides(&params)?;
+                actions::execute_download(&id, &text, &settings, &engines, &cancel, progress)
+            } else {
+                actions::execute_with_engines(
+                    &id, &paths, &text, &params, &engines, &cancel, progress,
+                )
+            }
+        })();
         {
             let s = state(&app);
             let mut s = s.lock().unwrap();
@@ -1056,10 +1234,12 @@ async fn run_app_shortcut(
     let (source, pid, lease) = {
         let state = state(&app);
         let mut s = state.lock().unwrap();
-        s.idle()?;
         if revision != s.revision {
             return Err("Selection changed. Invoke PieAll again.".into());
         }
+        // App shortcuts don't need the selection: a release mid-read runs at once.
+        s.cancel_capture();
+        s.idle()?;
         if s.source_app
             .is_none_or(|profile| profile.id != action.profile)
             || s.source == 0
@@ -1094,6 +1274,7 @@ async fn run_app_shortcut(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let _lease = lease;
+        Capturing::wait();
         let result = dispatch_app_shortcut(&app, source, pid, action);
         let (tone, status) = match result {
             Ok(()) => (
@@ -1282,6 +1463,26 @@ fn cancel_job(window: WebviewWindow, app: AppHandle, id: u64) -> Result<()> {
     Ok(())
 }
 
+/// Progress UI is for real progress work: several files, or one file that reports
+/// how far along it is (media, PDF). One-shot actions (open a terminal, copy a
+/// path) only ever get the result notice, however long the call took.
+fn shows_progress(app: &AppHandle, ticket: u64) -> bool {
+    let s = state(app);
+    let s = s.lock().unwrap();
+    s.operation == Some("action")
+        && s.ticket == ticket
+        && s.job.as_ref().is_some_and(|j| {
+            j.id == ticket
+                && j.state == "running"
+                && j.completed < j.total
+                && (j.total > 1
+                    || j.fraction.is_some()
+                    || pieall::downloads::is_download(&j.action)
+                    || actions::media_action(&j.action)
+                    || j.action == "setup_tools")
+        })
+}
+
 fn show_job_toast(app: &AppHandle) {
     let s = state(app);
     let s = s.lock().unwrap();
@@ -1302,6 +1503,26 @@ fn show_job_toast(app: &AppHandle) {
 /// A nonactivating notice with explicit dismiss and cancellation controls.
 fn toast(app: &AppHandle, tone: &'static str, title: impl Into<String>, detail: impl Into<String>) {
     show_notice(app, tone, title.into(), detail.into(), None);
+}
+fn dashboard_active(app: &AppHandle) -> bool {
+    app.get_webview_window("dashboard")
+        .and_then(|w| w.hwnd().ok())
+        .is_some_and(|hwnd| std::ptr::eq(unsafe { GetForegroundWindow() }, hwnd.0))
+}
+fn hide_job_notice(app: &AppHandle) {
+    let mut current = TOAST_GATE.lock().unwrap();
+    if current.take().is_some() {
+        TOAST_GENERATION.fetch_add(1, Ordering::SeqCst);
+        if let Some(window) = app.get_webview_window("toast") {
+            hide_raw(&window);
+        }
+    }
+}
+fn notice_corner(work: RECT, width: i32, height: i32, margin: i32) -> (i32, i32) {
+    (
+        (work.right - width - margin).max(work.left),
+        (work.bottom - height - margin).max(work.top),
+    )
 }
 fn show_notice(
     app: &AppHandle,
@@ -1334,6 +1555,13 @@ fn show_notice(
     let Some(window) = app.get_webview_window("toast") else {
         return;
     };
+    if job.is_some() && dashboard_active(app) {
+        TOAST_GENERATION.fetch_add(1, Ordering::SeqCst);
+        *current_job = None;
+        hide_raw(&window);
+        return;
+    }
+    let same_job = job.as_ref().is_some_and(|j| *current_job == Some(j.id));
     let generation = TOAST_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     *current_job = job.as_ref().map(|j| j.id);
     let _ = app.emit_to(
@@ -1347,33 +1575,57 @@ fn show_notice(
             job,
         },
     );
-    let mut point = POINT {
+    // A progress tick for the toast already on screen only repaints it: moving and
+    // resizing the window on every tick made the bar stutter.
+    let visible = window
+        .hwnd()
+        .is_ok_and(|h| unsafe { IsWindowVisible(h.0 as _) } != 0);
+    if same_job && visible && tone == "busy" {
+        return;
+    }
+    let point = POINT {
         x: RING_X.load(Ordering::SeqCst),
         y: RING_Y.load(Ordering::SeqCst),
     };
-    if point.x == i32::MIN {
-        unsafe { GetCursorPos(&mut point) };
+    let monitor = if same_job {
+        window
+            .hwnd()
+            .ok()
+            .map(|h| unsafe { MonitorFromWindow(h.0 as _, MONITOR_DEFAULTTONEAREST) })
+    } else {
+        None
     }
+    .unwrap_or_else(|| unsafe {
+        MonitorFromPoint(
+            if point.x == i32::MIN {
+                POINT { x: 0, y: 0 }
+            } else {
+                point
+            },
+            MONITOR_DEFAULTTONEAREST,
+        )
+    });
     let mut info: MONITORINFO = unsafe { std::mem::zeroed() };
     info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
-    unsafe {
-        GetMonitorInfoW(MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST), &mut info);
+    if unsafe { GetMonitorInfoW(monitor, &mut info) } == 0 {
+        return;
     }
-    let scale = window
-        .monitor_from_point(point.x as f64, point.y as f64)
-        .ok()
-        .flatten()
-        .map_or(1.0, |m| m.scale_factor());
+    let (mut dpi_x, mut dpi_y) = (96, 96);
+    unsafe {
+        GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y);
+    }
+    let scale = dpi_x as f64 / 96.0;
     let (width, height) = (400.0, 164.0);
-    let (w, h) = ((width * scale) as i32, (height * scale) as i32);
-    let work = info.rcWork;
-    let x = (point.x - w / 2).clamp(work.left, (work.right - w).max(work.left));
-    let y = (point.y - h / 2).clamp(work.top, (work.bottom - h).max(work.top));
+    let (w, h) = (
+        (width * scale).round() as i32,
+        (height * scale).round() as i32,
+    );
+    let (x, y) = notice_corner(info.rcWork, w, h, (16.0 * scale).round() as i32);
     let _ = window.set_size(tauri::LogicalSize::new(width, height));
     let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
     show_inactive(&window);
     if tone != "busy" {
-        let linger = if tone == "error" { 8000 } else { 4500 };
+        let linger = if tone == "error" { 3200 } else { 1400 };
         let app = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(linger));
@@ -1520,6 +1772,11 @@ fn finish_in_place(
             return;
         }
     };
+    if pieall::downloads::is_download(id) {
+        let (tone, title, detail) = summarize(&report, false);
+        action_toast(app, ticket, tone, title, detail);
+        return;
+    }
     if REPORTS.contains(&id) {
         let body = report
             .split_once("\r\n\r\n")
@@ -1698,7 +1955,6 @@ fn file_args(args: impl Iterator<Item = String>, cwd: &str) -> Vec<PathBuf> {
         })
         .collect()
 }
-
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -1738,7 +1994,11 @@ pub fn run() {
             dismiss_toast,
             cancel_job,
             tool_engines,
-            configure_engine
+            configure_engine,
+            download_settings,
+            configure_downloads,
+            download_url,
+            setup_tools
         ])
         .setup(|app| {
             match settings_path(app.handle()).and_then(|p| pieall::engines::load(&p)) {
@@ -1926,6 +2186,28 @@ pub fn run() {
                     }
                 });
             }
+            // Click-through logo splash over the desktop, independent of the hidden dashboard; it has no IPC and closes itself.
+            let splash = tauri::WebviewWindowBuilder::new(
+                app,
+                "splash",
+                tauri::WebviewUrl::App("index.html?surface=splash".into()),
+            )
+            .title("PieAll")
+            .inner_size(320.0, 320.0)
+            .center()
+            .decorations(false)
+            .transparent(true)
+            .shadow(false)
+            .resizable(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .focused(false)
+            .build()?;
+            splash.set_ignore_cursor_events(true)?;
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(2500));
+                let _ = splash.destroy();
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1934,6 +2216,9 @@ pub fn run() {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = close_window(app, window);
+                }
+                tauri::WindowEvent::Focused(true) if window.label() == "dashboard" => {
+                    hide_job_notice(app);
                 }
                 tauri::WindowEvent::Focused(true) if window.label() == "ring" => {
                     if RING_OPEN.load(Ordering::SeqCst) {
@@ -1967,6 +2252,51 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn notices_anchor_to_work_area_corner_including_negative_monitors() {
+        assert_eq!(
+            notice_corner(
+                RECT {
+                    left: 0,
+                    top: 0,
+                    right: 1920,
+                    bottom: 1040
+                },
+                400,
+                164,
+                16
+            ),
+            (1504, 860)
+        );
+        assert_eq!(
+            notice_corner(
+                RECT {
+                    left: -1920,
+                    top: -100,
+                    right: 0,
+                    bottom: 940
+                },
+                600,
+                246,
+                24
+            ),
+            (-624, 670)
+        );
+        assert_eq!(
+            notice_corner(
+                RECT {
+                    left: 0,
+                    top: 0,
+                    right: 300,
+                    bottom: 100
+                },
+                400,
+                164,
+                16
+            ),
+            (0, 0)
+        );
+    }
     #[test]
     fn session_only_exposes_the_captured_apps_shortcuts() {
         let figma = shortcuts::for_executable("figma.exe").unwrap();

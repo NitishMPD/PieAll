@@ -55,7 +55,7 @@ body,
   color: var(--ink);
   padding: 4px 9px;
   border-radius: 7px;
-  background: #efe3d0;
+  background: #e4e4e4;
   border: 1px solid var(--line);
   border-bottom-width: 3px;
 }
@@ -70,7 +70,7 @@ body,
 .cz-note {
   flex-basis: 100%;
   font-size: 11px;
-  color: #8a3a1c;
+  color: #4e4e4e;
   line-height: 1.4;
 }
 .cz-group {
@@ -114,7 +114,7 @@ body,
   flex-shrink: 0;
 }
 .cz-rail button.active {
-  background: #e9dcc9;
+  background: #dedede;
   font-weight: 600;
 }
 .cz-rail button > span:not(.app-icon):not(.cz-kind) {
@@ -142,11 +142,11 @@ body,
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #fff8ee;
+  color: #f9f9f9;
 }
 .cz-kind {
-  background: #e7d7c1;
-  color: #865432;
+  background: #d9d9d9;
+  color: #5f5f5f;
 }
 .cz-hint {
   font-size: 12px;
@@ -185,11 +185,11 @@ body,
   margin: 8px 0 0;
 }
 .cz-pie .ring-rim {
-  fill: #efe3d0;
+  fill: #e4e4e4;
   stroke: var(--line);
 }
 .cz-pie .ring-well {
-  fill: #e8d9c3;
+  fill: #dbdbdb;
 }
 .cz-slice {
   color: var(--ink);
@@ -202,13 +202,13 @@ body,
   transition: fill 0.12s;
 }
 .cz-slice:hover > path {
-  fill: #f0c796;
+  fill: #cecece;
 }
 .cz-slice.is-selected {
-  color: #fff8ee;
+  color: #1c1c1e;
 }
 .cz-slice.is-selected > path {
-  fill: var(--accent);
+  fill: var(--select);
 }
 .cz-slice:focus-visible > path {
   stroke: var(--ink);
@@ -232,12 +232,12 @@ body,
 }
 .cz-slice.is-ghost > path {
   fill: transparent;
-  stroke: #cdb89b;
+  stroke: #bbbbbb;
   stroke-width: 2;
   stroke-dasharray: 7 6;
 }
 .cz-slice.is-placeholder > path {
-  fill: #f1e6d4;
+  fill: #e7e7e7;
   cursor: default;
 }
 .cz-hub {
@@ -280,7 +280,7 @@ body,
   grid-template-columns: 1fr 1fr;
   gap: 4px;
   padding: 3px;
-  background: #ecdfcb;
+  background: #e1e1e1;
   border-radius: 11px;
   flex-shrink: 0;
 }
@@ -314,7 +314,7 @@ body,
   padding: 5px 4px 5px 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fffaf2;
+  background: #fbfbfb;
   cursor: grab;
   flex-shrink: 0;
 }
@@ -337,8 +337,8 @@ body,
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: #efe3d0;
-  color: #865432;
+  background: #e4e4e4;
+  color: #5f5f5f;
   flex: none;
 }
 .cz-label {
@@ -375,7 +375,7 @@ body,
   justify-content: flex-start;
   gap: 10px;
   padding: 6px 10px;
-  background: #fffaf2;
+  background: #fbfbfb;
 }
 .cz-pool li button > svg {
   color: var(--accent);

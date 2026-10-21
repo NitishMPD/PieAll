@@ -19,7 +19,7 @@ function useEvent(subscribe: () => Promise<() => void>) {
   }, []);
 }
 
-/** A quiet result pill where the ring was: what was saved, copied or refused. */
+/** A quiet screen-corner notice: what was saved, copied or refused. */
 export function Toast() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -38,6 +38,14 @@ export function Toast() {
   );
   useEvent(() => native.onToastHide(() => setLeaving(true)));
   if (!notice) return null;
+  const running =
+    notice.job?.state === "running" || notice.job?.state === "cancelling";
+  const job = notice.job;
+  // Unknown for one item with no reported fraction: the bar then sweeps instead.
+  const percent =
+    !job || (job.total === 1 && job.fraction == null)
+      ? undefined
+      : ((job.completed + (job.fraction ?? 0)) / Math.max(job.total, 1)) * 100;
   return (
     <main className="toast-stage">
       <div
@@ -62,48 +70,62 @@ export function Toast() {
           )}
         </span>
         <strong>{notice.title}</strong>
-        <button
-          className="toast-close"
-          aria-label="Close notification"
-          title="Close notification (job continues)"
-          onClick={() =>
-            void native
-              .dismissToast(notice.id, notice.job?.id)
-              .catch((e) => setError(String(e)))
-          }
-        >
-          <Icon name="close" size={14} />
-        </button>
-        {notice.detail && <span className="toast-detail">{notice.detail}</span>}
-        {notice.job && (
-          <div className="toast-job">
-            <progress
-              aria-label="Job progress"
-              max={notice.job.total || 1}
-              value={notice.job.completed + (notice.job.fraction ?? 0)}
-            />
-            <div>
-              <span>
-                {notice.job.state === "running"
-                  ? `${notice.job.completed} of ${notice.job.total} processed${notice.job.fraction != null ? ` · current file ${Math.floor(notice.job.fraction * 100)}%` : ""}`
-                  : notice.job.state === "cancelling"
+        {(running || notice.tone === "error") && (
+          <button
+            className="toast-close"
+            aria-label="Close notification"
+            title="Close notification (job continues)"
+            onClick={() =>
+              void native
+                .dismissToast(notice.id, notice.job?.id)
+                .catch((e) => setError(String(e)))
+            }
+          >
+            <Icon name="close" size={14} />
+          </button>
+        )}
+        {/* Title, then what is happening, then the bar. A finished job reads as a
+            plain result notice and leaves on its own. */}
+        {notice.detail && (
+          <span className="toast-detail">
+            {running && notice.job
+              ? [
+                  notice.job.state === "cancelling"
                     ? "Cancelling…"
-                    : notice.job.state}
-              </span>
-              {(notice.job.state === "running" ||
-                notice.job.state === "cancelling") && (
-                <button
-                  disabled={notice.job.state === "cancelling"}
-                  onClick={() =>
-                    void native
-                      .cancelJob(notice.job!.id)
-                      .catch((e) => setError(String(e)))
-                  }
-                >
-                  Cancel
-                </button>
-              )}
+                    : notice.detail,
+                  notice.job.total > 1 &&
+                    `${notice.job.completed} of ${notice.job.total}`,
+                  percent !== undefined && `${Math.floor(percent)}%`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : notice.detail}
+          </span>
+        )}
+        {notice.job && running && (
+          <div className="toast-job">
+            <div
+              className={`toast-bar ${percent === undefined ? "is-indeterminate" : ""}`}
+              role="progressbar"
+              aria-label="Progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={
+                percent === undefined ? undefined : Math.floor(percent)
+              }
+            >
+              <span style={{ width: `${percent ?? 100}%` }} />
             </div>
+            <button
+              disabled={notice.job.state === "cancelling"}
+              onClick={() =>
+                void native
+                  .cancelJob(notice.job!.id)
+                  .catch((e) => setError(String(e)))
+              }
+            >
+              Cancel
+            </button>
           </div>
         )}
         {error && (

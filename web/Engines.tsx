@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { native, type Engine } from "./native";
 import { Icon } from "./Icon";
 
@@ -8,23 +8,28 @@ export function Engines({ busy }: { busy: boolean }) {
   const [error, setError] = useState("");
   useEffect(() => {
     let active = true;
-    void native
-      .engines()
-      .then((rows) => {
-        if (active) setEngines(rows);
-      })
-      .catch((e) => {
-        if (active) setError(String(e));
-      });
+    const refresh = () =>
+      void native
+        .engines()
+        .then((rows) => {
+          if (active) setEngines(rows);
+        })
+        .catch((e) => {
+          if (active) setError(String(e));
+        });
+    refresh();
+    const unlisten = native.onChange(refresh);
     return () => {
       active = false;
+      void unlisten.then((off) => off());
     };
   }, []);
-  async function configure(name: string, remove = false) {
+  async function configure(name?: string, remove = false) {
     setPending(true);
     setError("");
     try {
-      await native.configureEngine(name, remove);
+      if (name) await native.configureEngine(name, remove);
+      else await native.setupTools();
       setEngines(await native.engines());
     } catch (e) {
       setError(String(e));
@@ -32,54 +37,95 @@ export function Engines({ busy }: { busy: boolean }) {
       setPending(false);
     }
   }
+  const ready = (names: string[]) =>
+    names.every((name) => engines.some((e) => e.name === name && e.path));
+  const allReady = ready(["ffmpeg", "ffprobe", "yt-dlp", "deno"]);
   return (
-    <section className="engine-panel">
-      <h1>Tool engines</h1>
+    <section className="engine-panel" aria-labelledby="tools-title">
+      <h1 id="tools-title">Tool setup</h1>
       <p>
-        Choose FFmpeg and FFprobe from a trusted Windows installation to enable
-        audio and video tools. Processing stays on your computer. PieAll does
-        not download engines automatically.
-      </p>
-      <p className="muted">
-        Use both executables from the same distribution. PieAll records their
-        file hashes. After updating them, choose them again here. Available
-        formats depend on the codecs in your installation.
+        Just choose a tool. PieAll downloads and configures what it needs on
+        first use.
       </p>
       {error && (
         <p role="alert" className="error">
           {error}
         </p>
       )}
-      <div className="engine-list">
-        {engines.map((engine) => (
-          <article className="engine-card" key={engine.name}>
+      <div className="tool-setup-summary">
+        <div>
+          <h2>
+            {allReady ? "Your tools are ready" : "Ready when you need them"}
+          </h2>
+          <p className="muted">
+            Set up everything now, or let PieAll handle it as you go. Files are
+            processed on your computer.
+          </p>
+        </div>
+        <button
+          className="primary"
+          disabled={busy || pending || allReady}
+          onClick={() => void configure()}
+        >
+          <Icon name={allReady ? "check" : "download"} size={17} />
+          {pending ? "Setting up…" : allReady ? "All set" : "Set up tools"}
+        </button>
+      </div>
+      <div className="tool-setup-rows">
+        {[
+          {
+            title: "Video & audio",
+            detail: "Convert, trim, compress and merge media",
+            names: ["ffmpeg", "ffprobe"],
+          },
+          {
+            title: "Browser downloads",
+            detail: "Save videos and audio from supported links",
+            names: ["yt-dlp", "deno"],
+          },
+        ].map((group) => (
+          <div className="tool-setup-row" key={group.title}>
             <div>
-              <h2>{engine.name === "ffmpeg" ? "FFmpeg" : "FFprobe"}</h2>
-              <span className="muted">
-                {engine.path
-                  ? "Configured · checked before each use"
-                  : "Not configured"}
-              </span>
+              <h2>{group.title}</h2>
+              <p className="muted">{group.detail}</p>
             </div>
-            <p className="engine-path">
-              {engine.path ??
-                (engine.name === "ffmpeg"
-                  ? "Converts and edits media."
-                  : "Reads media details and conversion duration.")}
-            </p>
-            {engine.sha256 && (
-              <details>
-                <summary>Recorded SHA-256</summary>
-                <code className="engine-hash">{engine.sha256}</code>
-              </details>
-            )}
+            <span className="tool-setup-state">
+              {ready(group.names) ? "Ready" : "Sets up automatically"}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="editor-note">
+        Setup progress appears in your usual job notice. Close hides it; Cancel
+        stops setup. An internet connection is needed the first time.
+      </p>
+      <details className="tool-advanced">
+        <summary>Advanced · use your own tools</summary>
+        <p className="muted">
+          Choose executables from a trusted Windows installation. Keep FFmpeg
+          and FFprobe in the same folder. After replacing a file, choose it
+          again to update its recorded hash.
+        </p>
+        {engines.map((engine) => (
+          <div className="tool-manual-row" key={engine.name}>
+            <div>
+              <strong>{engine.name}</strong>
+              <p className="engine-path muted">
+                {engine.path ?? "Automatic on first use"}
+              </p>
+              {engine.sha256 && (
+                <details>
+                  <summary>SHA-256</summary>
+                  <code className="engine-hash">{engine.sha256}</code>
+                </details>
+              )}
+            </div>
             <div className="button-row">
               <button
                 disabled={busy || pending}
                 onClick={() => void configure(engine.name)}
               >
-                <Icon name="open" size={17} />
-                {engine.path ? "Choose again" : "Choose executable"}
+                Choose file
               </button>
               {engine.path && (
                 <button
@@ -90,17 +136,9 @@ export function Engines({ busy }: { busy: boolean }) {
                 </button>
               )}
             </div>
-          </article>
+          </div>
         ))}
-      </div>
-      <p className="editor-note">
-        One job runs at a time. Video/audio jobs can run for up to one hour,
-        with a 2 GiB output limit. Close hides a notification; Cancel stops the
-        job and keeps completed outputs. Loudness normalization uses a single
-        pass at −16 LUFS. Video conversion re-encodes the first video and
-        optional first audio stream; subtitles and additional tracks are not
-        copied.
-      </p>
+      </details>
     </section>
   );
 }

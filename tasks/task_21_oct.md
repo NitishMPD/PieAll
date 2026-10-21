@@ -27,3 +27,31 @@
 - Added native worker progress, Close/Cancel controls, cancellation-safe publication and Windows process-tree/memory ownership; extended image crop/resize/frame and image-to-PDF settings.
 - Added seven bounded PDF commands, 15 optional FFmpeg/FFprobe media commands, native engine selection with SQLite/hash records, contextual quick tools and folder ZIP creation with compression controls; preserved originals and refreshed open-source notices.
 - Verified tool expansion with 29 Rust and 14 targeted frontend tests, workspace checking/strict Clippy, TypeScript, static rendering and formatting; documented runtime acceptance limits and remaining planned work.
+- Result toasts are quick again: finished actions show a plain notice (no progress bar, "complete" or close button) for 1.4 s, errors 3.2 s; progress shows only while running. The toast is near-opaque so it reads on bright wallpaper.
+- Fixed "Open terminal" reporting success with no window: cmd.exe now starts in its own console.
+- Smarter file ring: a PDF-only (or media-only) selection gets its tools as direct slices instead of a "PDF tools" submenu, and Copy SHA-256 left the default file ring.
+- One-shot actions (Terminal here, Copy path, Duplicate) never show the progress card or spinner, only the short result notice; progress UI is reserved for multi-file or progress-reporting work.
+- The pin slice now reads "Unpin" when the captured window is already always-on-top (checked live each time the ring opens).
+- Releasing ` on an app shortcut or window slice no longer waits for the selection read: the read is cancelled (clipboard restored) and the action runs at once.
+- Fixed Terminal here opening a blank, dead window and "Invalid worker response": launchers now run outside the sandboxed worker (whose job killed the terminal), and cmd.exe gets its own console without inheriting PieAll's stdio.
+
+- Added video/audio URL downloads with pinned yt-dlp/optional Deno, persistent quality/container/audio/folder settings, public-address proxy checks, shared bounded engine execution and cancellation-safe publication.
+- Added an exportable Chromium extension and explicit Chrome/Edge/Brave native-host setup/removal, bounded origin/time/identity/replay validation and background single-instance job handoff.
+- Added Browser downloads/settings UI and honest indeterminate progress; verified 40 Rust tests, one extension behavior test, 12 targeted frontend tests, strict workspace Clippy, TypeScript and static rendering. Refreshed notices and documented untested native/site acceptance and remaining browser/board work.
+
+- Replaced extension/native-host downloads with checked native browser URL copying and customizable Download video/audio ring defaults; retained pasted links and saved quality/folder settings.
+- Added verified first-use FFmpeg/FFprobe, yt-dlp and Deno setup with cancellable progress, safe extraction, atomic records and custom-path preservation; replaced engine cards with compact Tool setup and Advanced controls. Verified 41 Rust and 17 frontend tests, TypeScript, strict workspace Clippy and static setup rendering; live installs/browser downloads remain untested.
+- Terminal here really opens now: dropped SEE_MASK_NO_CONSOLE, which had attached cmd to PieAll's hidden console instead of giving it a window.
+
+- Fixed automatic tool setup panicking on HTTPS by explicitly selecting the enabled native TLS provider; applied the same fix to the legacy updater and added a setup-client regression test.
+
+- Moved notices from the cursor to a fixed bottom-right work-area corner and kept foreground job progress in the dashboard footer; added monitor-coordinate coverage.
+- Fixed large engine downloads timing out after 20 seconds by reusing native-TLS reqwest/Tokio with separate overall/stall limits and cancellable awaits; five installer tests, the notice-placement test and strict workspace Clippy passed.
+- Progress toasts: hug the bottom-right corner, no longer stutter (window is not moved/resized on every tick; bar eases between updates), and read Title / status with percent / bar + Cancel.
+
+- Made the app icon color-neutral (graphite tile, off-white and gray segments) and added a Captrain-style startup splash to the dashboard.
+- Fixed release workflow failing at "Create or resume release draft": drafts are not returned by the tags endpoint, so the script now finds them via the releases list; updated README and release docs.
+- Neutralized the dashboard theme (tokens and hard-coded warm colors), made the selected slice orange, and tightened the empty-state steps, icons and copy.
+- Moved the startup splash into its own transparent, click-through, always-on-top window (like Captrain) so it plays over the desktop on every launch, even with the dashboard hidden.
+- Replaced the logo-trace splash with a mini ring that swipes through the feature slices (center names each) and lands on "PieAll"; dropped the light sweep.
+- Restyled the splash ring in the logo colors (graphite slices, copper selection), stripped the tray, strokes and shadows, and fixed icons rendering filled because the slice fill rule also hit icon paths.

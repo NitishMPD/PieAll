@@ -15,10 +15,12 @@ import {
 } from "./action-search";
 import { Ring } from "./Ring";
 import { Toast } from "./Toast";
+import { Splash } from "./Splash";
 import { WindowControls } from "./TitleBar";
 import { Icon, iconFor } from "./Icon";
 import { Customize, applyTrigger } from "./Customize";
 import { Engines } from "./Engines";
+import { BrowserTools } from "./BrowserTools";
 import { TRIGGER_KEYS, usePrefs } from "./prefs";
 import {
   fieldVisible,
@@ -38,7 +40,9 @@ const surface =
 const standalone = surface === "ring";
 if (typeof document !== "undefined")
   document.documentElement.dataset.surface =
-    surface === "ring" || surface === "toast" ? surface : "dashboard";
+    surface === "ring" || surface === "toast" || surface === "splash"
+      ? surface
+      : "dashboard";
 
 export function App({
   initialSession = null,
@@ -46,6 +50,7 @@ export function App({
   initialSession?: Session | null;
 }) {
   if (surface === "toast") return <Toast />;
+  if (surface === "splash") return <Splash />;
   return <Shell initialSession={initialSession} />;
 }
 
@@ -58,7 +63,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
   const [page, setPage] = useState(0);
   const deferredQuery = useDeferredValue(query);
   const [view, setView] = useState<
-    "actions" | "customize" | "updates" | "engines"
+    "actions" | "customize" | "updates" | "engines" | "browser"
   >("actions");
   const updates = view === "updates";
   const setUpdates = useCallback(
@@ -336,6 +341,14 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
           ))}
           <h2 className="nav-heading">Personalize</h2>
           <button
+            className={`nav-item ${view === "browser" ? "active" : ""}`}
+            aria-current={view === "browser" ? "page" : undefined}
+            onClick={() => setView("browser")}
+          >
+            <Icon name="download" />
+            Browser downloads
+          </button>
+          <button
             className={`nav-item ${view === "customize" ? "active" : ""}`}
             aria-current={view === "customize" ? "page" : undefined}
             onClick={() => setView("customize")}
@@ -350,7 +363,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               onClick={() => setView("engines")}
             >
               <Icon name="sliders" />
-              Tool engines
+              Tool setup
             </button>
             <button
               className={`nav-item ${updates ? "active" : ""}`}
@@ -363,7 +376,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
           </div>
         </nav>
         <main className="workspace">
-          {view !== "customize" && view !== "engines" && (
+          {view !== "customize" && view !== "engines" && view !== "browser" && (
             <section className="selection-bar" aria-label="Current selection">
               <div className="selection-icon">
                 <Icon
@@ -371,7 +384,11 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                 />
               </div>
               <div className="selection-name">
-                <h1 title={session.target}>{session.target}</h1>
+                <h1 title={session.target}>
+                  {session.kind === "empty"
+                    ? "Nothing selected"
+                    : session.target}
+                </h1>
               </div>
               <div className="selection-actions">
                 <button
@@ -393,7 +410,9 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               </div>
             </section>
           )}
-          {view === "engines" ? (
+          {view === "browser" ? (
+            <BrowserTools session={session} />
+          ) : view === "engines" ? (
             <Engines busy={disabled} />
           ) : view === "customize" ? (
             <Customize session={session} />
@@ -496,33 +515,39 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                   </h2>
                   <p>
                     {session.kind === "empty"
-                      ? "Select something in Windows, or drop files here."
+                      ? "Select something in Windows, or drop files onto this window."
                       : "A few useful moves, right at your fingertips."}
                   </p>
                 </div>
                 {session.kind === "empty" ? (
                   <ol className="steps" aria-label="How PieAll works">
                     <li>
-                      <b>1</b>
+                      <b>
+                        <Icon name="files" size={15} />
+                      </b>
                       <span>
                         <strong>Select</strong>
-                        Files in Explorer, text anywhere, or just an app window.
+                        Files in Explorer, text, or any app window.
                       </span>
                     </li>
                     <li>
-                      <b>2</b>
+                      <b>
+                        <Icon name="ring" size={15} />
+                      </b>
                       <span>
                         <strong>
                           Hold <kbd>{triggerLabel}</kbd>
                         </strong>
-                        The ring opens right at your cursor.
+                        The ring opens at your cursor.
                       </span>
                     </li>
                     <li>
-                      <b>3</b>
+                      <b>
+                        <Icon name="open" size={15} />
+                      </b>
                       <span>
-                        <strong>Release on an action</strong>
-                        Results save beside the original.
+                        <strong>Release on a slice</strong>
+                        Results save next to the original.
                       </span>
                     </li>
                     <li className="steps-cta">
@@ -549,20 +574,22 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                     onClose={() => void perform(() => native.load("files"))}
                   />
                 )}
-                <div className="radial-caption">
-                  <span className="shortcut-mark">
-                    <Icon name="ring" size={16} />
-                  </span>
-                  <p>
-                    Anywhere in Windows, hold <kbd>{triggerLabel}</kbd>
-                    <br />
-                    <span>
-                      {session.app
-                        ? "App shortcuts run in the captured app."
-                        : "Release on an action. Results save beside the original."}
+                {session.kind !== "empty" && (
+                  <div className="radial-caption">
+                    <span className="shortcut-mark">
+                      <Icon name="ring" size={16} />
                     </span>
-                  </p>
-                </div>
+                    <p>
+                      Anywhere in Windows, hold <kbd>{triggerLabel}</kbd>
+                      <br />
+                      <span>
+                        {session.app
+                          ? "App shortcuts run in the captured app."
+                          : "Release on an action. Results save beside the original."}
+                      </span>
+                    </p>
+                  </div>
+                )}
                 {session.result !== null && (
                   <section className="result-panel" aria-label="Action result">
                     <div>
@@ -740,7 +767,11 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                 <progress
                   aria-label="Files processed"
                   max={session.job.total || 1}
-                  value={session.job.completed + (session.job.fraction ?? 0)}
+                  value={
+                    session.job.total === 1 && session.job.fraction == null
+                      ? undefined
+                      : session.job.completed + (session.job.fraction ?? 0)
+                  }
                 />
                 <button
                   disabled={session.job.state === "cancelling"}

@@ -417,12 +417,30 @@ pub fn catalog() -> Vec<Action> {
             fields,
         });
     }
+    for (id, title) in [
+        ("download_video", "Download video from URL"),
+        ("download_audio", "Download audio from URL"),
+    ] {
+        a.push(Action {
+            id,
+            title,
+            group: "Browser",
+            input: Text,
+            fields: vec![],
+        });
+    }
     a
 }
 pub fn media_action(id: &str) -> bool {
     id.starts_with("video_") || id.starts_with("audio_") || id == "media_details"
 }
 pub fn missing_engine(id: &str, engines: &crate::engines::Engines) -> Option<&'static str> {
+    if crate::downloads::is_download(id) {
+        return ["yt-dlp", "ffmpeg", "ffprobe"]
+            .iter()
+            .find(|name| !engines.contains_key(**name))
+            .map(|_| "Choose yt-dlp, FFmpeg and FFprobe in Tool engines.");
+    }
     if !media_action(id) {
         return None;
     }
@@ -490,6 +508,8 @@ struct Request {
     params: BTreeMap<String, String>,
     #[serde(default)]
     engines: crate::engines::Engines,
+    #[serde(default)]
+    download: Option<crate::downloads::Settings>,
 }
 pub fn execute(
     id: &str,
@@ -531,7 +551,7 @@ pub fn execute_with_engines(
     params: &BTreeMap<String, String>,
     engines: &crate::engines::Engines,
     cancelled: &std::sync::atomic::AtomicBool,
-    mut progress: impl FnMut(crate::jobs::Progress),
+    progress: impl FnMut(crate::jobs::Progress),
 ) -> Result<String, String> {
     let request = Request {
         id: id.into(),
@@ -539,7 +559,39 @@ pub fn execute_with_engines(
         text: text.into(),
         params: params.clone(),
         engines: engines.clone(),
+        download: None,
     };
+    // Launchers start apps that must outlive the call: the sandboxed worker's job
+    // kills every descendant when it exits, and a child holding the worker's pipes
+    // would stall its reply. They only spawn a process, so they run here.
+    if matches!(id, "terminal" | "reveal") {
+        return run(&request);
+    }
+    execute_request(request, cancelled, progress)
+}
+pub fn execute_download(
+    id: &str,
+    url: &str,
+    settings: &crate::downloads::Settings,
+    engines: &crate::engines::Engines,
+    cancelled: &std::sync::atomic::AtomicBool,
+    progress: impl FnMut(crate::jobs::Progress),
+) -> Result<String, String> {
+    let request = Request {
+        id: id.into(),
+        paths: vec![],
+        text: url.into(),
+        params: BTreeMap::new(),
+        engines: engines.clone(),
+        download: Some(settings.clone()),
+    };
+    execute_request(request, cancelled, progress)
+}
+fn execute_request(
+    request: Request,
+    cancelled: &std::sync::atomic::AtomicBool,
+    mut progress: impl FnMut(crate::jobs::Progress),
+) -> Result<String, String> {
     let mut bytes = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
     if bytes.len() > 3 * 1024 * 1024 {
         return Err("Input exceeds worker message limit.".into());
@@ -594,7 +646,11 @@ pub fn execute_with_engines(
             .read_to_end(&mut data)
             .map(|_| data)
     });
-    let seconds = if media_action(id) { 3600 } else { 120 };
+    let seconds = if media_action(&request.id) || crate::downloads::is_download(&request.id) {
+        3600
+    } else {
+        120
+    };
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
     let mut cancel_sent = None;
     let status = loop {
@@ -716,6 +772,16 @@ fn run(r: &Request) -> Result<String, String> {
         return Err("Select at most 256 files.".into());
     }
     if action.input == InputKind::Text {
+        if crate::downloads::is_download(&r.id) {
+            return crate::downloads::run(
+                &r.id,
+                &r.text,
+                r.download
+                    .as_ref()
+                    .ok_or("Open Browser tools to set up downloads.")?,
+                &r.engines,
+            );
+        }
         return text_action(&r.id, &r.text);
     }
     if action.input == InputKind::Window {
@@ -1078,6 +1144,9 @@ fn file_action(id: &str, path: &Path) -> Result<String, String> {
             } else {
                 path.parent().ok_or("No parent folder")?
             };
+            // ShellExecute gives cmd a console of its own (std's Command would hand it
+            // PieAll's stdio). It must run in the app process, not the worker: see
+            // execute_with_engines.
             use std::os::windows::ffi::OsStrExt;
             let directory: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
             let program: Vec<u16> = "cmd.exe".encode_utf16().chain(Some(0)).collect();
@@ -1729,7 +1798,7 @@ mod boundary_tests {
         assert!(eligible(find("audio_convert"), &[audio, video], false));
         assert!(missing_engine("video_convert", &crate::engines::Engines::new()).is_some());
         assert!(missing_engine("pdf_rotate", &crate::engines::Engines::new()).is_none());
-        assert_eq!(catalog.len(), 66);
+        assert_eq!(catalog.len(), 68);
     }
     #[test]
     fn rejects_malicious_zip() {

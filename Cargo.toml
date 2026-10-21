@@ -29,10 +29,13 @@ minisign-verify = { version = "=0.3.0", optional = true }
 semver = { version = "=1.0.28", optional = true }
 ureq = { version = "=3.4.2", default-features = false, features = ["native-tls"], optional = true }
 tempfile = "=3.27.0"
+reqwest = { version = "=0.13.5", default-features = false, features = ["native-tls"] }
+tokio = { version = "=1.54.0", features = ["rt", "time", "net"] }
 
 windows = { version = "=0.62.2", features = ["Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Ole", "Win32_System_Variant"] }
-windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_Controls", "Win32_UI_Controls_Dialogs", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_DataExchange", "Win32_System_Com", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_UI_HiDpi", "Win32_Security"] }
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_Controls", "Win32_UI_Controls_Dialogs", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_DataExchange", "Win32_System_Com", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_System_Registry", "Win32_UI_HiDpi", "Win32_Security"] }
 rusqlite = { version = "=0.37.0", features = ["bundled"] }
+url = "=2.5.8"
 
 [profile.release]
 lto = true

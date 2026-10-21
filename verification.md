@@ -1,4 +1,4 @@
-﻿# Verification record
+# Verification record
 Author: Nitish
 
 ## Tool expansion, jobs and engines ? 21 October 2026
@@ -17,7 +17,7 @@ Passed source checks:
 
 No app, engine executable, dev server or build was launched for this work. Real encoding, live cancellation during a codec, actual executable-version/codec support, packaged worker dispatch, native toast Close/Cancel hit testing/focus/accessibility/DPI, crash/forced-kill cleanup, disk-full behavior and PDF fidelity across varied external documents remain unverified.
 
-User-run acceptance command: `pnpm tauri dev`. Configure trusted FFmpeg/FFprobe in Tool engines, exercise each media format with representative video/audio, inspect playback and output size, and test cancellation/Close during encoding and finalization. Exercise PDF page settings/ranges/rotation, a signed/form PDF refusal, duplicate filenames, readonly targets, ZIP folders with links/empty folders and image crop/gradient previews. A complete release build remains user-run: `pnpm package:windows` with the documented signing setup. Browser downloads, boards, advanced editors and the rest of the catalog are still planned, not verified features.
+User-run acceptance command: `pnpm tauri dev`. Let first-use setup install FFmpeg/FFprobe (or select custom paths in Advanced), exercise each media format with representative video/audio, inspect playback and output size, and test cancellation/Close during encoding and finalization. Exercise PDF page settings/ranges/rotation, a signed/form PDF refusal, duplicate filenames, readonly targets, ZIP folders with links/empty folders and image crop/gradient previews. A complete release build remains user-run: `pnpm package:windows` with the documented signing setup. Browser downloads have source coverage but need native/site acceptance; boards, advanced editors and the rest of the catalog remain planned.
 
 ## Productivity default profiles - 21 October 2026
 
@@ -147,3 +147,30 @@ Direct2D glass renderer; custom-ring UI Automation; modifier/OLE drag; configura
 At 17:56 IST another active project thread began updater integration in the shared checkout. Its dependency/module edits temporarily made aggregate checks fail (`updates.rs` not present yet and Cargo.lock awaiting refresh). The checks listed above passed for the native MVP before that integration. The updater-owning thread must repeat aggregate checks after its files land; this record does not claim that its in-progress changes were validated by the native MVP pass.
 
 At 17:58 IST, after updater files and the refreshed lockfile landed, all-target type checking and strict Clippy passed again. All 15 native-MVP targeted tests were repeated successfully against that dependency set. Updater integration was still editing UI formatting during the final format check, so its owner retains responsibility for the final whole-checkout formatting and updater/release checks. Native code was not built or launched.
+
+
+## Native download and setup source checks - 21 October 2026
+
+- `cargo test -p pieall --lib --locked`: 41 passed.
+- `cargo clippy --workspace --all-targets --locked -- -D warnings`: passed.
+- `pnpm exec vitest run web/editor-fields.test.ts web/menus.test.ts web/action-search.test.ts`: 17 passed.
+- `pnpm run typecheck`, changed-file Prettier, Rust formatting and `git diff --check`: passed.
+- Static React fixtures: `node scripts/preview-ui.cjs --tools` and `node scripts/preview-ui.cjs --shortcuts` passed. The compact setup fixture was rendered and visually inspected at 1000px; this is not native WebView acceptance. The initial collaborative browser attempt could not open file: URLs, so the static HTML preview was used. Remote shell text transport affected the middle-dot glyph in that preview; source UTF-8 text remains intact.
+- Queried the fixed publisher release metadata to confirm the Windows FFmpeg GPL asset exists; no engine binary was installed or executed.
+
+## Native downloads and automatic setup acceptance - 21 October 2026
+
+Current code checks cover native URL source rejection, browser ring defaults/customization, release origin/digest validation, archive escape, cancelled setup, matching custom engines, transaction rollback, typed download options and safe publication. Tests do not exercise real browser input or engines. User-run acceptance after an executable is available:
+
+1. Start with no configured engines. In a Chromium or Firefox window open an exact public video/post, hold the PieAll key and choose Download video. Verify it copies the address, restores the clipboard, installs tools with progress and saves the highest available video/audio streams. There is no extension to install. Repeat with Download audio.
+2. Change focus or physical input during copying; no keys may reach a different app and no stale clipboard URL may be downloaded. Change the clipboard externally; PieAll must not overwrite it. After copying, changing tabs must not change the queued URL. A feed requires opening the exact post/video first.
+3. Exercise Tool setup on a clean profile, failed network, cancelled transfer/extraction, malformed/digest-mismatched release fixtures and a custom media pair. Failure must keep existing records/files; retry is a new setup attempt. Setup network waits poll cancellation every 100 ms; metadata allows 30 seconds, archives 15 minutes overall with a 30-second read-stall timeout. No installed executable is run by setup itself.
+4. In Browser downloads save quality/container/audio defaults and choose a destination. Reopen to verify persistence. Try pasted URLs, compatible/incompatible containers, output collisions, private IP/local DNS, denied folders, connection failure and oversized media. Inspect actual codecs/quality with FFprobe.
+5. Confirm indeterminate progress without a known total and real byte progress when provided. Close suppresses later job notices; Cancel keeps completed outputs and cleans private staging. Worker termination retains the five-second grace period; setup drops cancellable network operations. Downloads never paste reports into the browser or open files automatically.
+6. Check keyboard traversal, screen-reader names/status, compact Tool setup at narrow widths, toast hit testing, mixed DPI, packaged worker dispatch and Windows Downloads paths. Confirm no native messaging registration, plugin/config/PATH discovery or cookie import is needed.
+
+No build, app launch or live engine installation was run by the agent. User-run development acceptance: `pnpm tauri dev`. Production build if needed: `pnpm run package:windows` with the required signing configuration.
+
+## Quiet progress and installer timeout correction - 21 October 2026
+
+The native notice corner has unit coverage for ordinary, negative-coordinate and small monitor work areas. Installer tests cover native TLS construction and cancellation of a pending network future. Actual native focus/minimize transitions, taskbar placement at mixed DPI and a full slow-network engine installation remain user-run acceptance. Verify foreground PieAll shows only footer progress/Cancel; switching away permits a fixed corner notice, moving the cursor never moves it, and returning to PieAll hides it without cancelling or permanently dismissing the job.

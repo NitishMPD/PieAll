@@ -1,0 +1,82 @@
+.browser-panel {
+  max-width: 850px;
+}
+.browser-panel fieldset {
+  border: 0;
+  padding: 0;
+  margin: 24px 0;
+  min-width: 0;
+}
+.browser-panel label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+.browser-panel input,
+.browser-panel select {
+  width: 100%;
+  min-width: 0;
+}
+.browser-panel form > fieldset > label {
+  margin-bottom: 8px;
+}
+.browser-panel input {
+  caret-color: var(--accent);
+}
+.browser-panel fieldset > input {
+  margin-top: 0;
+}
+.browser-panel p {
+  line-height: 1.6;
+}
+.download-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 24px 0 12px;
+}
+.download-options label {
+  flex: 1 1 150px;
+}
+.download-folder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0;
+  margin: 8px 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+.download-folder > span {
+  flex: 1;
+  min-width: 160px;
+  color: var(--muted);
+}
+.download-folder strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+.browser-panel .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.download-result {
+  margin: 28px 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.download-result h2 {
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+.download-result pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  max-height: 240px;
+  overflow-y: auto;
+}

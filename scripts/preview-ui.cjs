@@ -155,9 +155,30 @@ const css =
   fs
     .readFileSync(path.join(root, "web/styles.css"), "utf8")
     .replace(/@import[^;]+;/g, "");
+const toolsPreview = process.argv.includes("--tools");
+const { Engines } = load(path.join(root, "web/Engines.tsx"));
 const markup = renderToStaticMarkup(
-  React.createElement(App, { initialSession: session }),
+  toolsPreview
+    ? React.createElement(Engines, { busy: false })
+    : React.createElement(App, { initialSession: session }),
 );
+if (toolsPreview) {
+  for (const text of [
+    "Tool setup",
+    "Set up tools",
+    "Video &amp; audio",
+    "Browser downloads",
+    "Advanced",
+  ]) {
+    if (!markup.includes(text))
+      throw new Error(`Missing setup content: ${text}`);
+  }
+  if (markup.includes("engine-card") || markup.includes("Browser connection"))
+    throw new Error("Obsolete setup UI");
+  console.log(
+    "Static tool setup: automatic setup, grouped rows and Advanced verified.",
+  );
+}
 if (process.argv.includes("--shortcuts")) {
   const rows = (markup.match(/class="action-row"/g) ?? []).length;
   const expectedRows = Math.min(60, session.actions.length);
@@ -174,7 +195,12 @@ if (process.argv.includes("--shortcuts")) {
   );
 }
 const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>${css}html,body,#root{height:740px;min-height:0}body{min-width:640px}</style></head><body><div id="root">${markup}</div></body></html>`;
-const output = path.join(root, "verification/tauri-layout.html");
+const output = path.join(
+  root,
+  toolsPreview
+    ? "verification/tool-setup.html"
+    : "verification/tauri-layout.html",
+);
 fs.mkdirSync(path.dirname(output), { recursive: true });
 fs.writeFileSync(output, html);
 console.log(output);
