@@ -65,3 +65,4 @@
 - Fixed output scans failing when downloader fragments disappear during renames, and separated inspection errors from genuine 2 GiB limit errors; both targeted regression tests passed.
 - Fixed release draft creation failing on a stale GitHub release list by validating the creation response directly; added stale-list, resume and ownership regression tests to local/CI release checks. All 10 release tests passed.
 - Updated README for 68 commands, browser downloads, automatic engine setup, folder ZIPs, Start with Windows, the tray shortcut toggle and the current graphite/orange look.
+- Fixed the release build failing with "Missing comment in public key": package-release.ps1 now passes PIEALL_TAURI_PUBLIC_KEY to tauri build as a config override. Added .taurignore so doc/task/web edits no longer restart `pnpm tauri dev`.

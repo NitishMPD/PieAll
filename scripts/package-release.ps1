@@ -11,7 +11,10 @@ python scripts/bundle-notices.py
 if ($LASTEXITCODE -ne 0) { throw 'Notice consolidation failed' }
 
 # This script builds only when explicitly invoked by the user or release CI.
-pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis -- --locked
+# The CLI checks its new updater signature against the configured pubkey, which the repo keeps empty.
+$keyConfig = Join-Path ([IO.Path]::GetTempPath()) "pieall-updater-$version.json"
+[IO.File]::WriteAllText($keyConfig, (@{ plugins = @{ updater = @{ pubkey = $env:PIEALL_TAURI_PUBLIC_KEY.Trim() } } } | ConvertTo-Json -Depth 4 -Compress))
+pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis --config $keyConfig -- --locked
 if ($LASTEXITCODE -ne 0) { throw 'Tauri build/signing failed' }
 $releaseRoot = Join-Path $repoRoot ".release/v$version"
 if (Test-Path -LiteralPath $releaseRoot) { throw 'Release staging already exists. Inspect it and use a fresh checkout before retrying.' }

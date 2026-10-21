@@ -1,0 +1,11 @@
+# `pnpm tauri dev` watches the whole workspace (the root crate lives here); skip files that never affect the Rust build.
+*.md
+docs/
+tasks/
+web/
+public/
+scripts/
+verification/
+licenses/
+installer/
+dist/
