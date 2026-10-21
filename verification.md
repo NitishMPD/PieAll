@@ -1,6 +1,14 @@
 ﻿# Verification record
 Author: Nitish
 
+## Context-only shortcut correction ? 21 October 2026
+
+The dashboard now indexes the native captured session, with a shared profile guard for dashboard and ring. Regression cases cover Figma to Photoshop changes, unsupported/missing app context, unrelated entries incorrectly marked eligible, selection-tool precedence, six direct shortcuts and flat Search actions. The former all-app browse fixture below records the earlier implementation and is superseded by this correction.
+
+Passed: `pnpm run typecheck`; `pnpm test` (14 tests); the five native shell unit tests; strict desktop Clippy; Rust formatting; changed-file Prettier; and `node scripts/preview-ui.cjs --shortcuts` (58 contextual rows, six direct app choices, flat search, no unrelated app rows). No browser automation was needed for these source-verifiable changes.
+
+User-run acceptance: `pnpm tauri dev`. Invoke from Figma, Photoshop and an unsupported app; verify only the captured app's commands appear. Use Search actions and `/` to open and focus the flat Apps search; switch apps after entering a query and confirm the query/page reset. Check mouse release, click, number keys and focus restoration while dispatch remains restricted to the captured app. No app, dev server or build was launched for this correction.
+
 ## Contextual app library — 21 October 2026
 
 The shipped catalog expands shared keymaps into 3,079 action IDs across 57 profiles, plus the existing 44 local tools. Source validation checks unique profile/executable/action IDs, known key grammar, resolvable IDs and six valid quick choices per profile. It does not prove every default binding against installed app versions.
@@ -16,7 +24,7 @@ Passed for this change:
 
 The broad frontend formatter also flagged five untouched files (`web/bootstrap.tsx`, `web/geometry.test.ts`, `web/geometry.ts`, `web/Toast.tsx`, `web/tokens.css`); they were not reformatted as part of catalog work. Changed frontend files are checked separately. A transient Windows incremental-cache access warning during an earlier test invocation did not recur in the later checks.
 
-User-run acceptance: start with `pnpm tauri dev` (or build without an installer using `pnpm tauri build --no-bundle`). From Explorer, Chrome/Edge, Word/Excel, Figma, Photoshop, a code editor and a terminal, verify all six quick choices, All shortcuts categories/More pages, keyboard navigation, immediate release after a flick, click while holding, dashboard app filtering/search/pagination, Escape/focus restoration and Narrator. Exercise mode-dependent commands in their intended mode. Explicitly check Ctrl+backtick actions in VS Code and Excel, then confirm PieAll's own hotkey still works. Change focus or close the source before dispatch and during a multi-chord action; no further keys should reach another app. Check clipboard behavior, elevated targets, US/alternate layouts, dialogs, app-customized keymaps and actual aliases. Measure cold/warm invocation, hold-to-action latency, frame consistency and process-tree memory. None of those native checks was run in this session.
+User-run acceptance: start with `pnpm tauri dev` (or build without an installer using `pnpm tauri build --no-bundle`). From Explorer, Chrome/Edge, Word/Excel, Figma, Photoshop, a code editor and a terminal, verify all six quick choices, flat Search actions, keyboard navigation, immediate release after a flick, click while holding, captured-app search/pagination, Escape/focus restoration and Narrator. Exercise mode-dependent commands in their intended mode. Explicitly check Ctrl+backtick actions in VS Code and Excel, then confirm PieAll's own hotkey still works. Change focus or close the source before dispatch and during a multi-chord action; no further keys should reach another app. Check clipboard behavior, elevated targets, US/alternate layouts, dialogs, app-customized keymaps and actual aliases. Measure cold/warm invocation, hold-to-action latency, frame consistency and process-tree memory. None of those native checks was run in this session.
 
 ## Hold-to-open, in-place actions — 20 October 2026
 

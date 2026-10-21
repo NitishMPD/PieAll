@@ -1,10 +1,15 @@
 //! Hold-to-open for the plain backtick key, anywhere in Windows.
 //!
-//! A low-level keyboard hook holds back each unmodified ` press. Releasing it
-//! quickly, or typing another key first, replays the backtick so typing is
-//! unchanged. Holding it past `HOLD_MS` reports `Hold::Start`, and releasing
-//! it afterwards reports `Hold::End`. Modified presses (Shift for ~, Ctrl+`)
-//! and injected input pass through untouched.
+//! A low-level keyboard hook holds back each unmodified ` press and reports
+//! `Hold::Start` at once, so the ring appears on key-down. Releasing within
+//! `HOLD_MS`, or typing another key first, reports `Hold::Tap` and replays the
+//! backtick, so typing is unchanged. Holding past `HOLD_MS` reports
+//! `Hold::Confirm`; the release after that reports `Hold::End`. Modified presses
+//! (Shift for ~, Ctrl+`) and injected input pass through untouched.
+//!
+//! Over apps where ` is a menu key rather than text (the `instant` predicate,
+//! e.g. Figma or Explorer), the press is confirmed immediately with no tap
+//! detection, like AutoHotPie: there a plain ` is never typed.
 
 use pieall::platform::INJECTED_MARKER;
 use std::{
@@ -18,16 +23,23 @@ use windows_sys::Win32::{
 };
 
 pub enum Hold {
+    /// ` went down: show the ring now.
     Start,
+    /// It is a hold, not a typed backtick: safe to read the selection.
+    Confirm,
+    /// It was typing after all: drop the ring; the backtick is replayed.
+    Tap,
     End,
+    /// Escape while held: close without running anything.
+    Cancel,
 }
 
-const HOLD_MS: u32 = 180;
+const HOLD_MS: u32 = 150;
 
 #[derive(Clone, Copy, PartialEq)]
 enum State {
     Idle,
-    /// ` is down and held back; a timer decides tap vs. hold.
+    /// ` is down and held back with the ring showing; a timer decides tap vs. hold.
     Pending,
     /// The ring is open; the release will be reported.
     Holding,
@@ -36,6 +48,8 @@ enum State {
 }
 
 static EVENTS: OnceLock<mpsc::Sender<Hold>> = OnceLock::new();
+type Instant = Box<dyn Fn() -> bool + Send + Sync>;
+static INSTANT: OnceLock<Instant> = OnceLock::new();
 thread_local! {
     static STATE: Cell<State> = const { Cell::new(State::Idle) };
     static TIMER: Cell<usize> = const { Cell::new(0) };
@@ -44,7 +58,11 @@ thread_local! {
 
 /// Installs the hook on its own message-loop thread. Events are delivered in order
 /// on a separate thread, so slow handlers never stall system keyboard input.
-pub fn install(handler: impl Fn(Hold) + Send + 'static) -> Result<(), String> {
+pub fn install(
+    handler: impl Fn(Hold) + Send + 'static,
+    instant: impl Fn() -> bool + Send + Sync + 'static,
+) -> Result<(), String> {
+    let _ = INSTANT.set(Box::new(instant));
     let (events, inbox) = mpsc::channel();
     EVENTS
         .set(events)
@@ -140,7 +158,7 @@ fn on_timer(id: usize) {
     stop_timer();
     if STATE.get() == State::Pending {
         STATE.set(State::Holding);
-        emit(Hold::Start);
+        emit(Hold::Confirm);
     }
 }
 
@@ -154,6 +172,12 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
                 return false;
             }
             SCAN.set(k.scanCode as u16);
+            emit(Hold::Start);
+            if INSTANT.get().is_some_and(|instant| instant()) {
+                STATE.set(State::Holding);
+                emit(Hold::Confirm);
+                return true;
+            }
             STATE.set(State::Pending);
             TIMER.set(unsafe { SetTimer(std::ptr::null_mut(), 0, HOLD_MS, None) });
             true
@@ -163,6 +187,7 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
                 // A quick tap: type the backtick after all.
                 stop_timer();
                 STATE.set(State::Idle);
+                emit(Hold::Tap);
                 send(&[key(VK_OEM_3, scan, 0), key(VK_OEM_3, scan, KEYEVENTF_KEYUP)]);
             }
             true // auto-repeat while undecided
@@ -174,6 +199,7 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
             // Fast typing ("`a"): replay ` first, then this key, keeping their order.
             stop_timer();
             STATE.set(State::Passthrough);
+            emit(Hold::Tap);
             let extended = if k.flags & LLKHF_EXTENDED != 0 {
                 KEYEVENTF_EXTENDEDKEY
             } else {
@@ -190,7 +216,14 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
                 STATE.set(State::Idle);
                 emit(Hold::End);
             }
-            // Other keys reach the ring (Escape, arrows, numbers).
+            // The ring may not have focus, so Escape is taken here instead of
+            // reaching the app underneath. Other keys pass through.
+            if k.vkCode == VK_ESCAPE as u32 {
+                if down {
+                    emit(Hold::Cancel);
+                }
+                return true;
+            }
             backtick
         }
         State::Passthrough => {

@@ -7,18 +7,32 @@ export function libraryActions(
   activeProfile?: string | null,
 ): Action[] {
   const names = new Map(library.profiles.map((p) => [p.id, p.name]));
-  return library.actions.map((action) => ({
-    id: action.id,
-    title: action.title,
-    group: "Apps",
-    fields: [],
-    eligible: action.profile === activeProfile,
-    shortcut: action.keys,
-    category: action.category,
-    profile: action.profile,
-    appName: names.get(action.profile) ?? action.profile,
-    priority: action.priority,
-  }));
+  return library.actions
+    .filter((action) => action.profile === activeProfile)
+    .map((action) => ({
+      id: action.id,
+      title: action.title,
+      group: "Apps",
+      fields: [],
+      eligible: action.profile === activeProfile,
+      shortcut: action.keys,
+      category: action.category,
+      profile: action.profile,
+      appName: names.get(action.profile) ?? action.profile,
+      priority: action.priority,
+    }));
+}
+
+/** App shortcuts belong exclusively to the captured session's profile. */
+export function contextualActions(
+  actions: Action[],
+  app?: string | null,
+): Action[] {
+  return actions.filter((action) =>
+    action.id.startsWith("app:") || action.shortcut
+      ? !!app && action.eligible && action.id.startsWith(`app:${app}:`)
+      : true,
+  );
 }
 
 export function indexActions(actions: Action[]) {

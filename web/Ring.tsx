@@ -57,6 +57,7 @@ export function Ring({
   thumbnail,
   standalone = false,
   onRun,
+  onBrowse,
   onClose,
 }: {
   session: Session;
@@ -64,6 +65,7 @@ export function Ring({
   standalone?: boolean;
   onRun: (action: string, params: Record<string, string>) => void;
   onClose: () => void;
+  onBrowse: () => void;
 }) {
   const [path, setPath] = useState<string[]>([]);
   const [selected, setSelected] = useState<number | null>(
@@ -103,7 +105,8 @@ export function Ring({
   }
   function activate(item: MenuItem) {
     if (blocked) return;
-    if (item.children) enter(item);
+    if (item.browse) onBrowse();
+    else if (item.children) enter(item);
     else if (item.action) onRun(item.action, item.params ?? {});
   }
   // Releasing the held key always ends the ring: it runs the highlighted action
@@ -117,7 +120,8 @@ export function Ring({
     }
     const index = selected ?? sectorAt(x, y, items.length, DEAD_ZONE);
     const item = index !== null ? items[index] : undefined;
-    if (item?.action && !blocked) onRun(item.action, item.params ?? {});
+    if (item?.browse && !blocked) onBrowse();
+    else if (item?.action && !blocked) onRun(item.action, item.params ?? {});
     else onClose();
   }
   const latest = useRef(release);
@@ -134,14 +138,12 @@ export function Ring({
       setSelected(null);
       setCentered(false);
       pending.current = null;
-      // Reset without transition, then animate in on the next frame.
+      // Reset without transition, then fade in on the next frame.
       setPhase("closed");
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          setPhase("open");
-          container.current?.focus();
-        }),
-      );
+      requestAnimationFrame(() => {
+        setPhase("open");
+        container.current?.focus();
+      });
     }),
   );
   useListener(standalone, () => native.onClosing(() => setPhase("closing")));
@@ -206,6 +208,11 @@ export function Ring({
       className={`radial ${standalone ? "radial-standalone" : ""}`}
       onPointerMove={(e) => track(e.clientX, e.clientY)}
       onKeyDown={(event) => {
+        if (event.key === "/" && !blocked) {
+          event.preventDefault();
+          onBrowse();
+          return;
+        }
         if (
           event.key === "Escape" ||
           (event.key === "Backspace" && path.length)
@@ -294,7 +301,6 @@ export function Ring({
                 <g
                   key={item?.key ?? `empty-${index}`}
                   className="sector-shell"
-                  style={{ "--i": index } as CSSProperties}
                 >
                   <g
                     className={`sector ${active ? "is-selected" : ""} ${item ? "" : "is-placeholder"}`}

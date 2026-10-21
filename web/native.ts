@@ -57,7 +57,7 @@ export interface Session {
 export const native = {
   session: () => invoke<Session>("session"),
   shortcutLibrary: () => invoke<ShortcutLibrary>("shortcut_library"),
-  surface: (action: "dashboard" | "ring" | "dismiss") =>
+  surface: (action: "dashboard" | "ring" | "dismiss" | "search") =>
     invoke<void>("surface", { action }),
   load: (kind: "files" | "clipboard") => invoke<void>("load_context", { kind }),
   prepare: (id: string | null, revision: number) =>
@@ -71,6 +71,7 @@ export const native = {
     action: "check" | "download" | "install",
     expectedVersion?: string,
   ) => invoke<void>("update_action", { action, expectedVersion }),
+  onSearch: (fn: () => void) => listen("search-actions", fn),
   onChange: (fn: () => void) => listen("session-changed", fn),
   /** The ring opened; `held` is true while the backtick key is still down. */
   onRing: (fn: (held: boolean) => void) =>

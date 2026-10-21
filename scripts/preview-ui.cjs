@@ -109,7 +109,7 @@ if (process.argv.includes("--shortcuts")) {
   const { libraryActions, indexActions, searchActions } = load(
     path.join(root, "web/action-search.ts"),
   );
-  // This static fixture includes the full browse library; native sessions send only their app subset.
+  // Match the native session: only the captured app enters the UI.
   session.target = "Figma";
   session.kind = "window";
   session.app = "figma";
@@ -160,13 +160,17 @@ const markup = renderToStaticMarkup(
 );
 if (process.argv.includes("--shortcuts")) {
   const rows = (markup.match(/class="action-row"/g) ?? []).length;
-  if (rows !== 60) throw new Error(`Expected 60 rendered rows, got ${rows}`);
-  if (!markup.includes("Frame tool") || !markup.includes("All shortcuts"))
+  const expectedRows = Math.min(60, session.actions.length);
+  if (rows !== expectedRows)
+    throw new Error(`Expected ${expectedRows} rendered rows, got ${rows}`);
+  if (!markup.includes("Frame tool") || !markup.includes("Search actions"))
     throw new Error("Missing app ring choices");
-  if (!markup.includes("Next</button>"))
+  if (markup.includes("app:photoshop:") || markup.includes("All shortcuts"))
+    throw new Error("Unrelated apps or nested shortcuts leaked into the view");
+  if (session.actions.length > 60 && !markup.includes("Next</button>"))
     throw new Error("Missing action pagination");
   console.log(
-    "Static render: 60 rows, app quick actions and accessible pagination verified.",
+    `Static render: ${rows} contextual rows, direct app actions and flat search verified.`,
   );
 }
 const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>${css}html,body,#root{height:740px;min-height:0}body{min-width:640px}</style></head><body><div id="root">${markup}</div></body></html>`;

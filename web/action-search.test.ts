@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import source from "../src/shortcuts.json";
 import {
+  contextualActions,
   indexActions,
   libraryActions,
   PAGE_SIZE,
@@ -28,17 +29,34 @@ const library: ShortcutLibrary = {
 describe("app action search", () => {
   const actions = libraryActions(library, "figma");
   const index = indexActions(actions);
-  it("indexes the shipped catalog, with eligibility only for the captured app", () => {
-    expect(actions.length).toBeGreaterThan(3000);
+  it("only exposes the captured app, including when context changes or is unsupported", () => {
+    expect(library.actions.length).toBeGreaterThan(3000);
+    expect(actions.length).toBeGreaterThan(0);
+    expect(actions.every((a) => a.profile === "figma" && a.eligible)).toBe(
+      true,
+    );
+    expect(libraryActions(library, null)).toEqual([]);
+    expect(libraryActions(library, "unknown")).toEqual([]);
+    const photoshop = libraryActions(library, "photoshop");
+    const mixed = [...actions, ...photoshop];
+    expect(contextualActions(mixed, "figma")).toEqual(actions);
+    expect(contextualActions(mixed, "photoshop")).toEqual(photoshop);
+    expect(contextualActions(mixed, null)).toEqual([]);
     expect(
-      actions.filter((a) => a.eligible).every((a) => a.profile === "figma"),
-    ).toBe(true);
-    expect(libraryActions(library, null).every((a) => !a.eligible)).toBe(true);
-    expect(actions.find((a) => a.id === "app:photoshop:curves")).toMatchObject({
-      appName: "Adobe Photoshop",
-      shortcut: "Ctrl+M",
-      eligible: false,
-    });
+      contextualActions(
+        [
+          {
+            id: "upper",
+            title: "Upper",
+            group: "Text",
+            fields: [],
+            eligible: true,
+          },
+          ...mixed,
+        ],
+        null,
+      ),
+    ).toHaveLength(1);
   });
   it("matches separate words in app, title, category and shortcut", () => {
     expect(
@@ -50,6 +68,13 @@ describe("app action search", () => {
       searchActions(index, "photoshop Ctrl+M", "All actions").map(
         (a) => a.title,
       ),
+    ).toEqual([]);
+    expect(
+      searchActions(
+        indexActions(libraryActions(library, "photoshop")),
+        "Ctrl+M",
+        "Apps",
+      ).map((a) => a.title),
     ).toEqual(["Curves"]);
     expect(searchActions(index, "figma", "Text")).toEqual([]);
     expect(searchActions(index, "no-such-command", "All actions")).toEqual([]);

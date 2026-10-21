@@ -6,16 +6,10 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  native,
-  type Action,
-  type Session,
-  type Preview,
-  type ShortcutLibrary,
-} from "./native";
+import { native, type Action, type Session, type Preview } from "./native";
 import {
   indexActions,
-  libraryActions,
+  contextualActions,
   PAGE_SIZE,
   searchActions,
 } from "./action-search";
@@ -48,28 +42,15 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
   const [thumbnail, setThumbnail] = useState<Preview | null>(null);
   const [group, setGroup] = useState("All actions");
   const [query, setQuery] = useState("");
-  const [library, setLibrary] = useState<ShortcutLibrary | null>(null);
-  const [libraryError, setLibraryError] = useState("");
-  const [profile, setProfile] = useState("");
   const [page, setPage] = useState(0);
   const deferredQuery = useDeferredValue(query);
   const [updates, setUpdates] = useState(false);
   const [confirmInstall, setConfirmInstall] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const sequence = useRef(0);
-  const appActions = useMemo(
-    () => (library ? libraryActions(library, session?.app) : []),
-    [library, session?.app],
-  );
-  const appIndex = useMemo(() => indexActions(appActions), [appActions]);
   const actionIndex = useMemo(
-    () => [
-      ...indexActions(
-        (session?.actions ?? []).filter((a) => !library || !a.shortcut),
-      ),
-      ...appIndex,
-    ],
-    [session?.actions, library, appIndex],
+    () => indexActions(contextualActions(session?.actions ?? [], session?.app)),
+    [session?.actions, session?.app],
   );
   const counts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -78,14 +59,8 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
     return counts;
   }, [actionIndex]);
   const actions = useMemo(
-    () =>
-      searchActions(
-        actionIndex,
-        deferredQuery,
-        group,
-        group === "Apps" ? profile : "",
-      ),
-    [actionIndex, deferredQuery, group, profile],
+    () => searchActions(actionIndex, deferredQuery, group),
+    [actionIndex, deferredQuery, group],
   );
   const currentPage = Math.min(
     page,
@@ -98,22 +73,11 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
     list.current?.scrollTo(0, 0);
-  }, [currentPage, deferredQuery, group, profile]);
+  }, [currentPage, deferredQuery, group]);
   useEffect(() => {
-    if (standalone) return;
-    let active = true;
-    native
-      .shortcutLibrary()
-      .then((value) => {
-        if (active) setLibrary(value);
-      })
-      .catch((error) => {
-        if (active) setLibraryError(String(error));
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    setQuery("");
+    setPage(0);
+  }, [session?.app]);
   const refresh = useCallback(async () => {
     const seq = ++sequence.current;
     const next = await native.session();
@@ -135,6 +99,33 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
     },
     [refresh],
   );
+  const browseActions = useCallback(() => {
+    if (standalone) {
+      void perform(() => native.surface("search"));
+    } else {
+      setUpdates(false);
+      setGroup(session?.app ? "Apps" : "All actions");
+      setQuery("");
+      setPage(0);
+      requestAnimationFrame(() =>
+        document.getElementById("action-search")?.focus(),
+      );
+    }
+  }, [perform, session?.app]);
+  useEffect(() => {
+    if (standalone) return;
+    let active = true;
+    const subscription = native.onSearch(() => {
+      if (active) browseActions();
+    });
+    void subscription.catch((e) => {
+      if (active) setError(String(e));
+    });
+    return () => {
+      active = false;
+      void subscription.then((remove) => remove()).catch(() => {});
+    };
+  }, [browseActions]);
   useEffect(() => {
     let active = true;
     let remove: (() => void) | undefined;
@@ -231,6 +222,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
           session={session}
           thumbnail={thumbnail?.url ?? null}
           standalone
+          onBrowse={browseActions}
           onRun={runPreset}
           onClose={() => void perform(() => native.surface("dismiss"))}
         />
@@ -462,6 +454,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                 <Ring
                   session={session}
                   thumbnail={thumbnail?.url ?? null}
+                  onBrowse={browseActions}
                   onRun={runPreset}
                   onClose={() => void perform(() => native.load("files"))}
                 />
@@ -539,49 +532,11 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                     </label>
                     {group === "Apps" && (
                       <div className="app-filter">
-                        <label htmlFor="app-filter">App</label>
-                        <select
-                          id="app-filter"
-                          value={profile}
-                          onChange={(e) => {
-                            setProfile(e.target.value);
-                            setPage(0);
-                          }}
-                        >
-                          <option value="">All apps</option>
-                          {library?.profiles.map((app) => (
-                            <option key={app.id} value={app.id}>
-                              {app.name}
-                              {app.id === session.app ? " · current app" : ""}
-                            </option>
-                          ))}
-                        </select>
                         <p>
-                          Windows US keyboard defaults. Invoke PieAll from the
-                          matching app to run them. Editing mode and custom
-                          keymaps can change what they do.
+                          {session.app
+                            ? "Shortcuts for the captured app. Windows US defaults; editing mode and custom keymaps can change their behavior."
+                            : "Hold backtick in a supported app to see its shortcuts."}
                         </p>
-                        {libraryError ? (
-                          <p role="alert">
-                            Couldn’t load the app library.{" "}
-                            <button
-                              className="text-button"
-                              onClick={() => {
-                                setLibraryError("");
-                                void native
-                                  .shortcutLibrary()
-                                  .then(setLibrary)
-                                  .catch((e) => setLibraryError(String(e)));
-                              }}
-                            >
-                              Try again
-                            </button>
-                          </p>
-                        ) : (
-                          !library && (
-                            <p role="status">Loading app shortcuts…</p>
-                          )
-                        )}
                       </div>
                     )}
                     <div

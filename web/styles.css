@@ -900,46 +900,31 @@ html[data-surface="toast"] body {
   outline: none;
   color: var(--glass-ink);
 }
+/* Speed over flourish (AutoHotPie bar): the ring is usable on its first frame;
+   a 70 ms fade only softens the pop. Slices no longer stagger in. */
 .radial-standalone .ring-body {
   opacity: 0;
-  transform: scale(0.9);
+  transform: scale(0.97);
 }
 .radial-standalone[data-phase="open"] .ring-body {
   opacity: 1;
   transform: none;
   transition:
-    opacity 0.11s ease-out,
-    transform 0.2s var(--spring);
+    opacity 0.07s ease-out,
+    transform 0.09s ease-out;
 }
 .radial-standalone[data-phase="closing"] .ring-body {
   opacity: 0;
-  transform: scale(0.95);
-  transition:
-    opacity 0.1s ease-in,
-    transform 0.1s ease-in;
-}
-.radial-standalone .sector-shell {
-  opacity: 0;
-  transform: scale(0.84) rotate(-5deg);
-}
-.radial-standalone[data-phase="open"] .sector-shell,
-.radial-standalone[data-phase="closing"] .sector-shell {
-  opacity: 1;
-  transform: none;
-}
-.radial-standalone[data-phase="open"] .sector-shell {
-  transition:
-    opacity 0.12s ease-out calc(var(--i) * 14ms),
-    transform 0.24s var(--spring) calc(var(--i) * 14ms);
+  transition: opacity 0.06s ease-in;
 }
 /* Moving into or out of a submenu swaps the whole level. */
 .radial-standalone .sectors {
-  animation: level-in 0.2s var(--spring);
+  animation: level-in 0.12s ease-out;
 }
 @keyframes level-in {
   from {
     opacity: 0;
-    transform: scale(0.9) rotate(-8deg);
+    transform: scale(0.95);
   }
 }
 .radial-standalone .ring-rim {

@@ -17,6 +17,7 @@ use windows_sys::Win32::{
     Foundation::{HWND, POINT, RECT},
     Graphics::Gdi::*,
     System::Threading::{AttachThreadInput, GetCurrentThreadId},
+    UI::HiDpi::{GetDpiForMonitor, GetDpiForWindow, MDT_EFFECTIVE_DPI},
     UI::WindowsAndMessaging::*,
 };
 
@@ -306,7 +307,7 @@ fn hide_raw(window: &WebviewWindow) {
 
 /// Exit animation length; the window hides only after its content has faded out,
 /// so the next show never flashes a stale frame.
-const OUTRO_MS: u64 = 110;
+const OUTRO_MS: u64 = 60;
 static RING_OPEN: AtomicBool = AtomicBool::new(false);
 static RING_GENERATION: AtomicU64 = AtomicU64::new(0);
 /// Generation of the ring that last gained focus. Focus loss only closes that ring;
@@ -314,6 +315,9 @@ static RING_GENERATION: AtomicU64 = AtomicU64::new(0);
 static RING_FOCUSED: AtomicU64 = AtomicU64::new(u64::MAX);
 /// The backtick is physically down. While held, only its release closes the ring.
 static RING_HELD: AtomicBool = AtomicBool::new(false);
+/// Generation of the ring whose hold is confirmed (not a typed backtick). Text
+/// capture sends Ctrl+C, so it waits for this.
+static RING_CONFIRMED: AtomicU64 = AtomicU64::new(u64::MAX);
 /// Physical screen point of the last ring's center; results appear there.
 static RING_X: AtomicI32 = AtomicI32::new(i32::MIN);
 static RING_Y: AtomicI32 = AtomicI32::new(i32::MIN);
@@ -401,23 +405,27 @@ fn place_ring(app: &AppHandle, held: bool) -> Result<()> {
     unsafe {
         GetCursorPos(&mut point);
     }
-    let scale = ring
-        .monitor_from_point(point.x as f64, point.y as f64)
-        .map_err(|e| e.to_string())?
-        .map_or(1.0, |m| m.scale_factor());
+    // Native calls only: Tauri's window getters/setters hop to the main thread,
+    // which delayed the ring and could show it before a queued move landed.
+    let monitor = unsafe { MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST) };
+    let (mut dpi_x, mut dpi_y) = (96u32, 96u32);
+    unsafe {
+        GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y);
+    }
+    let scale = dpi_x as f64 / 96.0;
     let size = (440.0 * scale).round() as i32;
     let mut info: MONITORINFO = unsafe { std::mem::zeroed() };
     info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
     unsafe {
-        GetMonitorInfoW(MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST), &mut info);
+        GetMonitorInfoW(monitor, &mut info);
     }
     let work = info.rcWork;
     let x = (point.x - size / 2).clamp(work.left, (work.right - size).max(work.left));
     let y = (point.y - size / 2).clamp(work.top, (work.bottom - size).max(work.top));
-    ring.set_size(tauri::LogicalSize::new(440.0, 440.0))
-        .map_err(|e| e.to_string())?;
-    ring.set_position(tauri::PhysicalPosition::new(x, y))
-        .map_err(|e| e.to_string())?;
+    let hwnd = ring.hwnd().map_err(|e| e.to_string())?.0 as HWND;
+    unsafe {
+        SetWindowPos(hwnd, HWND_TOPMOST, x, y, size, size, SWP_NOACTIVATE);
+    }
     RING_X.store(x + size / 2, Ordering::SeqCst);
     RING_Y.store(y + size / 2, Ordering::SeqCst);
     RING_GENERATION.fetch_add(1, Ordering::SeqCst);
@@ -425,7 +433,6 @@ fn place_ring(app: &AppHandle, held: bool) -> Result<()> {
     // Click-mode opens clear a stale hold, so focus loss can still close them.
     RING_HELD.store(held, Ordering::SeqCst);
     let _ = app.emit_to("ring", "ring-opened", held);
-    let hwnd = ring.hwnd().map_err(|e| e.to_string())?.0 as HWND;
     unsafe {
         // Undecorated windows can keep caption/frame styles, which Windows paints as a
         // pale band once a window region is set. Strip them before clipping.
@@ -472,13 +479,16 @@ fn release_ring(app: &AppHandle) {
         hide_raw(&ring);
         return;
     }
-    let mut point = POINT { x: 0, y: 0 };
-    unsafe {
-        GetCursorPos(&mut point);
-    }
-    if let (Ok(origin), Ok(scale)) = (ring.inner_position(), ring.scale_factor()) {
-        let x = (point.x - origin.x) as f64 / scale;
-        let y = (point.y - origin.y) as f64 / scale;
+    // Native calls, no main-thread hop: the release should act immediately.
+    if let Ok(hwnd) = ring.hwnd() {
+        let hwnd = hwnd.0 as HWND;
+        let mut point = POINT { x: 0, y: 0 };
+        let scale = unsafe {
+            GetCursorPos(&mut point);
+            ScreenToClient(hwnd, &mut point);
+            GetDpiForWindow(hwnd).max(96) as f64 / 96.0
+        };
+        let (x, y) = (point.x as f64 / scale, point.y as f64 / scale);
         let _ = app.emit_to("ring", "ring-release", (x, y));
     }
     // The web side decides what the release does (run a slice or close), but the
@@ -498,6 +508,22 @@ fn release_ring(app: &AppHandle) {
             let _ = hide_ring(&app, true);
         }
     });
+}
+
+/// True over apps where ` is a menu key, not text: a shortcut profile that never
+/// reads selected text (Figma, Explorer and the desktop, Adobe apps). Terminals
+/// are excluded because shells use ` as an escape character.
+fn instant_ring() -> bool {
+    let hwnd = unsafe { GetForegroundWindow() } as usize;
+    if hwnd == 0 || platform::is_terminal_window(hwnd) {
+        return false;
+    }
+    let mut pid = 0;
+    unsafe { GetWindowThreadProcessId(hwnd as _, &mut pid) };
+    platform::window_executable(hwnd, pid)
+        .ok()
+        .and_then(|exe| shortcuts::for_executable(&exe))
+        .is_some_and(|profile| !profile.capture_text)
 }
 
 /// Opens the ring for whatever is under the user's hands: the Explorer or desktop
@@ -543,7 +569,9 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
         .source_app
         .is_some_and(|p| !p.capture_text);
     let wants_text = source != 0 && !shell && !skip_text && !platform::is_terminal_window(source);
-    if !wants_text {
+    // While ` is held the ring never takes focus: the app keeps it, so shortcuts
+    // and results land without a focus round-trip, and the hook handles Escape.
+    if !wants_text && !held {
         // Explorer is read over COM, which does not need its window focused.
         focus_ring(app);
     }
@@ -551,8 +579,23 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
         .get_webview_window("ring")
         .and_then(|w| w.hwnd().ok())
         .map_or(0, |h| h.0 as usize);
+    let generation = RING_GENERATION.load(Ordering::SeqCst);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        // A held ` may still turn out to be typing; never send Ctrl+C for that.
+        // A tap closes the ring, which bumps the ticket and ends the wait.
+        if held && wants_text {
+            let ticket = || state(&app).lock().unwrap().ticket;
+            for _ in 0..400 {
+                if RING_CONFIRMED.load(Ordering::SeqCst) == generation {
+                    break;
+                }
+                if ticket() != lease.ticket {
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
         let result = if shell {
             platform::capture_selection_from(source).map(|paths| (paths, None))
         } else if wants_text {
@@ -587,7 +630,7 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
             true
         };
         drop(lease);
-        if current && wants_text {
+        if current && wants_text && !held {
             focus_ring(&app);
         }
     });
@@ -599,6 +642,11 @@ fn surface(window: WebviewWindow, app: AppHandle, action: String) -> Result<()> 
     local(&window)?;
     match action.as_str() {
         "dashboard" => show_dashboard(&app),
+        "search" => {
+            show_dashboard(&app)?;
+            app.emit_to("dashboard", "search-actions", ())
+                .map_err(|e| e.to_string())
+        }
         "ring" => {
             state(&app).lock().unwrap().idle()?;
             place_ring(&app, false)?;
@@ -1393,22 +1441,45 @@ pub fn run() {
                 }
             }
             let handle = app.handle().clone();
-            let hook = hold::install(move |event| {
-                let result = match event {
-                    hold::Hold::Start => {
-                        RING_HELD.store(true, Ordering::SeqCst);
-                        invoke_ring(&handle, true)
+            // A Start that fails (busy) may still be a typed backtick; report it only
+            // once the hold is confirmed, so typing never pops error toasts.
+            let refused = Mutex::new(None::<String>);
+            let hook = hold::install(
+                move |event| {
+                    let result = match event {
+                        hold::Hold::Start => {
+                            RING_HELD.store(true, Ordering::SeqCst);
+                            *refused.lock().unwrap() = invoke_ring(&handle, true).err();
+                            Ok(())
+                        }
+                        hold::Hold::Confirm => {
+                            RING_CONFIRMED
+                                .store(RING_GENERATION.load(Ordering::SeqCst), Ordering::SeqCst);
+                            refused.lock().unwrap().take().map_or(Ok(()), Err)
+                        }
+                        hold::Hold::Tap => {
+                            refused.lock().unwrap().take();
+                            // Typing, not a hold: vanish at once, no fade, focus untouched.
+                            RING_HELD.store(false, Ordering::SeqCst);
+                            let result = hide_ring(&handle, false);
+                            if let Some(ring) = handle.get_webview_window("ring") {
+                                hide_raw(&ring);
+                            }
+                            result
+                        }
+                        hold::Hold::End => {
+                            RING_HELD.store(false, Ordering::SeqCst);
+                            release_ring(&handle);
+                            Ok(())
+                        }
+                        hold::Hold::Cancel => hide_ring(&handle, true),
+                    };
+                    if let Err(error) = result {
+                        toast(&handle, "error", "PieAll is busy", error);
                     }
-                    hold::Hold::End => {
-                        RING_HELD.store(false, Ordering::SeqCst);
-                        release_ring(&handle);
-                        Ok(())
-                    }
-                };
-                if let Err(error) = result {
-                    toast(&handle, "error", "PieAll is busy", error);
-                }
-            });
+                },
+                instant_ring,
+            );
             if let Err(error) = hook {
                 let startup = app.handle().clone();
                 std::thread::spawn(move || {

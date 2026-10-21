@@ -33,7 +33,7 @@ const actions = (eligible: string[]) =>
   }));
 
 describe("context menus", () => {
-  it("offers six ranked app actions without a submenu and keeps the complete library", () => {
+  it("offers six direct app actions and flat search instead of nested shortcut menus", () => {
     const shortcuts = Array.from({ length: 12 }, (_, n) => ({
       id: `app:test:${n}`,
       title: `Shortcut ${n}`,
@@ -46,6 +46,7 @@ describe("context menus", () => {
     }));
     const session = {
       kind: "window",
+      app: "test",
       names: [],
       actions: [
         ...shortcuts,
@@ -66,19 +67,14 @@ describe("context menus", () => {
         .reverse()
         .map((action) => action.id),
     );
-    function leaves(items: MenuItem[]): string[] {
-      return items.flatMap((item) =>
-        item.children
-          ? leaves(item.children)
-          : item.action
-            ? [item.action]
-            : [],
-      );
-    }
-    expect(
-      new Set(leaves(menu).filter((id) => id.startsWith("app:"))).size,
-    ).toBe(12);
-    expect(leaves(menu)).toContain("center_window");
+    expect(menu.find((item) => item.browse)?.label).toBe("Search actions");
+    expect(menu.filter((item) => item.action?.startsWith("app:"))).toHaveLength(
+      6,
+    );
+    expect(menu.find((item) => item.action === "center_window")?.action).toBe(
+      "center_window",
+    );
+    expect(JSON.stringify(menu)).not.toContain("All shortcuts");
   });
   it("preserves every action through multiple pages at every depth", () => {
     const leaves = Array.from({ length: 137 }, (_, n) => ({
@@ -106,9 +102,10 @@ describe("context menus", () => {
     expect(keys.length).toBe(274);
     expect(new Set(keys).size).toBe(137);
   });
-  it("keeps app commands with text tools and excludes ineligible shortcuts", () => {
+  it("gives selection tools precedence and rejects unrelated app shortcuts even if marked eligible", () => {
     const session = {
-      kind: "text",
+      kind: "window",
+      app: "figma",
       actions: [
         {
           id: "app:figma:move",
@@ -116,7 +113,6 @@ describe("context menus", () => {
           group: "Apps",
           fields: [],
           shortcut: "V",
-          category: "Tools",
           eligible: true,
         },
         {
@@ -125,17 +121,20 @@ describe("context menus", () => {
           group: "Apps",
           fields: [],
           shortcut: "Ctrl+M",
-          category: "Adjustments",
-          eligible: false,
+          eligible: true,
         },
       ],
     } as unknown as Session;
-    const menu = contextMenu(session);
-    expect(menu.some((item) => item.action === "upper")).toBe(true);
-    const shortcuts = menu.find((item) => item.key === "app-shortcuts")!;
-    expect(JSON.stringify(shortcuts)).toContain("app:figma:move");
-    expect(JSON.stringify(shortcuts)).not.toContain("photoshop");
-    expect(contextMenu({ ...session, actions: [] })).toEqual(menus.text);
+    expect(
+      contextMenu(session).some((item) => item.action === "app:figma:move"),
+    ).toBe(true);
+    expect(JSON.stringify(contextMenu(session))).not.toContain("photoshop");
+    expect(contextMenu({ ...session, kind: "text" })).toEqual(menus.text);
+    expect(contextMenu({ ...session, kind: "images" })).toEqual(menus.images);
+    expect(contextMenu({ ...session, app: null })).toEqual(menus.window);
+    expect(contextMenu({ ...session, app: "photoshop" })[0].action).toBe(
+      "app:photoshop:curves",
+    );
   });
   it("bounds long wedge labels without changing their accessible source names", () => {
     for (const label of [

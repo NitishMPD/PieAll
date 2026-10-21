@@ -1,4 +1,5 @@
 import type { Action, Session } from "./native";
+import { contextualActions } from "./action-search";
 
 /** One ring slice: a preset action or a submenu of them. */
 export interface MenuItem {
@@ -7,6 +8,7 @@ export interface MenuItem {
   icon: string;
   hint?: string;
   action?: string;
+  browse?: boolean;
   params?: Record<string, string>;
   children?: MenuItem[];
 }
@@ -152,32 +154,13 @@ export const menus: Record<string, MenuItem[]> = {
   ],
 };
 
-/** Only native eligible app actions enter the ring, never the browse library. */
+/** Selection tools take precedence; app commands never become category trees. */
 export function contextMenu(session: Session): MenuItem[] {
   const base = menus[session.kind] ?? [];
-  const shortcuts = session.actions.filter((a) => a.eligible && a.shortcut);
-  if (!shortcuts.length) return base;
-  const categories = new Map<string, MenuItem[]>();
-  for (const action of shortcuts) {
-    const category = action.category ?? "Shortcuts";
-    const items = categories.get(category) ?? [];
-    items.push(
-      run(
-        action.id,
-        action.title,
-        shortcutIcon(action.id),
-        {},
-        action.shortcut ?? undefined,
-      ),
-    );
-    categories.set(category, items);
-  }
-  const app = Array.from(categories, ([name, children]) =>
-    sub(`app:${name}`, name, "code", children),
-  );
-  const quick = shortcuts
-    .filter((action) => action.priority != null)
-    .sort((a, b) => a.priority! - b.priority!)
+  if (session.kind !== "window") return base;
+  const shortcuts = contextualActions(session.actions, session.app)
+    .filter((action) => action.shortcut)
+    .sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity))
     .slice(0, 6)
     .map((action) =>
       run(
@@ -188,12 +171,18 @@ export function contextMenu(session: Session): MenuItem[] {
         action.shortcut ?? undefined,
       ),
     );
-  const appMenu = quick.length
-    ? [...quick, sub("app-all", "All shortcuts", "apps", app)]
-    : app;
-  return session.kind === "window"
-    ? [...appMenu, sub("window-tools", "Window", "window", base)]
-    : [...base, sub("app-shortcuts", "App shortcuts", "apps", appMenu)];
+  if (!shortcuts.length) return base;
+  return [
+    ...shortcuts,
+    {
+      key: "search-actions",
+      label: "Search actions",
+      icon: "search",
+      browse: true,
+      hint: "Search this app's shortcuts",
+    },
+    sub("window-tools", "Window", "window", base),
+  ];
 }
 
 /** Recursively page every level; no catalog entry may disappear past a slice limit. */
@@ -253,7 +242,7 @@ export function resolve(
         if (children.length < 2) return children;
         return [{ ...item, children: paginate(children) }];
       }
-      return item.action && ok.has(item.action) ? [item] : [];
+      return item.browse || (item.action && ok.has(item.action)) ? [item] : [];
     });
   return paginate(walk(items));
 }
