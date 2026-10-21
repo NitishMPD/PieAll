@@ -257,7 +257,7 @@ export function contextMenu(
 }
 
 /** Recursively page every level; no catalog entry may disappear past a slice limit. */
-function paginate(items: MenuItem[], page = 0): MenuItem[] {
+export function paginate(items: MenuItem[], page = 0): MenuItem[] {
   if (items.length <= MAX) return items;
   return [
     ...items.slice(0, MAX - 1),

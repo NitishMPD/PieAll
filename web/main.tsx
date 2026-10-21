@@ -20,6 +20,7 @@ import { Customize, applyTrigger } from "./Customize";
 import { TRIGGER_KEYS, usePrefs } from "./prefs";
 import "./styles.css";
 import "./dashboard.css";
+import "./customize.css";
 
 const surface =
   typeof location !== "undefined"
@@ -272,14 +273,9 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
             height={40}
             alt=""
           />
-          <span>
-            PieAll<span className="brand-sub">A little less work.</span>
-          </span>
+          <span>PieAll</span>
         </a>
         <div className="header-actions">
-          <span className="local-label">
-            <span /> Runs on this PC
-          </span>
           <button
             className="quiet"
             disabled={disabled}
@@ -346,37 +342,39 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               <Icon name="update" />
               Updates{session.update.version && <span className="new-dot" />}
             </button>
-            <small>PieAll · on your PC</small>
           </div>
         </nav>
         <main className="workspace">
-          <section className="selection-bar" aria-label="Current selection">
-            <div className="selection-icon">
-              <Icon name={session.kind === "empty" ? "files" : session.kind} />
-            </div>
-            <div className="selection-name">
-              <span>Working with</span>
-              <h1 title={session.target}>{session.target}</h1>
-            </div>
-            <div className="selection-actions">
-              <button
-                disabled={disabled}
-                onClick={() => void perform(() => native.load("files"))}
-              >
-                <Icon name="open" size={17} />
-                Open files
-              </button>
-              <button
-                className="icon-button"
-                disabled={disabled}
-                title="Use clipboard text"
-                aria-label="Use clipboard text"
-                onClick={() => void perform(() => native.load("clipboard"))}
-              >
-                <Icon name="clipboard" size={19} />
-              </button>
-            </div>
-          </section>
+          {view !== "customize" && (
+            <section className="selection-bar" aria-label="Current selection">
+              <div className="selection-icon">
+                <Icon
+                  name={session.kind === "empty" ? "files" : session.kind}
+                />
+              </div>
+              <div className="selection-name">
+                <h1 title={session.target}>{session.target}</h1>
+              </div>
+              <div className="selection-actions">
+                <button
+                  disabled={disabled}
+                  onClick={() => void perform(() => native.load("files"))}
+                >
+                  <Icon name="open" size={17} />
+                  Open files
+                </button>
+                <button
+                  className="icon-button"
+                  disabled={disabled}
+                  title="Use clipboard text"
+                  aria-label="Use clipboard text"
+                  onClick={() => void perform(() => native.load("clipboard"))}
+                >
+                  <Icon name="clipboard" size={19} />
+                </button>
+              </div>
+            </section>
+          )}
           {view === "customize" ? (
             <Customize session={session} />
           ) : updates ? (

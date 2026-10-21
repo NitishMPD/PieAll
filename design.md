@@ -1,11 +1,16 @@
 # PieAll design
 Author: Nitish
 
+## Tray shortcut control — 21 October 2026
+
+The native tray menu orders Open PieAll, Show action ring, Use shortcut, and Exit PieAll. Use shortcut uses a native checkmark, checked when keyboard invocation is enabled, and supports the native menu's keyboard interaction. Show action ring has no hard-coded key hint and remains usable when shortcuts are paused. A failed toggle restores the checkmark to the actual state.
+
 ## Dashboard structure and customization — 21 October 2026
 
-The sidebar is grouped under Actions and Personalize, with Updates pinned at the bottom; the active item carries an accent bar. The empty state replaces the disabled ring with three numbered steps (Select, Hold the key, Release on an action) and two buttons, Choose files and Customize ring. The header shows the current hold key in a keycap chip.
+The dashboard fills the window and never scrolls as a whole; the sidebar, lists and panels scroll on their own. Header and selection bar are compact, with no taglines. The sidebar groups Actions and Personalize, with Updates at the bottom. The empty state shows three numbered steps and two buttons.
 
-Customize ring has a hold-key card (keycap plus Change key; the keycap turns accent while listening) and a two-pane layout editor: contexts on the left (file types, then a searchable app list with the current app first and a dot on customized ones), and on the right a live ring preview beside a numbered slot list with move up, move down and remove buttons, then a chip list to add actions. All controls are buttons with names, so reordering needs no drag and works by keyboard. Layouts stack to one column below 900px.
+Customize ring is a fixed three-pane view. Left: hold-key chip with Change, the active app pinned first, the four file types, and a searchable list of all apps with monogram tiles (a stable color per app, since Windows exposes no icons to the UI); a dot marks customized rings. Center: the full ring exactly as it will open (same wedge shapes, icons, labels, More slice for overflow past eight), with a dashed ghost slice to add into and the app or type in the hub. Clicking a slice selects it. Right: tabs Slices (drag to reorder, plus move and remove buttons, selection synced with the ring) and Add action (searchable list). Below 860px the right pane moves under the ring.
+
 
 ## Contextual shortcut browsing — 21 October 2026
 

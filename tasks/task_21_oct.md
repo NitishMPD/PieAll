@@ -10,3 +10,5 @@
 - Made PieAll open on key-down everywhere (AutoHotPie-speed): quick taps still type ` with the ring vanishing instantly, text capture waits for a confirmed hold, shortcut-only apps confirm immediately, the ring never takes focus while held (hook handles Escape), native-only window placement and release reading, and a 70 ms entrance with no stagger.
 - Turned off the Windows 11 accent border on the ring and toast windows; clicking a slice activated the ring and the border showed as a pale blue arc above the top slice.
 - Redesigned dashboard navigation and empty state; added Customize ring (hold-key choice, per file type and per app ring layouts).
+- Rebuilt Customize ring as a fixed three-pane editor (rail with active app and app search, full ring preview, slice list and add picker); removed filler copy and made the dashboard non-scrolling.
+- Added a native Use shortcut tray toggle to pause hold-key and Ctrl+backtick invocation for the current session, preserve manual ring access, and guard hotkey restoration; verified disabled-key passthrough and active-hold release with a focused Rust unit test.

@@ -26,6 +26,27 @@ use windows_sys::Win32::{
 
 type Result<T> = std::result::Result<T, String>;
 
+const INVOCATION: &str = "Ctrl+Backquote";
+fn set_shortcuts_enabled(app: &AppHandle, enabled: bool) -> Result<()> {
+    let session = state(app);
+    let session = session.lock().unwrap();
+    // The operation lease also covers temporary Ctrl+` release and restoration.
+    session.idle()?;
+    if enabled {
+        if !app.global_shortcut().is_registered(INVOCATION) {
+            app.global_shortcut()
+                .register(INVOCATION)
+                .map_err(|e| format!("Could not enable Ctrl+`: {e}"))?;
+        }
+    } else if app.global_shortcut().is_registered(INVOCATION) {
+        app.global_shortcut()
+            .unregister(INVOCATION)
+            .map_err(|e| format!("Could not disable Ctrl+`: {e}"))?;
+    }
+    hold::set_enabled(enabled);
+    Ok(())
+}
+
 #[derive(Default)]
 struct Session {
     revision: u64,
@@ -932,7 +953,6 @@ fn dispatch_app_shortcut(
     pid: u32,
     action: &shortcuts::Shortcut,
 ) -> Result<()> {
-    const INVOCATION: &str = "Ctrl+Backquote";
     let collision = shortcuts::uses_invocation_shortcut(action)
         && app.global_shortcut().is_registered(INVOCATION);
     if !collision {
@@ -944,7 +964,11 @@ fn dispatch_app_shortcut(
     let result = platform::send_app_shortcut(source, pid, action);
     // RegisterHotKey would swallow injected Ctrl+` too. Keep it free while input is dispatched.
     std::thread::sleep(std::time::Duration::from_millis(80));
-    let restore = app.global_shortcut().register(INVOCATION);
+    let restore = if hold::enabled() && !app.global_shortcut().is_registered(INVOCATION) {
+        app.global_shortcut().register(INVOCATION)
+    } else {
+        Ok(())
+    };
     match (result, restore) {
         (result, Ok(())) => result,
         (Ok(()), Err(error)) => Err(format!(
@@ -1401,7 +1425,7 @@ pub fn run() {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _, event| {
-                    if event.state == ShortcutState::Pressed {
+                    if event.state == ShortcutState::Pressed && hold::enabled() {
                         if let Err(error) = invoke_ring(app, false) {
                             message(app, error);
                         }
@@ -1430,7 +1454,7 @@ pub fn run() {
             {
                 message(app.handle(), error);
             }
-            if let Err(error) = app.global_shortcut().register("Ctrl+Backquote") {
+            if let Err(error) = app.global_shortcut().register(INVOCATION) {
                 message(
                     app.handle(),
                     format!("Ctrl + ` is unavailable: {error}. Hold ` or use the tray."),
@@ -1523,23 +1547,39 @@ pub fn run() {
             let ring = tauri::menu::MenuItem::with_id(
                 app,
                 "ring",
-                "Show action ring (hold `)",
+                "Show action ring",
+                true,
+                None::<&str>,
+            )?;
+            let use_shortcut = tauri::menu::CheckMenuItem::with_id(
+                app,
+                "use-shortcut",
+                "Use shortcut",
+                true,
                 true,
                 None::<&str>,
             )?;
             let exit =
                 tauri::menu::MenuItem::with_id(app, "exit", "Exit PieAll", true, None::<&str>)?;
-            let menu = tauri::menu::Menu::with_items(app, &[&open, &ring, &exit])?;
+            let menu = tauri::menu::Menu::with_items(app, &[&open, &ring, &use_shortcut, &exit])?;
             let pixels = include_bytes!("../icons/tray.rgba").to_vec();
             tauri::tray::TrayIconBuilder::new()
                 .icon(tauri::image::Image::new_owned(pixels, 32, 32))
                 .tooltip("PieAll · hold ` over a file, text or window")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| {
+                .on_menu_event(move |app, event| {
                     let result = match event.id.as_ref() {
                         "open" => show_dashboard(app),
                         "ring" => invoke_ring(app, false),
+                        "use-shortcut" => {
+                            let result = set_shortcuts_enabled(app, !hold::enabled());
+                            // Native check items toggle before the callback; undo on failure.
+                            let checked = use_shortcut
+                                .set_checked(hold::enabled())
+                                .map_err(|e| e.to_string());
+                            result.and(checked)
+                        }
                         "exit" => {
                             let idle = state(app).lock().unwrap().idle();
                             if idle.is_ok() {

@@ -1,6 +1,10 @@
 # PieAll
 Author: Nitish
 
+## Tray shortcut toggle — 21 October 2026
+
+The tray menu has a checked-by-default Use shortcut toggle. Turning it off pauses new hold-key invocation and unregisters Ctrl+backtick, so those keys reach other apps normally. A hold already in progress finishes normally. Show action ring remains available from the tray. Turning the toggle back on restores both routes; registration failures leave the previous state and checkmark intact and show the existing error UI. Changes require no active action or editor, and app-shortcut dispatch cannot restore a disabled invocation hotkey. This toggle applies for the current process session and resets to enabled when PieAll restarts.
+
 ## Ring customization — 21 October 2026
 
 The dashboard has a Customize ring section. Users pick the hold key (`, Caps Lock, Pause, Scroll Lock or F1–F12; Esc cancels capture) and edit the ring layout per context: Images, Files, Text, Windows, and any of the 57 app profiles. A layout is an ordered list of ring slices. Slices come from the context's built-in presets, their choices, plain registry actions of the matching groups, or that app's shortcuts. Users can reorder, remove, add and reset. Slices past eight move into More. A saved layout replaces the built-in one; keys that no longer exist are ignored; Reset restores the default. For an app, the saved layout replaces the six quick actions, while Search actions and Window tools stay fixed.

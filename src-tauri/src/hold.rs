@@ -15,7 +15,7 @@ use pieall::platform::INJECTED_MARKER;
 use std::{
     cell::Cell,
     sync::{
-        atomic::{AtomicU32, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
         mpsc, OnceLock,
     },
 };
@@ -41,6 +41,15 @@ const HOLD_MS: u32 = 150;
 
 /// Virtual-key code of the hold key; the backtick unless the user picked another.
 static TRIGGER: AtomicU32 = AtomicU32::new(VK_OEM_3 as u32);
+static ENABLED: AtomicBool = AtomicBool::new(true);
+
+pub fn enabled() -> bool {
+    ENABLED.load(Ordering::SeqCst)
+}
+
+pub fn set_enabled(enabled: bool) {
+    ENABLED.store(enabled, Ordering::SeqCst);
+}
 
 /// Changes the hold key. Only keys that have no modifier-only meaning are accepted.
 pub fn set_trigger(vk: u32) -> Result<(), String> {
@@ -184,7 +193,7 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
     let scan = SCAN.get();
     match STATE.get() {
         State::Idle => {
-            if !(backtick && down) || modifiers_down() {
+            if !enabled() || !(backtick && down) || modifiers_down() {
                 return false;
             }
             SCAN.set(k.scanCode as u16);
@@ -248,6 +257,35 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
             }
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disabled_shortcut_passes_trigger_and_escape_through() {
+        set_enabled(false);
+        for vk in [TRIGGER.load(Ordering::SeqCst), VK_ESCAPE as u32] {
+            let event = KBDLLHOOKSTRUCT {
+                vkCode: vk,
+                ..unsafe { std::mem::zeroed() }
+            };
+            assert!(!handle(&event, true));
+            assert!(!handle(&event, false));
+            assert!(STATE.get() == State::Idle);
+        }
+        // Disabling must still consume the release of a hold we already intercepted.
+        STATE.set(State::Holding);
+        let release = KBDLLHOOKSTRUCT {
+            vkCode: TRIGGER.load(Ordering::SeqCst),
+            ..unsafe { std::mem::zeroed() }
+        };
+        assert!(handle(&release, false));
+        assert!(STATE.get() == State::Idle);
+        set_enabled(true);
+        assert!(enabled());
     }
 }
 
