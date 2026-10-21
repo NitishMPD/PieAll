@@ -245,9 +245,8 @@ fn session(window: WebviewWindow, app: AppHandle) -> Result<View> {
 }
 
 fn show_dashboard(app: &AppHandle) -> Result<()> {
-    if let Some(ring) = app.get_webview_window("ring") {
-        let _ = ring.hide();
-    }
+    // Through hide_ring so RING_OPEN clears; otherwise the next hold only "closes" it.
+    let _ = hide_ring(app, false);
     let window = app
         .get_webview_window("dashboard")
         .ok_or("Action browser unavailable")?;
@@ -390,6 +389,23 @@ fn place_ring(app: &AppHandle, held: bool) -> Result<()> {
     let _ = app.emit_to("ring", "ring-opened", held);
     let hwnd = ring.hwnd().map_err(|e| e.to_string())?.0 as HWND;
     unsafe {
+        // Undecorated windows keep caption/frame styles. Once a window region is set,
+        // Windows paints its classic inactive caption, which showed as a pale crescent
+        // above the top slice. Strip them before clipping.
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        let bare = style & !((WS_CAPTION | WS_THICKFRAME) as isize);
+        if bare != style {
+            SetWindowLongPtrW(hwnd, GWL_STYLE, bare);
+            SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                0,
+                0,
+                0,
+                0,
+                SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
         // Clip the native hit surface too; transparent corners must not eat desktop clicks.
         let inset = (17.0 * scale).round() as i32;
         let region = CreateEllipticRgn(inset, inset, size - inset, size - inset);
@@ -418,6 +434,23 @@ fn release_ring(app: &AppHandle) {
         let y = (point.y - origin.y) as f64 / scale;
         let _ = app.emit_to("ring", "ring-release", (x, y));
     }
+    // The web side decides what the release does (run a slice or close), but the
+    // ring must never outlive the key. Once capture is done and the web side has
+    // had its turn, close whatever ring is still the one this release belonged to.
+    let generation = RING_GENERATION.load(Ordering::SeqCst);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        for _ in 0..40 {
+            if state(&app).lock().unwrap().operation != Some("capture") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        if RING_GENERATION.load(Ordering::SeqCst) == generation {
+            let _ = hide_ring(&app, true);
+        }
+    });
 }
 
 /// Opens the ring for whatever is under the user's hands: the Explorer or desktop

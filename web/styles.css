@@ -169,12 +169,11 @@ kbd {
   gap: 11px;
   font-size: 24px;
   font-weight: 650;
-  letter-spacing: -1px;
+  letter-spacing: -0.03em;
 }
 .brand-symbol {
-  color: var(--accent);
-  display: flex;
-  align-items: center;
+  display: block;
+  flex-shrink: 0;
 }
 .brand-sub {
   display: block;
@@ -381,6 +380,11 @@ kbd {
   stroke: rgba(178, 140, 98, 0.3);
   stroke-width: 1;
 }
+.ring-well {
+  fill: none;
+  stroke: rgba(178, 140, 98, 0.3);
+  stroke-width: 1;
+}
 .sector {
   cursor: pointer;
   outline: none;
@@ -437,10 +441,10 @@ kbd {
 }
 .ring-center {
   position: absolute;
-  width: 33%;
-  height: 33%;
-  left: 33.5%;
-  top: 33.5%;
+  width: 37.27%;
+  height: 37.27%;
+  left: 31.36%;
+  top: 31.36%;
   padding: 12px 15px;
   gap: 5px;
   display: flex;
@@ -838,11 +842,12 @@ html[data-surface="toast"] body {
   pointer-events: none;
 }
 
-/* Floating ring: neutral liquid glass. Wedges are smoked translucent panes lit
-   from above (bright top edge, faint sheen); gaps stay fully transparent. */
+/* Floating ring: neutral glass tray holding raised pillow slices. The tray and
+   slices are dense enough to read over any wallpaper or desktop icons. */
 .radial-standalone {
   --spring: cubic-bezier(0.18, 0.9, 0.24, 1.12);
-  --glass: rgba(20, 20, 22, 0.56);
+  --tray: rgba(16, 16, 18, 0.78);
+  --glass: rgba(52, 52, 57, 0.9);
   --glass-ink: #f4f4f6;
   width: 440px;
   height: 440px;
@@ -892,15 +897,22 @@ html[data-surface="toast"] body {
   }
 }
 .radial-standalone .ring-rim {
-  fill: none;
-  stroke: none;
+  fill: var(--tray);
+  stroke: url(#glass-edge);
+  stroke-width: 1.2;
+}
+.radial-standalone .ring-well {
+  fill: rgba(0, 0, 0, 0.28);
+  stroke: rgba(255, 255, 255, 0.16);
 }
 .radial-standalone .sector-shape {
   fill: var(--glass);
   stroke: url(#glass-edge);
   stroke-width: 1;
-  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.26));
-  transition: fill 0.09s;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
+  transition:
+    fill 0.09s,
+    stroke 0.09s;
 }
 .radial-standalone .sector-sheen {
   display: block;
@@ -908,26 +920,32 @@ html[data-surface="toast"] body {
   stroke: none;
 }
 .radial-standalone .sector.is-selected .sector-shape {
-  fill: rgba(255, 255, 255, 0.2);
-  stroke: rgba(255, 255, 255, 0.72);
+  fill: rgba(248, 248, 250, 0.96);
+  stroke: #fff;
 }
 .radial-standalone .sector.is-selected {
-  color: #fff;
+  color: #141416;
+}
+.radial-standalone .sector.is-selected .sector-sheen {
+  display: none;
+}
+.radial-standalone .sector.is-selected text {
+  stroke: none;
 }
 .radial-standalone .sector:focus-visible .sector-shape {
   stroke: #fff;
   stroke-width: 2;
 }
 .radial-standalone .is-placeholder .sector-shape {
-  fill: rgba(20, 20, 22, 0.34);
+  fill: rgba(52, 52, 57, 0.45);
   opacity: 1;
 }
 .radial-standalone .sector text {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   fill: currentColor;
   paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.22);
+  stroke: rgba(0, 0, 0, 0.3);
   stroke-width: 2px;
 }
 .radial-standalone .wedge-icon {
@@ -937,7 +955,7 @@ html[data-surface="toast"] body {
 .radial-standalone .dwell {
   display: block;
   fill: none;
-  stroke: rgba(255, 255, 255, 0.92);
+  stroke: #141416;
   stroke-width: 2.5;
   stroke-linecap: round;
   stroke-dasharray: 1;
@@ -950,8 +968,8 @@ html[data-surface="toast"] body {
   }
 }
 .radial-standalone .ring-center {
-  background: rgba(20, 20, 22, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(38, 38, 42, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: var(--glass-ink);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
@@ -961,13 +979,13 @@ html[data-surface="toast"] body {
     border-color 0.12s;
 }
 .radial-standalone .ring-center:hover:not(:disabled) {
-  background: rgba(30, 30, 33, 0.7);
+  background: rgba(50, 50, 55, 0.96);
 }
 .radial-standalone .ring-center.is-dwelling {
   border-color: rgba(255, 255, 255, 0.65);
 }
 .radial-standalone .ring-center > span:not(.spinner) {
-  color: rgba(244, 244, 246, 0.6);
+  color: rgba(244, 244, 246, 0.68);
 }
 .radial-standalone .spinner,
 .toast .spinner {
@@ -1203,6 +1221,11 @@ html[data-surface="toast"] body {
   }
 }
 @media (forced-colors: active) {
+  .ring-rim,
+  .ring-well {
+    fill: none;
+    stroke: CanvasText;
+  }
   .sector-shape {
     fill: Canvas;
     stroke: CanvasText;

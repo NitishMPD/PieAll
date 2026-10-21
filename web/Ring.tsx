@@ -1,13 +1,22 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Session } from "./native";
-import { SIZE, arcPath, point, sectorAt, wedgePath } from "./geometry";
+import {
+  INNER,
+  OUTER,
+  SIZE,
+  arcPath,
+  point,
+  sectorAt,
+  wedgePath,
+} from "./geometry";
 import { menus, resolve, type MenuItem } from "./menus";
 import { native } from "./native";
 import { Icon } from "./Icon";
 
 /** Resting on a "More" slice (or the center, inside a submenu) this long moves level. */
 export const DWELL_MS = 550;
-const DEAD_ZONE = 66;
+/** Matches the hub: inside it nothing is selected. */
+const DEAD_ZONE = 82;
 
 function useListener(enabled: boolean, subscribe: () => Promise<() => void>) {
   useEffect(() => {
@@ -92,8 +101,9 @@ export function Ring({
     if (item.children) enter(item);
     else if (item.action) onRun(item.action, item.params ?? {});
   }
-  // Releasing the held key runs the slice in the cursor's direction. Releasing
-  // anywhere else cancels. A release during capture waits for the selection.
+  // Releasing the held key always ends the ring: it runs the action slice in the
+  // cursor's direction, otherwise it closes. Submenus open by resting, not by
+  // releasing. A release during capture waits for the selection.
   function release(x: number, y: number) {
     if (reading) {
       pending.current = [x, y];
@@ -101,11 +111,8 @@ export function Ring({
     }
     const index = sectorAt(x, y, items.length, DEAD_ZONE);
     const item = index !== null ? items[index] : undefined;
-    if (!item) onClose();
-    else if (item.children) {
-      enter(item);
-      container.current?.focus();
-    } else activate(item);
+    if (item?.action && !blocked) onRun(item.action, item.params ?? {});
+    else onClose();
   }
   const latest = useRef(release);
   latest.current = release;
@@ -264,12 +271,13 @@ export function Ring({
               <stop offset="1" stopColor="#fff" stopOpacity="0.06" />
             </linearGradient>
           </defs>
-          <circle className="ring-rim" cx="220" cy="220" r="202" />
+          <circle className="ring-rim" cx="220" cy="220" r={OUTER + 10} />
+          <circle className="ring-well" cx="220" cy="220" r={INNER - 7} />
           <g className="sectors" key={path.join("/")}>
             {Array.from({ length: count }, (_, index) => {
               const item = items[index];
               const angle = (index * 360) / count;
-              const [x, y] = point(139, angle);
+              const [x, y] = point((OUTER + INNER) / 2, angle);
               const [px, py] = point(5, angle);
               const active = !!item && selected === index;
               return (

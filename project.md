@@ -1,11 +1,15 @@
 # PieAll
 Author: Nitish
 
+## Application identity — 21 October 2026
+
+The existing PieAll name, app identifier and tagline remain unchanged. The dashboard and connection screen load the local `public/brand/pieall.svg` mark; Vite copies public assets into the frontend distribution. `index.html` uses it as the favicon. Windows executable, shortcut and NSIS installer branding use `src-tauri/icons/icon.ico` through the existing Tauri bundle configuration; the tray continues to consume the 32×32 `tray.rgba` bytes through its existing native owner. `src-tauri/icons/icon.png` is the 512 px export. Regenerate all assets with `python scripts/generate-brand.py` (Pillow required); its assertions check ICO size coverage, tray byte length and transparent corners. Branding does not change invocation or action behavior. Builds and native icon acceptance remain user-run.
+
 ## Invocation model — 20 October 2026
 
 PieAll is a tray utility, not an import app. The dashboard no longer opens at launch; it stays reachable from the tray as the full action list, the parameter editors and the accessible route.
 
-- **Hold `** anywhere in Windows. A low-level keyboard hook (src-tauri/src/hold.rs) holds back each unmodified backtick press. A release within 220 ms, or another key pressed first, replays the backtick in order, so typing is unchanged. Holding past 180 ms opens the ring at the cursor; releasing the key runs the slice in the cursor's direction, and releasing in the center or on nothing cancels. Resting 550 ms on a submenu slice opens it. Shift (~), Ctrl, Alt, AltGr and Win combinations and injected input pass through. Ctrl+` and the tray open the same ring without the hold gesture. Pressing either again while the ring is open closes it.
+- **Hold `** anywhere in Windows. A low-level keyboard hook (src-tauri/src/hold.rs) holds back each unmodified backtick press. A release within 220 ms, or another key pressed first, replays the backtick in order, so typing is unchanged. Holding past 180 ms opens the ring at the cursor; releasing the key always ends the ring: it runs the action slice in the cursor's direction, and anything else (center, nothing, a submenu slice, or a busy session) closes it. Submenus open only by resting 550 ms on their slice. As a backstop, the native side closes the ring itself 400 ms after the release (after any selection capture finishes) if it is still the same ring, so a stalled web round-trip or a failed run cannot leave it open. Shift (~), Ctrl, Alt, AltGr and Win combinations and injected input pass through. Ctrl+` and the tray open the same ring without the hold gesture. Pressing either again while the ring is open closes it.
 - **Context comes from the foreground window**, captured before PieAll shows anything:
   - Explorer or the desktop: the selected items, read over COM. With Windows 11 tabs, only the active tab's visible view counts. With nothing selected, the open folder itself is the target.
   - Any other app except terminals: the selected text, copied with an injected Ctrl+C. The user's clipboard is snapshotted first (memory-backed formats, up to 64 MiB) and restored straight after; no clipboard change within 300 ms means no selection. Terminal classes never get Ctrl+C because it interrupts there.

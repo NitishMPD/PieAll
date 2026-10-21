@@ -1,5 +1,7 @@
 # PieAll — Tauri desktop
 
+<img src="public/brand/pieall.svg" width="80" height="80" alt="PieAll radial mark" />
+
 A Windows radial action utility with **44 implemented commands**, a searchable action browser, focused image editors and isolated local workers. Built from [the product plan](PieAll-plan.md). This is an early implementation, not a verified release of the full 100-action product.
 
 ## Run it yourself

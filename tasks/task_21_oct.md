@@ -1,0 +1,3 @@
+- Branded PieAll with a shared radial mark across dashboard, connection screen, favicon, README and Windows app/installer/tray assets; added a reproducible asset generator and documented the identity.
+- Redesigned the floating ring as a glass tray with pillow slices (parallel gaps, rounded corners, denser fills, solid selected slice), removed the pale crescent above the top slice, made releasing ` always close the ring, and fixed the ring refusing to reopen after a slice opened the dashboard editor.
+- Releasing ` now closes the ring natively as a backstop, 400 ms after release once selection capture ends, so a stalled web round-trip or failed run can't leave the ring open.

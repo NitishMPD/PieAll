@@ -130,7 +130,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
   if (!session)
     return (
       <main className="connection" aria-live="polite">
-        <Icon name="ring" size={40} />
+        <img src="/brand/pieall.svg" width={48} height={48} alt="" />
         <h1>PieAll</h1>
         <p>{error || "Connecting to your local tools…"}</p>
         {error && (
@@ -178,9 +178,13 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
             setUpdates(false);
           }}
         >
-          <span className="brand-symbol">
-            <Icon name="ring" size={30} />
-          </span>
+          <img
+            className="brand-symbol"
+            src="/brand/pieall.svg"
+            width={40}
+            height={40}
+            alt=""
+          />
           <span>
             PieAll<span className="brand-sub">A little less work.</span>
           </span>
