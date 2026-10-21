@@ -79,6 +79,8 @@ export const native = {
     invoke<void>("configure_engine", { name, remove }),
   dismissToast: (id: number, job?: number) =>
     invoke<void>("dismiss_toast", { id, job: job ?? null }),
+  openDownloadLocation: (id: number) =>
+    invoke<void>("open_download_location", { id }),
   cancelJob: (id: number) => invoke<void>("cancel_job", { id }),
   session: () => invoke<Session>("session"),
   shortcutLibrary: () => invoke<ShortcutLibrary>("shortcut_library"),
@@ -136,6 +138,7 @@ export interface Toast {
   detail: string;
 }
 export interface Job {
+  output?: string | null;
   id: number;
   title: string;
   detail: string;

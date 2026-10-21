@@ -11,7 +11,7 @@
     "tauri": "tauri",
     "package:windows": "tauri build --bundles nsis",
     "format:check": "prettier --check web \"scripts/*.cjs\" \"scripts/fixtures/*.json\" .github/workflows/release.yml package.json src-tauri/tauri.conf.json src-tauri/capabilities/local.json tsconfig.json vite.config.ts index.html",
-    "test:release": "node --test scripts/release-version.test.cjs scripts/release-artifacts.test.cjs",
+    "test:release": "node --test scripts/release-version.test.cjs scripts/release-artifacts.test.cjs scripts/github-release.test.cjs",
     "notices:bundle": "python scripts/bundle-notices.py"
   },
   "dependencies": {

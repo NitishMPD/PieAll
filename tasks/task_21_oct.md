@@ -59,3 +59,9 @@
 - Ran Prettier on web/dashboard.css, web/Splash.tsx and web/browser-tools.css so the release workflow's format:check passes.
 - Ran every release-workflow check locally; fixed cargo fmt in tests/download_diagnostic.rs. All checks pass.
 - Added a 'Start PieAll with Windows' checkbox in Customize, backed by the per-user Run registry key (new autostart module and two dashboard-only commands).
+- Added dark mode to the dashboard window: colors now come from tokens in web/tokens.css, with a prefers-color-scheme: dark override.
+
+- Added Open location to successful download toasts, revealing the native job output in Explorer; kept completion notices visible for eight seconds with Close, including over the active dashboard. Seven native shell tests, TypeScript and changed-file formatting passed; native UI/Explorer interaction remains unverified.
+- Fixed output scans failing when downloader fragments disappear during renames, and separated inspection errors from genuine 2 GiB limit errors; both targeted regression tests passed.
+- Fixed release draft creation failing on a stale GitHub release list by validating the creation response directly; added stale-list, resume and ownership regression tests to local/CI release checks. All 10 release tests passed.
+- Updated README for 68 commands, browser downloads, automatic engine setup, folder ZIPs, Start with Windows, the tray shortcut toggle and the current graphite/orange look.

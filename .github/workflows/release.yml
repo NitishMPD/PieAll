@@ -47,7 +47,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm format:check
-      - run: node --test scripts/release-version.test.cjs scripts/release-artifacts.test.cjs
+      - run: node --test scripts/release-version.test.cjs scripts/release-artifacts.test.cjs scripts/github-release.test.cjs
       - run: node scripts/release-version.cjs --check
       - run: cargo fmt --all -- --check
       - run: cargo check --workspace --all-targets --locked --features release-tools

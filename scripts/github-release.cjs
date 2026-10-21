@@ -19,12 +19,17 @@ function gh(args) {
     stdio: ["ignore", "pipe", "pipe"],
   });
 }
-function api(endpoint) {
-  return execFileSync("gh", ["api", endpoint], {
-    cwd: root,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+function api(endpoint, body) {
+  return execFileSync(
+    "gh",
+    ["api", endpoint, ...(body ? ["--method", "POST", "--input", "-"] : [])],
+    {
+      cwd: root,
+      encoding: "utf8",
+      input: body ? JSON.stringify(body) : undefined,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
 }
 function maybeRelease(endpoint) {
   try {
@@ -54,21 +59,21 @@ function draft(version) {
     }).trim();
   let release = findRelease(tag);
   if (!release) {
-    gh([
-      "release",
-      "create",
-      tag,
-      "--target",
-      commit,
-      "--draft",
-      "--generate-notes",
-      "--title",
-      `PieAll ${tag}`,
-    ]);
-    release = findRelease(tag);
+    // The release list can lag behind creation; validate the POST response itself.
+    release = JSON.parse(
+      api(`repos/${REPOSITORY}/releases`, {
+        tag_name: tag,
+        target_commitish: commit,
+        draft: true,
+        generate_release_notes: true,
+        name: `PieAll ${tag}`,
+      }),
+    );
   }
   assert(
-    release?.draft && release.target_commitish === commit,
+    release?.draft &&
+      release.tag_name === tag &&
+      release.target_commitish === commit,
     "Release must be an owned draft at this exact commit",
   );
   fs.mkdirSync(path.join(root, ".release"), { recursive: true });

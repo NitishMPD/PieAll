@@ -84,6 +84,7 @@ struct JobView {
     total: usize,
     state: &'static str,
     fraction: Option<f64>,
+    output: Option<PathBuf>,
 }
 
 #[derive(Serialize)]
@@ -1068,6 +1069,7 @@ async fn run_action(
             total: s.paths.len().max(1),
             state: "running",
             fraction: None,
+            output: None,
         });
         let selection = if from_ring { s.selection.take() } else { None };
         (
@@ -1177,6 +1179,11 @@ async fn run_action(
             }
             s.cancel = None;
             if let Some(job) = s.job.as_mut() {
+                job.output = result
+                    .as_ref()
+                    .ok()
+                    .filter(|_| pieall::downloads::is_download(&id))
+                    .and_then(|report| download_output(report));
                 job.fraction = None;
                 job.state = match &result {
                     Ok(report) if report.contains("FAILED ") => "partial",
@@ -1451,6 +1458,27 @@ fn dismiss_toast(window: WebviewWindow, app: AppHandle, id: u64, job: Option<u64
 }
 
 #[tauri::command]
+fn open_download_location(window: WebviewWindow, app: AppHandle, id: u64) -> Result<()> {
+    if window.label() != "toast" {
+        return Err("Unknown surface.".into());
+    }
+    let path = {
+        let s = state(&app);
+        let s = s.lock().unwrap();
+        s.job
+            .as_ref()
+            .filter(|j| {
+                j.id == id && j.state == "complete" && pieall::downloads::is_download(&j.action)
+            })
+            .and_then(|j| j.output.clone())
+            .ok_or("This download is no longer available.")?
+    };
+    pieall::output::plain_path(&path)?;
+    actions::execute("reveal", &[path], "", &BTreeMap::new())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn cancel_job(window: WebviewWindow, app: AppHandle, id: u64) -> Result<()> {
     if !matches!(window.label(), "dashboard" | "toast") {
         return Err("Unknown surface.".into());
@@ -1565,7 +1593,8 @@ fn show_notice(
     let Some(window) = app.get_webview_window("toast") else {
         return;
     };
-    if job.is_some() && dashboard_active(app) {
+    let has_output = job.as_ref().is_some_and(|j| j.output.is_some());
+    if job.is_some() && !has_output && dashboard_active(app) {
         TOAST_GENERATION.fetch_add(1, Ordering::SeqCst);
         *current_job = None;
         hide_raw(&window);
@@ -1635,7 +1664,13 @@ fn show_notice(
     let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
     show_inactive(&window);
     if tone != "busy" {
-        let linger = if tone == "error" { 3200 } else { 1400 };
+        let linger = if has_output {
+            8000
+        } else if tone == "error" {
+            3200
+        } else {
+            1400
+        };
         let app = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(linger));
@@ -1679,6 +1714,11 @@ fn first_failure(lines: &[&str]) -> Option<String> {
         .iter()
         .find_map(|l| l.strip_prefix("FAILED "))
         .map(|l| l.split_once(": ").map_or(l, |(_, why)| why).to_string())
+}
+
+fn download_output(report: &str) -> Option<PathBuf> {
+    let path = PathBuf::from(report.lines().next()?.strip_prefix("Saved ")?);
+    path.is_absolute().then_some(path)
 }
 
 /// Turns a worker report into a short toast: what was saved, or why not.
@@ -2004,6 +2044,7 @@ pub fn run() {
             preview,
             update_action,
             dismiss_toast,
+            open_download_location,
             cancel_job,
             tool_engines,
             configure_engine,
@@ -2348,6 +2389,18 @@ mod tests {
         assert!(valid_update_key(fixture["key"].as_str().unwrap()));
         assert!(!valid_update_key("invalid"));
         assert!(!valid_update_key(""));
+    }
+    #[test]
+    fn download_output_uses_only_the_saved_absolute_path() {
+        assert_eq!(
+            download_output(
+                "Saved C:\\Downloads\\clip (2).mkv\r\nVideo title\r\nSource video: 1080p"
+            ),
+            Some(PathBuf::from("C:\\Downloads\\clip (2).mkv"))
+        );
+        assert_eq!(download_output("FAILED download"), None);
+        assert_eq!(download_output("Saved relative.mkv"), None);
+        assert_eq!(download_output(""), None);
     }
     #[test]
     fn summaries_name_the_saved_file_or_the_failure() {

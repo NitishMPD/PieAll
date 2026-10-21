@@ -24,16 +24,36 @@ fn output_size(path: &Path) -> Result<u64, String> {
             return Err("Engine output has too many files.".into());
         }
         let entry = entry.map_err(|e| e.to_string())?;
-        let meta = entry.metadata().map_err(|e| e.to_string())?;
+        // yt-dlp renames and removes fragments while this directory is scanned.
+        let meta = match std::fs::symlink_metadata(entry.path()) {
+            Ok(meta) => meta,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e.to_string()),
+        };
         if !meta.is_file() {
-            return Err("Unexpected engine output directory.".into());
+            return Err("Unexpected engine output entry.".into());
         }
-        crate::output::plain_path(&entry.path())?;
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if meta.file_attributes() & 0x400 != 0 {
+                return Err("Reparse points are not supported in engine output.".into());
+            }
+        }
         total = total
             .checked_add(meta.len())
             .ok_or("Output size overflow")?;
     }
     Ok(total)
+}
+fn check_output(destination: Option<&Path>) -> Result<(), String> {
+    if let Some(path) = destination {
+        let size = output_size(path).map_err(|e| format!("Cannot inspect media output: {e}"))?;
+        if size > 2 * 1024 * 1024 * 1024 {
+            return Err("Media output exceeded 2 GiB.".into());
+        }
+    }
+    Ok(())
 }
 /// Drain both pipes even after display limits; never let a verbose codec block.
 pub fn run(
@@ -112,19 +132,15 @@ pub fn run(
             let _ = err.join();
             return Err(e);
         }
-        let too_large = destination
-            .is_some_and(|p| output_size(p).map_or(true, |n| n > 2 * 1024 * 1024 * 1024));
-        if started.elapsed() > timeout || too_large {
+        let output_check = check_output(destination);
+        if started.elapsed() > timeout || output_check.is_err() {
             let _ = child.kill();
             let _ = child.wait();
             let _ = out.join();
             let _ = err.join();
-            return Err(if too_large {
-                "Media output exceeded 2 GiB."
-            } else {
-                "Media engine exceeded its time limit."
-            }
-            .into());
+            return Err(output_check
+                .err()
+                .unwrap_or_else(|| "Media engine exceeded its time limit.".into()));
         }
         match child.try_wait() {
             Ok(Some(status)) => break status,
@@ -141,9 +157,7 @@ pub fn run(
     };
     let stdout = out.join().map_err(|_| "Engine output reader stopped")?;
     let stderr = err.join().map_err(|_| "Engine error reader stopped")?;
-    if destination.is_some_and(|p| output_size(p).map_or(true, |n| n > 2 * 1024 * 1024 * 1024)) {
-        return Err("Media output exceeded its 2 GiB budget or could not be inspected.".into());
-    }
+    check_output(destination)?;
     for s in rx.try_iter() {
         line(&s);
     }
@@ -152,4 +166,49 @@ pub fn run(
     }
     jobs::check()?;
     Ok(stdout)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_checks_distinguish_inspection_errors_and_size_limits() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("media.mp4"), b"video").unwrap();
+        assert_eq!(output_size(dir.path()).unwrap(), 5);
+        check_output(Some(dir.path())).unwrap();
+        std::fs::create_dir(dir.path().join("unexpected")).unwrap();
+        assert!(check_output(Some(dir.path()))
+            .unwrap_err()
+            .starts_with("Cannot inspect media output:"));
+        let large = dir.path().join("large.mp4");
+        std::fs::File::create(&large)
+            .unwrap()
+            .set_len(2 * 1024 * 1024 * 1024 + 1)
+            .unwrap();
+        assert_eq!(
+            check_output(Some(&large)).unwrap_err(),
+            "Media output exceeded 2 GiB."
+        );
+    }
+
+    #[test]
+    fn output_scan_tolerates_fragment_renames() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = dir.path().join("media.part");
+        let second = dir.path().join("media.mp4");
+        std::fs::write(&first, b"video").unwrap();
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                for _ in 0..1000 {
+                    std::fs::rename(&first, &second).unwrap();
+                    std::fs::rename(&second, &first).unwrap();
+                }
+            });
+            for _ in 0..1000 {
+                assert!(output_size(dir.path()).unwrap() <= 10);
+            }
+        });
+    }
 }

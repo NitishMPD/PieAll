@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light dark;
   --font: "Segoe UI Variable Text", "Segoe UI", sans-serif;
   --paper: #f5f5f6;
   --cream: #ffffff;
@@ -6,7 +7,42 @@
   --muted: #6c6c70;
   --line: #e1e1e4;
   --accent: #1c1c1e;
+  --on-accent: #f9f9f9;
+  --accent-hover: #3a3a3c;
   --hover: #ebebed;
   --wedge: #e4e4e7;
+  --wedge-hover: #cecece;
   --select: #ff8a3d;
+  --field: #fbfbfb;
+  --chip: #e4e4e4;
+  --chip-hi: #dedede;
+  --chip-ink: #5f5f5f;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1c1c1e;
+    --cream: #2a2a2d;
+    --ink: #f2f2f4;
+    --muted: #a0a0a6;
+    --line: #3a3a3e;
+    --accent: #f2f2f4;
+    --on-accent: #1c1c1e;
+    --accent-hover: #d8d8dc;
+    --hover: #343438;
+    --wedge: #3a3a3e;
+    --wedge-hover: #4a4a50;
+    --field: #232326;
+    --chip: #2f2f33;
+    --chip-hi: #3a3a3e;
+    --chip-ink: #b4b4ba;
+  }
+  :root .icon-text {
+    background: #3a3d2a;
+    color: #c3cc9a;
+  }
+  :root .icon-files,
+  :root .icon-archives {
+    background: #35382f;
+    color: #b9c3b6;
+  }
 }

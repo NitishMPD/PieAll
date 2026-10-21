@@ -70,11 +70,15 @@ export function Toast() {
           )}
         </span>
         <strong>{notice.title}</strong>
-        {(running || notice.tone === "error") && (
+        {(running || notice.tone === "error" || job?.output) && (
           <button
             className="toast-close"
             aria-label="Close notification"
-            title="Close notification (job continues)"
+            title={
+              running
+                ? "Close notification (job continues)"
+                : "Close notification"
+            }
             onClick={() =>
               void native
                 .dismissToast(notice.id, notice.job?.id)
@@ -85,7 +89,7 @@ export function Toast() {
           </button>
         )}
         {/* Title, then what is happening, then the bar. A finished job reads as a
-            plain result notice and leaves on its own. */}
+            result notice with Open location for saved downloads. */}
         {notice.detail && (
           <span className="toast-detail">
             {running && notice.job
@@ -125,6 +129,19 @@ export function Toast() {
               }
             >
               Cancel
+            </button>
+          </div>
+        )}
+        {job?.output && job.state === "complete" && (
+          <div className="toast-job">
+            <button
+              onClick={() =>
+                void native
+                  .openDownloadLocation(job.id)
+                  .catch((e) => setError(String(e)))
+              }
+            >
+              Open location
             </button>
           </div>
         )}

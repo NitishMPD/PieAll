@@ -33,7 +33,7 @@ No Windows Authenticode certificate is configured. Updater signing authenticates
 
 The base version is the synchronized checked-in version. Release patch = base patch + GITHUB_RUN_NUMBER, with Windows version bounds and stable canonical versions enforced. The script changes only the root package.json version, Tauri config version, the two local Cargo package versions and their two Cargo.lock blocks. Dependency resolutions and pnpm-lock.yaml are unchanged. It records its run in ignored `.release/version.json`, making a retry of the same version step idempotent. A different run number requires a fresh checkout. CI does not commit version bumps.
 
-Generated notes go into a draft release at the source commit. Drafts have no tag yet, so the script finds them by listing releases (the `releases/tags/<tag>` endpoint returns 404 for drafts), which also lets a failed run resume its draft. Packaging builds the x64 installer, creates a portable ZIP and signs both. The script assembles six required assets:
+Generated notes go into a draft release at the source commit. Existing drafts are found by listing releases, which lets a failed run resume its draft without relying on the `releases/tags/<tag>` endpoint. New drafts use the release-creation API response directly because the release list can lag behind creation. The script requires the expected tag, draft state and exact source commit before saving notes. Packaging builds the x64 installer, creates a portable ZIP and signs both. The script assembles six required assets:
 
 - `PieAll_VERSION_x64-setup.exe` and its `.sig`.
 - `PieAll_VERSION_x64-portable.zip` and its `.sig`.

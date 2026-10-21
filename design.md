@@ -7,6 +7,8 @@ The sidebar opens a focused Browser downloads page in the existing warm dashboar
 
 The browser ring starts with Download video and Download audio, then four familiar browser shortcuts. The normal action copies the current browser address and uses saved defaults. The dashboard explains opening the exact video/post page when viewing a feed and retains a paste-link fallback. No extension or connection setup appears. Results preserve saved paths and source/output details for copying.
 
+Download failures distinguish an actual output-size limit from a failure to inspect temporary output; inspection errors include the underlying cause.
+
 ## Implemented editors, engine setup and job notices ? 21 October 2026
 
 Tool setup keeps the warm visual language and uses a compact summary with one Set up tools button, two plain status rows (Video & audio, Browser downloads) and an Advanced disclosure. Ready and Sets up automatically describe user-visible availability. Manual file paths, individual executables and recorded hashes stay inside Advanced. Setup progress, errors, Close and Cancel reuse the existing job surface. The layout stacks controls on narrow windows and retains labelled keyboard controls.
@@ -151,3 +153,11 @@ Every launch shows a 2.5 s splash in its own small transparent window, centered 
 ## Neutral dashboard — 21 October 2026
 
 The dashboard now matches the neutral ring and icon: page `#F5F5F6`, controls `#FFFFFF`, ink and primary buttons graphite `#1C1C1E`, muted `#6C6C70`, lines `#E1E1E4`. Orange `#FF8A3D` (`--select`) is reserved for the selected slice in the ring preview and customizer, echoing the icon. The empty state is three compact icon + short-label steps (Select, Hold, Release on a slice) with Choose files and Customize ring beneath; the duplicate caption is hidden until something is selected, and the selection bar reads "Nothing selected" instead of "Choose your files".
+
+## Dark mode
+
+The dashboard follows the Windows app theme (`prefers-color-scheme`). All dashboard colors come from tokens in `web/tokens.css`; the dark set overrides them there. The floating ring and splash keep their own always-dark styling. Runtime appearance is unverified.
+
+## Download completion action - 21 October 2026
+
+A successful download toast adds an Open location button below its result text and a Close notification button. It keeps the existing neutral toast styling and keyboard focus treatment, remains nonactivating, and stays eight seconds instead of the usual 1.4 seconds. It also appears when the dashboard is active. Selecting Open location reveals the saved file in Explorer; failures appear inline in the toast. Native keyboard, focus and Explorer behavior still require manual acceptance.
