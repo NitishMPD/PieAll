@@ -1122,19 +1122,20 @@ pub fn human_size(bytes: u64) -> String {
         _ => format!("{:.1} MB", bytes as f64 / 1_048_576.0),
     }
 }
+fn explorer_command(path: &Path) -> Command {
+    let mut command = Command::new("explorer.exe");
+    if !path.is_dir() {
+        // Keep the switch outside the quoted path so Explorer parses filenames with spaces.
+        command.arg("/select,");
+    }
+    command.arg(path);
+    command
+}
 fn file_action(id: &str, path: &Path) -> Result<String, String> {
     match id {
         "folder_size" | "find_duplicates" => folder_report(id, path),
         "reveal" => {
-            let arg = if path.is_dir() {
-                path.as_os_str().to_os_string()
-            } else {
-                let mut a = std::ffi::OsString::from("/select,");
-                a.push(path);
-                a
-            };
-            Command::new("explorer.exe")
-                .arg(arg)
+            explorer_command(path)
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -1388,6 +1389,24 @@ fn text_action(id: &str, text: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn explorer_keeps_selection_switch_separate_from_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let folder = root.path().join("Custom downloads, caf\u{e9}");
+        fs::create_dir(&folder).unwrap();
+        let file = folder.join("Video title (2).mkv");
+        fs::write(&file, b"fixture").unwrap();
+        let command = explorer_command(&file);
+        assert_eq!(command.get_program(), "explorer.exe");
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            vec![std::ffi::OsStr::new("/select,"), file.as_os_str()]
+        );
+        assert_eq!(
+            explorer_command(&folder).get_args().collect::<Vec<_>>(),
+            vec![folder.as_os_str()]
+        );
+    }
     #[test]
     fn text_roundtrips() {
         for value in ["a+b / café", "hello\nworld", "😀"] {

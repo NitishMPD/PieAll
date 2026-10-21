@@ -145,4 +145,6 @@ There are 44 implemented commands in the registry. Text formatting/case/encoding
 
 ## Download completion location - 21 October 2026
 
+Explorer receives its selection switch separately from the saved path, preserving filenames with spaces, commas and Unicode. Open location uses the actual completed output's folder (Windows Downloads or the chosen custom destination), even if defaults change afterward.
+
 Successful video/audio downloads expose Open location in their completion toast, including while the dashboard is active. The action uses the completed job ID and its native saved output path to reveal the file in Explorer; web parameters cannot supply a path. Failed, cancelled and running downloads expose no location action. Completion toasts with an output stay eight seconds and can be closed. Files never open automatically.
