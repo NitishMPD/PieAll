@@ -55,3 +55,7 @@
 - Moved the startup splash into its own transparent, click-through, always-on-top window (like Captrain) so it plays over the desktop on every launch, even with the dashboard hidden.
 - Replaced the logo-trace splash with a mini ring that swipes through the feature slices (center names each) and lands on "PieAll"; dropped the light sweep.
 - Restyled the splash ring in the logo colors (graphite slices, copper selection), stripped the tray, strokes and shadows, and fixed icons rendering filled because the slice fill rule also hit icon paths.
+- Fixed Windows downloader proxy connection resets by restoring blocking mode on accepted sockets; added a delayed-header regression and verified YouTube metadata extraction through the proxy.
+- Ran Prettier on web/dashboard.css, web/Splash.tsx and web/browser-tools.css so the release workflow's format:check passes.
+- Ran every release-workflow check locally; fixed cargo fmt in tests/download_diagnostic.rs. All checks pass.
+- Added a 'Start PieAll with Windows' checkbox in Customize, backed by the per-user Run registry key (new autostart module and two dashboard-only commands).

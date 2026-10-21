@@ -1215,6 +1215,16 @@ fn set_trigger_key(window: WebviewWindow, vk: u32) -> Result<()> {
     hold::set_trigger(vk)
 }
 #[tauri::command]
+fn autostart_enabled(window: WebviewWindow) -> Result<bool> {
+    dashboard_only(&window)?;
+    crate::autostart::enabled()
+}
+#[tauri::command]
+fn set_autostart(window: WebviewWindow, enabled: bool) -> Result<()> {
+    dashboard_only(&window)?;
+    crate::autostart::set_enabled(enabled)
+}
+#[tauri::command]
 fn shortcut_library(window: WebviewWindow) -> Result<ShortcutLibrary> {
     dashboard_only(&window)?;
     let catalog = shortcuts::catalog();
@@ -1988,6 +1998,8 @@ pub fn run() {
             run_action,
             shortcut_library,
             set_trigger_key,
+            autostart_enabled,
+            set_autostart,
             copy_result,
             preview,
             update_action,

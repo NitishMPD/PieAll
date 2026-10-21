@@ -98,24 +98,95 @@
 }
 
 /* Startup splash: transparent click-through window holding a mini ring in the logo colors; the copper selection swipes through each feature slice while the center names it, lands on PieAll, then fades (window closes at 2.5 s). */
-.splash { width: 100%; height: 100%; display: grid; place-items: center; animation: splash-out 2.5s ease both; }
-.splash-ring { position: relative; width: 300px; height: 300px; animation: splash-in 0.25s ease-out both; }
-.splash-ring svg { width: 100%; height: 100%; overflow: visible; }
-.splash-slice { color: #f4f4f6; transform-box: view-box; transform-origin: 220px 220px; transition: transform 0.12s ease-out; }
-.splash-slice > path { fill: #1c1c1e; transition: fill 0.09s; }
-.splash-slice svg { opacity: 0.5; transition: opacity 0.09s; }
-.splash-slice.is-selected { color: #1c1c1e; transform: translate(var(--pop-x), var(--pop-y)); }
-.splash-slice.is-selected > path { fill: #ff8a3d; }
-.splash-slice.is-selected svg { opacity: 1; }
-.splash-center { position: absolute; inset: 31.36%; display: grid; place-items: center; border-radius: 50%; background: #1c1c1e; color: #f4f4f6; }
-.splash-center strong { font-family: var(--font); font-size: 15px; font-weight: 600; animation: splash-text 0.14s ease-out both; }
-.splash-ring.is-done .splash-center strong { font-size: 22px; font-weight: 700; }
-@keyframes splash-in { from { opacity: 0; transform: scale(0.94); } }
-@keyframes splash-text { from { opacity: 0; } }
-@keyframes splash-out { 0%, 86% { opacity: 1; } 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) {
-  .splash-ring, .splash-center strong { animation: none; }
-  .splash-slice, .splash-slice > path, .splash-slice svg { transition: none; }
+.splash {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  animation: splash-out 2.5s ease both;
 }
-
-
+.splash-ring {
+  position: relative;
+  width: 300px;
+  height: 300px;
+  animation: splash-in 0.25s ease-out both;
+}
+.splash-ring svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.splash-slice {
+  color: #f4f4f6;
+  transform-box: view-box;
+  transform-origin: 220px 220px;
+  transition: transform 0.12s ease-out;
+}
+.splash-slice > path {
+  fill: #1c1c1e;
+  transition: fill 0.09s;
+}
+.splash-slice svg {
+  opacity: 0.5;
+  transition: opacity 0.09s;
+}
+.splash-slice.is-selected {
+  color: #1c1c1e;
+  transform: translate(var(--pop-x), var(--pop-y));
+}
+.splash-slice.is-selected > path {
+  fill: #ff8a3d;
+}
+.splash-slice.is-selected svg {
+  opacity: 1;
+}
+.splash-center {
+  position: absolute;
+  inset: 31.36%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #1c1c1e;
+  color: #f4f4f6;
+}
+.splash-center strong {
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 600;
+  animation: splash-text 0.14s ease-out both;
+}
+.splash-ring.is-done .splash-center strong {
+  font-size: 22px;
+  font-weight: 700;
+}
+@keyframes splash-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+@keyframes splash-text {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes splash-out {
+  0%,
+  86% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-ring,
+  .splash-center strong {
+    animation: none;
+  }
+  .splash-slice,
+  .splash-slice > path,
+  .splash-slice svg {
+    transition: none;
+  }
+}

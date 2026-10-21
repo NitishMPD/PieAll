@@ -13,6 +13,8 @@ Tool setup provides optional preinstallation of all tools; first use handles set
 
 A per-job loopback HTTP/CONNECT proxy resolves each destination and connects to the checked numeric address. HTTP(S) targets use standard ports, no embedded credentials, and public addresses only, including redirect/extractor connections that use this proxy. Headers, connection count and timeouts are bounded; proxy sockets close with the job. This is a network guard for configured downloader requests, not an OS network sandbox for user-selected executables or their DLLs. No external network downloader is selected; FFmpeg post-processing inputs are restricted to file/pipe protocols.
 
+Accepted proxy sockets explicitly use blocking mode before header reads and tunnel forwarding; Windows inherits the nonblocking listener mode otherwise, causing premature connection resets. A delayed-header regression covers this boundary. A metadata-only yt-dlp check against YouTube video T2Zp8NGdvrk failed through the proxy before the fix and succeeded afterward; this does not verify a complete download, Deno challenges or FFmpeg merging.
+
 Native current-page URL copying is implemented for Chromium and Firefox browser profiles. Feed/media disambiguation, canonical-post discovery from blob players, multi-video pickers, web-image saving and boards remain unfinished. An exact video/post page is the reliable feed target. Live engine installation, packaged worker dispatch, real yt-dlp/Deno/FFmpeg combinations, site behavior, focus/clipboard restoration, toast interaction and accessibility require user-run acceptance; static checks do not establish them.
 
 ## Implemented tool expansion ? 21 October 2026

@@ -169,6 +169,8 @@ fn forward(
     streams: &Streams,
     stop: &AtomicBool,
 ) -> Result<(), String> {
+    // Windows accepted sockets inherit the listener's nonblocking mode.
+    client.set_nonblocking(false).map_err(|e| e.to_string())?;
     client
         .set_read_timeout(Some(Duration::from_secs(30)))
         .map_err(|e| e.to_string())?;
@@ -283,6 +285,22 @@ fn forward(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn proxy_waits_for_request_headers_after_accept() {
+        let proxy = Proxy::start().unwrap();
+        let mut client = TcpStream::connect(proxy.address).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        client.write_all(b"CONNECT ").unwrap();
+        thread::sleep(Duration::from_millis(100));
+        client
+            .write_all(b"127.0.0.1:443 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            .unwrap();
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 502"));
+    }
     #[test]
     fn proxy_rejects_private_connections_and_owns_idle_sockets() {
         let proxy = Proxy::start().unwrap();

@@ -96,6 +96,40 @@ function HoldKey({ prefs }: { prefs: Prefs }) {
   );
 }
 
+function Autostart() {
+  const [on, setOn] = useState(false);
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    native.autostart().then(setOn, (e) => setNote(String(e)));
+  }, []);
+  return (
+    <div className="cz-hold">
+      <label>
+        <input
+          type="checkbox"
+          checked={on}
+          onChange={(e) => {
+            const next = e.target.checked;
+            native.setAutostart(next).then(
+              () => {
+                setOn(next);
+                setNote("");
+              },
+              (error) => setNote(String(error)),
+            );
+          }}
+        />{" "}
+        Start PieAll with Windows
+      </label>
+      {note && (
+        <p role="alert" className="cz-note">
+          {note}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** The ring exactly as it will open, with a ghost slice to add into. */
 function Pie({
   items,
@@ -448,6 +482,7 @@ export function Customize({ session }: { session: Session }) {
     <section className="cz" aria-label="Customize ring">
       <nav className="cz-rail" aria-label="Rings">
         <HoldKey prefs={prefs} />
+        <Autostart />
         {active && (
           <div className="cz-group">
             <h3>Active app</h3>
