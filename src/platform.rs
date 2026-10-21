@@ -636,8 +636,14 @@ pub fn copy_selection(
     cancelled: impl Fn() -> bool,
 ) -> Option<(String, ClipboardSnapshot)> {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_CONTROL;
+    if cancelled() {
+        return None;
+    }
     let snapshot = ClipboardSnapshot::take(owner)?;
     let before = unsafe { GetClipboardSequenceNumber() };
+    if cancelled() {
+        return None;
+    }
     send_chord(VK_CONTROL, b'C' as u16);
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(300);
     while unsafe { GetClipboardSequenceNumber() } == before {
@@ -811,6 +817,13 @@ pub fn set_clipboard_image(width: u32, height: u32, bgra: &[u8]) -> Result<(), S
 
 #[cfg(test)]
 mod shortcut_tests {
+    #[test]
+    fn cancelled_selection_does_not_touch_the_clipboard() {
+        let before = unsafe { super::GetClipboardSequenceNumber() };
+        assert!(super::copy_selection(0, || true).is_none());
+        assert_eq!(unsafe { super::GetClipboardSequenceNumber() }, before);
+    }
+
     #[test]
     fn invalid_source_is_rejected_before_input_is_sent() {
         assert!(super::window_profile(0, 0).is_err());

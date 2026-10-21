@@ -308,9 +308,9 @@ pub fn run(id: &str, url: &str, settings: &Settings, engines: &Engines) -> Resul
     let dest = publish(work.path(), &metadata, &settings.destination)?;
     let ext = metadata["ext"].as_str().unwrap_or("unknown");
     jobs::progress(1, 1, "Download saved");
+    // The toast takes Open location from the first line's absolute path; only that line may start with "Saved ".
     Ok(format!(
-        "Saved {}\r\n{}\r\nSource video: {}×{} · {} · Source audio: {}\r\nSaved format: {ext} · Quality: {} · Audio preference: {}",
-        dest.file_name().unwrap_or_default().to_string_lossy(),
+        "Saved {}\r\nSource video: {}×{} · {} · Source audio: {}\r\nFormat: {ext} · Quality: {} · Audio preference: {}",
         dest.display(),
         metadata["width"],
         metadata["height"],

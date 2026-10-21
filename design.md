@@ -1,6 +1,8 @@
 # PieAll design
 Author: Nitish
 
+ZIP extraction uses the existing job notice and dashboard progress bar, showing byte-based percentage and the current entry during longer work. The existing 700 ms delay, dashboard foreground behavior, Close and Cancel controls apply; short extractions can finish before the progress notice appears.
+
 ## Browser downloads - 21 October 2026
 
 The sidebar opens a focused Browser downloads page in the existing warm dashboard style. A labelled URL field leads into video/audio mode, relevant format controls, a visible destination and Download/Save as defaults. Native folder selection keeps paths out of editable web parameters. Required tools set up on first use through the same progress notice. Form controls remain keyboard accessible; setup and download errors are inline alerts. In-flight forms disable changes while the existing footer/toast retains Cancel. Unknown single-item progress uses an indeterminate bar rather than a guessed percentage; closing its toast does not stop the download.

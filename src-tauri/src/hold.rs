@@ -249,7 +249,8 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
                 }
                 return true;
             }
-            backtick
+            // Let Windows clear async key state on physical release, even after a swallowed down.
+            backtick && down
         }
         State::Passthrough => {
             if backtick && !down {
@@ -287,15 +288,28 @@ mod tests {
             assert!(!handle(&event, false));
             assert!(STATE.get() == State::Idle);
         }
-        // Disabling must still consume the release of a hold we already intercepted.
+        // Disabling must still end an intercepted hold and let Windows see its release.
         STATE.set(State::Holding);
         let release = KBDLLHOOKSTRUCT {
             vkCode: TRIGGER.load(Ordering::SeqCst),
             ..unsafe { std::mem::zeroed() }
         };
-        assert!(handle(&release, false));
+        assert!(!handle(&release, false));
         assert!(STATE.get() == State::Idle);
         set_enabled(true);
         assert!(enabled());
+    }
+
+    #[test]
+    fn held_trigger_blocks_repeats_but_passes_physical_release() {
+        let event = KBDLLHOOKSTRUCT {
+            vkCode: TRIGGER.load(Ordering::SeqCst),
+            ..unsafe { std::mem::zeroed() }
+        };
+        STATE.set(State::Holding);
+        assert!(handle(&event, true));
+        assert!(STATE.get() == State::Holding);
+        assert!(!handle(&event, false));
+        assert!(STATE.get() == State::Idle);
     }
 }

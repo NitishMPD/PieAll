@@ -1,7 +1,15 @@
 # PieAll
 Author: Nitish
 
+ZIP extraction and integrity testing report expanded-byte progress through the existing worker channel, retaining the selected-archive count for batch jobs. Streaming checks cancellation every 64 KiB and limits progress updates to about ten per second; successful processing also reports completion, including empty archives. Existing declared-size validation, staging and publication guards remain in force.
+
+ZIP listing, integrity testing and extraction allow up to 1536 MiB of ZIP input and total expanded data, 768 MiB per expanded file and a 3000:1 expansion ratio (with the existing 1 MiB allowance). These size and ratio limits are three times their original values; entry count, ZIP creation limits and safe extraction rules remain unchanged.
+
 ## Browser downloads - 21 October 2026
+
+The hold hook passes a confirmed hold's physical key release through to Windows, including when shortcuts are disabled during the hold. This clears asynchronous key state before the shared shortcut dispatcher checks for held input; repeat key-downs remain intercepted. Browser URL copying and app shortcuts retain their held-key, foreground and process checks.
+
+Text capture reserves its clipboard activity before its worker is scheduled, so fast ring actions wait for queued as well as running captures. Cancellation is checked before hold confirmation and before selection-copy input; choosing Copy URL or Download during a fast release cannot start a cancelled selection probe after the action has already begun. The shared three-chord URL sequence retains its two 70 ms inter-chord gaps.
 
 Browser downloads in the sidebar accepts one explicit HTTP(S) video/post URL. Download video defaults to best available separate video plus audio, with a combined-stream fallback, no resolution cap and MKV merging/remuxing without forced re-encoding. Download audio extracts the best available audio; Original preserves its codec where supported, while MP3/M4A/Opus/FLAC/WAV are explicit conversions. Persistent defaults cover a quality cap, MKV/MP4/WebM container, audio format and a native-picked destination (initially the Windows Downloads folder). The visible form can override one job; Save as defaults persists its choices. Incompatible codecs/container combinations fail rather than silently selecting lower quality. Cookie-based login, DRM, live-stream acceptance, batch links and full playlists are not supported by this slice.
 

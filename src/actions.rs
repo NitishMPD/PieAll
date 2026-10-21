@@ -846,6 +846,10 @@ fn run(r: &Request) -> Result<String, String> {
                 crate::pdf_tools::run_with_progress(&r.id, path, &r.params, index, r.paths.len())
             } else if media_action(&r.id) {
                 crate::media_tools::run(&r.id, path, &r.params, &r.engines, index, r.paths.len())
+            } else if matches!(r.id.as_str(), "list_zip" | "test_zip" | "extract_zip") {
+                archive_action(&r.id, path, |fraction, item| {
+                    crate::jobs::progress_fraction(index, r.paths.len(), item, Some(fraction));
+                })
             } else {
                 file_action(&r.id, path)
             }
@@ -1201,7 +1205,6 @@ fn file_action(id: &str, path: &Path) -> Result<String, String> {
             }
             Ok(format!("{}\n{:x}", path.display(), hash.finalize()))
         }
-        "list_zip" | "test_zip" | "extract_zip" => archive_action(id, path),
         _ => Err("Unsupported file action".into()),
     }
 }
@@ -1211,10 +1214,15 @@ impl Drop for TempDir {
         let _ = fs::remove_dir_all(&self.0);
     }
 }
-fn archive_action(id: &str, path: &Path) -> Result<String, String> {
+fn archive_action(
+    id: &str,
+    path: &Path,
+    mut progress: impl FnMut(f64, &str),
+) -> Result<String, String> {
+    progress(0., "Reading ZIP");
     let f = File::open(path).map_err(|e| e.to_string())?;
-    if f.metadata().map_err(|e| e.to_string())?.len() > 512 * 1024 * 1024 {
-        return Err("ZIP input exceeds 512 MiB.".into());
+    if f.metadata().map_err(|e| e.to_string())?.len() > 1536 * 1024 * 1024 {
+        return Err("ZIP input exceeds 1536 MiB.".into());
     }
     let mut zip = zip::ZipArchive::new(f).map_err(|e| e.to_string())?;
     if zip.len() > 10000 {
@@ -1234,12 +1242,12 @@ fn archive_action(id: &str, path: &Path) -> Result<String, String> {
             return Err("Duplicate or case-colliding ZIP entry.".into());
         }
         total = total.checked_add(entry.size()).ok_or("ZIP size overflow")?;
-        if total > 512 * 1024 * 1024
-            || entry.size() > 256 * 1024 * 1024
+        if total > 1536 * 1024 * 1024
+            || entry.size() > 768 * 1024 * 1024
             || entry.size()
                 > entry
                     .compressed_size()
-                    .saturating_mul(1000)
+                    .saturating_mul(3000)
                     .max(1024 * 1024)
         {
             return Err("ZIP exceeds expansion safety limits.".into());
@@ -1277,6 +1285,8 @@ fn archive_action(id: &str, path: &Path) -> Result<String, String> {
         }
     }
     let mut actual_total = 0u64;
+    let mut last_progress = std::time::Instant::now();
+    let mut buffer = [0u8; 65536];
     for i in 0..zip.len() {
         crate::jobs::check()?;
         let mut entry = zip.by_index(i).map_err(|e| e.to_string())?;
@@ -1302,16 +1312,34 @@ fn archive_action(id: &str, path: &Path) -> Result<String, String> {
         } else {
             Box::new(std::io::sink())
         };
-        let copied = std::io::copy(&mut entry.by_ref().take(limit + 1), &mut out)
-            .map_err(|e| e.to_string())?;
+        let name = entry.name().to_string();
+        let mut input = entry.by_ref().take(limit + 1);
+        let mut copied = 0u64;
+        loop {
+            crate::jobs::check()?;
+            let n = input.read(&mut buffer).map_err(|e| e.to_string())?;
+            if n == 0 {
+                break;
+            }
+            copied += n as u64;
+            if copied > limit {
+                return Err("ZIP entry expanded beyond its declared size.".into());
+            }
+            out.write_all(&buffer[..n]).map_err(|e| e.to_string())?;
+            if last_progress.elapsed() >= std::time::Duration::from_millis(100) {
+                progress((actual_total + copied) as f64 / total.max(1) as f64, &name);
+                last_progress = std::time::Instant::now();
+            }
+        }
         if copied != limit {
             return Err("ZIP entry expanded beyond its declared size.".into());
         }
         actual_total += copied;
-        if actual_total > 512 * 1024 * 1024 {
+        if actual_total > 1536 * 1024 * 1024 {
             return Err("ZIP expansion limit exceeded.".into());
         }
     }
+    progress(1., "Finishing ZIP");
     if let Some(t) = temp {
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
         for n in 0..10000 {
@@ -1426,12 +1454,51 @@ mod tests {
         fs::write(&p, "hello").unwrap();
         crate::archive_tools::create(&[p], &BTreeMap::new()).unwrap();
         let z = d.path().join("a.zip");
-        assert!(archive_action("test_zip", &z).unwrap().contains("Verified"));
-        archive_action("extract_zip", &z).unwrap();
+        assert!(archive_action("test_zip", &z, |_, _| {})
+            .unwrap()
+            .contains("Verified"));
+        archive_action("extract_zip", &z, |_, _| {}).unwrap();
         assert_eq!(
             fs::read_to_string(d.path().join("a/a.txt")).unwrap(),
             "hello"
         );
+    }
+    #[test]
+    fn extraction_reports_progress_and_preserves_chunked_and_empty_entries() {
+        let d = tempfile::tempdir().unwrap();
+        let z = d.path().join("progress.zip");
+        let data: Vec<u8> = (0..200_000).map(|i| (i % 251) as u8).collect();
+        let mut zip = zip::ZipWriter::new(File::create(&z).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file("large.bin", options).unwrap();
+        zip.write_all(&data).unwrap();
+        zip.start_file("empty.txt", options).unwrap();
+        zip.add_directory("empty-dir/", options).unwrap();
+        zip.finish().unwrap();
+        let mut updates = Vec::new();
+        archive_action("extract_zip", &z, |fraction, _| updates.push(fraction)).unwrap();
+        assert_eq!(updates.first(), Some(&0.));
+        assert_eq!(updates.last(), Some(&1.));
+        assert!(updates.windows(2).all(|p| p[0] <= p[1]));
+        assert!(updates
+            .iter()
+            .all(|f| f.is_finite() && (0. ..=1.).contains(f)));
+        assert_eq!(fs::read(d.path().join("progress/large.bin")).unwrap(), data);
+        assert_eq!(
+            fs::metadata(d.path().join("progress/empty.txt"))
+                .unwrap()
+                .len(),
+            0
+        );
+        assert!(d.path().join("progress/empty-dir").is_dir());
+
+        let empty = d.path().join("empty.zip");
+        zip::ZipWriter::new(File::create(&empty).unwrap())
+            .finish()
+            .unwrap();
+        updates.clear();
+        archive_action("extract_zip", &empty, |fraction, _| updates.push(fraction)).unwrap();
+        assert_eq!(updates, [0., 1.]);
     }
 }
 fn contact_sheet(paths: &[PathBuf], params: &BTreeMap<String, String>) -> Result<String, String> {
@@ -1809,7 +1876,7 @@ mod boundary_tests {
             .unwrap();
         w.write_all(b"unsafe").unwrap();
         w.finish().unwrap();
-        assert!(archive_action("extract_zip", &p).is_err());
+        assert!(archive_action("extract_zip", &p, |_, _| {}).is_err());
         assert!(!d.path().join("outside.txt").exists());
     }
     #[test]

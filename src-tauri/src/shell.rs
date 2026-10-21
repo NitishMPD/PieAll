@@ -682,18 +682,20 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
         .map_or(0, |h| h.0 as usize);
     let generation = RING_GENERATION.load(Ordering::SeqCst);
     let app = app.clone();
+    // Reserve before scheduling: an immediate action must also wait for a queued capture.
+    let capturing = wants_text.then(Capturing::start);
     tauri::async_runtime::spawn_blocking(move || {
-        let _capturing = wants_text.then(Capturing::start);
+        let _capturing = capturing;
         // A held ` may still turn out to be typing; never send Ctrl+C for that.
         // A tap closes the ring, which bumps the ticket and ends the wait.
         if held && wants_text {
             let ticket = || state(&app).lock().unwrap().ticket;
             for _ in 0..400 {
-                if RING_CONFIRMED.load(Ordering::SeqCst) == generation {
-                    break;
-                }
                 if ticket() != lease.ticket {
                     return;
+                }
+                if RING_CONFIRMED.load(Ordering::SeqCst) == generation {
+                    break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
@@ -2401,6 +2403,16 @@ mod tests {
         assert_eq!(download_output("FAILED download"), None);
         assert_eq!(download_output("Saved relative.mkv"), None);
         assert_eq!(download_output(""), None);
+    }
+    #[test]
+    fn download_reports_name_one_file_and_its_location() {
+        let report = "Saved C:\\Downloads\\clip.mkv\r\nSource video: 1920×1080 · \"avc1\" · Source audio: \"opus\"\r\nFormat: mkv · Quality: best · Audio preference: original";
+        let (tone, title, _) = summarize(report, false);
+        assert_eq!((tone, title.as_str()), ("ok", "Saved clip.mkv"));
+        assert_eq!(
+            download_output(report),
+            Some(PathBuf::from("C:\\Downloads\\clip.mkv"))
+        );
     }
     #[test]
     fn summaries_name_the_saved_file_or_the_failure() {
