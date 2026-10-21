@@ -20,6 +20,7 @@ import { WindowControls } from "./TitleBar";
 import { Icon, iconFor } from "./Icon";
 import { Customize, applyTrigger } from "./Customize";
 import { Engines } from "./Engines";
+import { Jobs } from "./Jobs";
 import { BrowserTools } from "./BrowserTools";
 import { TRIGGER_KEYS, usePrefs } from "./prefs";
 import {
@@ -438,7 +439,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                   </pre>
                 </>
               )}
-              {session.busy === "update" && (
+              {session.update.busy && (
                 <progress
                   max="100"
                   value={session.update.progress}
@@ -447,7 +448,11 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               )}
               <div className="button-row">
                 <button
-                  disabled={disabled || !session.update.configured}
+                  disabled={
+                    disabled ||
+                    session.update.busy ||
+                    !session.update.configured
+                  }
                   onClick={() => void perform(() => native.update("check"))}
                 >
                   Check for updates
@@ -455,7 +460,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                 {session.update.version && !session.update.ready && (
                   <button
                     className="primary"
-                    disabled={disabled}
+                    disabled={disabled || session.update.busy}
                     onClick={() =>
                       void perform(() => native.update("download"))
                     }
@@ -466,7 +471,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                 {session.update.ready && (
                   <button
                     className="primary"
-                    disabled={disabled}
+                    disabled={disabled || session.update.busy}
                     onClick={() => setConfirmInstall(session.update.version)}
                   >
                     Install update…
@@ -490,6 +495,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                     className="primary"
                     disabled={
                       disabled ||
+                      session.update.busy ||
                       !session.update.ready ||
                       session.update.version !== confirmInstall
                     }
@@ -751,6 +757,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               </section>
             </div>
           )}
+          <Jobs jobs={session.jobs ?? []} perform={perform} />
           <footer
             className={`status-bar ${session.busy ? "is-busy" : ""}`}
             role="status"
@@ -762,29 +769,6 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               <Icon name="check" size={16} />
             )}
             <span>{session.status}</span>
-            {session.job && session.busy === "action" && (
-              <>
-                <progress
-                  aria-label="Files processed"
-                  max={session.job.total || 1}
-                  value={
-                    session.job.total === 1 && session.job.fraction == null
-                      ? undefined
-                      : session.job.completed + (session.job.fraction ?? 0)
-                  }
-                />
-                <button
-                  disabled={session.job.state === "cancelling"}
-                  onClick={() =>
-                    void perform(() => native.cancelJob(session.job!.id))
-                  }
-                >
-                  {session.job.state === "cancelling"
-                    ? "Cancelling…"
-                    : "Cancel"}
-                </button>
-              </>
-            )}
           </footer>
           {error && (
             <div className="error-banner" role="alert">

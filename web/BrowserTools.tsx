@@ -27,7 +27,8 @@ export function BrowserTools({ session }: { session: Session }) {
     };
   }, []);
   const disabled = !!session.busy || !!session.editor || pending;
-  const job = session.job?.title.startsWith("Download ") ? session.job : null;
+  const job =
+    session.jobs?.find((job) => job.title.startsWith("Download ")) ?? null;
   async function save(chooseFolder: boolean) {
     if (!settings) return;
     setPending(true);
@@ -57,6 +58,9 @@ export function BrowserTools({ session }: { session: Session }) {
     setMessage("");
     try {
       await native.downloadUrl(mode, url, settings.preferences);
+      setMessage(
+        "Download started. You can start another or keep using PieAll.",
+      );
     } catch (e) {
       setError(String(e));
     } finally {

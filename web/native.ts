@@ -38,6 +38,7 @@ export interface ShortcutLibrary {
 }
 export interface Session {
   job?: Job | null;
+  jobs?: Job[];
   revision: number;
   target: string;
   names: string[];
@@ -50,6 +51,7 @@ export interface Session {
   result: string | null;
   actions: Action[];
   update: {
+    busy?: boolean;
     configured: boolean;
     version: string | null;
     notes: string;
@@ -81,6 +83,7 @@ export const native = {
     invoke<void>("dismiss_toast", { id, job: job ?? null }),
   openDownloadLocation: (id: number) =>
     invoke<void>("open_download_location", { id }),
+  jobReport: (id: number) => invoke<string>("job_report", { id }),
   cancelJob: (id: number) => invoke<void>("cancel_job", { id }),
   session: () => invoke<Session>("session"),
   shortcutLibrary: () => invoke<ShortcutLibrary>("shortcut_library"),
@@ -138,6 +141,8 @@ export interface Toast {
   detail: string;
 }
 export interface Job {
+  has_report?: boolean;
+  report?: string | null;
   output?: string | null;
   id: number;
   title: string;

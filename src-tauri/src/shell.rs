@@ -66,11 +66,22 @@ struct Session {
     release: Option<Update>,
     download: Option<Vec<u8>>,
     update_message: String,
+    updating: bool,
     progress: u8,
-    job: Option<JobView>,
-    cancel: Option<Arc<AtomicBool>>,
-    dismissed_job: Option<u64>,
+    jobs: BTreeMap<u64, Job>,
     engines: pieall::engines::Engines,
+}
+
+struct Job {
+    view: JobView,
+    report: Option<String>,
+    cancel: Option<Arc<AtomicBool>>,
+    dismissed: bool,
+}
+impl Job {
+    fn running(&self) -> bool {
+        matches!(self.view.state, "running" | "cancelling")
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -85,6 +96,7 @@ struct JobView {
     state: &'static str,
     fraction: Option<f64>,
     output: Option<PathBuf>,
+    has_report: bool,
 }
 
 #[derive(Serialize)]
@@ -108,6 +120,7 @@ struct ActionView {
 }
 #[derive(Serialize)]
 struct UpdateView {
+    busy: bool,
     configured: bool,
     version: Option<String>,
     notes: String,
@@ -131,6 +144,7 @@ struct View {
     actions: Vec<ActionView>,
     update: UpdateView,
     job: Option<JobView>,
+    jobs: Vec<JobView>,
 }
 
 impl Session {
@@ -152,6 +166,61 @@ impl Session {
         } else {
             Ok(())
         }
+    }
+    fn cancel_job(&mut self, id: u64) -> Result<()> {
+        let job = self
+            .jobs
+            .get_mut(&id)
+            .filter(|j| j.running())
+            .ok_or("This job has already finished.")?;
+        if let Some(cancel) = &job.cancel {
+            cancel.store(true, Ordering::SeqCst);
+        }
+        job.view.state = "cancelling";
+        Ok(())
+    }
+    fn finish_job(&mut self, ticket: u64, revision: u64, id: &str, result: &Result<String>) {
+        if self.revision == revision && self.ticket == ticket {
+            match result {
+                Ok(report) => {
+                    self.result = Some(report.clone());
+                    self.status = "Action complete. Original files preserved.".into();
+                }
+                Err(error) => self.status = error.clone(),
+            }
+        }
+        if let Some(job) = self.jobs.get_mut(&ticket) {
+            job.cancel = None;
+            job.report = Some(result.as_ref().map_or_else(Clone::clone, Clone::clone));
+            let job = &mut job.view;
+            job.has_report = true;
+            job.output = result
+                .as_ref()
+                .ok()
+                .filter(|_| pieall::downloads::is_download(id))
+                .and_then(|report| download_output(report));
+            job.fraction = None;
+            job.state = match result {
+                Ok(report) if report.contains("FAILED ") => "partial",
+                Ok(_) => "complete",
+                Err(e) if e.starts_with("Cancelled.") => "cancelled",
+                Err(_) => "failed",
+            };
+            if result.is_ok() {
+                job.completed = job.total;
+            }
+            job.detail = result.as_ref().map_or_else(
+                |e| e.clone(),
+                |r| r.lines().next().unwrap_or("Complete").into(),
+            );
+        }
+    }
+    fn quiescent(&self) -> Result<()> {
+        self.idle()?;
+        if self.updating || self.jobs.values().any(Job::running) {
+            return Err("Wait for running jobs to finish or cancel them first.".into());
+        }
+        Ok(())
     }
     fn replace(&mut self, paths: Vec<PathBuf>, text: String) {
         self.revision += 1;
@@ -200,7 +269,8 @@ impl Session {
             n => format!("{n} selected files"),
         };
         View {
-            job: self.job.clone(),
+            job: self.jobs.values().next_back().map(|j| j.view.clone()),
+            jobs: self.jobs.values().rev().map(|j| j.view.clone()).collect(),
             revision: self.revision,
             target,
             app: self.source_app.map(|p| p.id.as_str()),
@@ -263,6 +333,7 @@ impl Session {
                 }))
                 .collect(),
             update: UpdateView {
+                busy: self.updating,
                 configured: updates_configured(),
                 version: self.release.as_ref().map(|r| r.version.clone()),
                 notes: self
@@ -329,6 +400,55 @@ impl Drop for Lease {
         }
         drop(s);
         notify(&self.app);
+    }
+}
+
+// Background jobs own their lifetime independently of the interactive selection lease.
+struct JobGuard {
+    app: AppHandle,
+    id: u64,
+}
+impl Drop for JobGuard {
+    fn drop(&mut self) {
+        let state = state(&self.app);
+        let mut s = state.lock().unwrap();
+        if let Some(job) = s.jobs.get_mut(&self.id) {
+            if job.running() {
+                job.view.state = "failed";
+                job.view.detail = "The action stopped unexpectedly. Try again.".into();
+            }
+            job.cancel = None;
+        }
+        drop(s);
+        notify(&self.app);
+    }
+}
+
+struct UpdateGuard {
+    app: AppHandle,
+    install: Option<Lease>,
+}
+impl Drop for UpdateGuard {
+    fn drop(&mut self) {
+        state(&self.app).lock().unwrap().updating = false;
+        drop(self.install.take());
+        notify(&self.app);
+    }
+}
+
+static ENGINE_SETUP: Mutex<()> = Mutex::new(());
+fn engine_setup(cancel: &AtomicBool) -> Result<std::sync::MutexGuard<'static, ()>> {
+    loop {
+        if cancel.load(Ordering::SeqCst) {
+            return Err("Cancelled. Tool setup stopped.".into());
+        }
+        match ENGINE_SETUP.try_lock() {
+            Ok(guard) => return Ok(guard),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                std::thread::sleep(std::time::Duration::from_millis(50))
+            }
+            Err(_) => return Err("Tool setup stopped unexpectedly. Restart PieAll.".into()),
+        }
     }
 }
 
@@ -927,6 +1047,9 @@ async fn configure_engine(
     notify(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let _lease = lease;
+        let _setup = ENGINE_SETUP
+            .try_lock()
+            .map_err(|_| "Tools are being set up. Change custom engines after setup finishes.")?;
         let engine = if remove {
             None
         } else {
@@ -1007,6 +1130,13 @@ async fn run_action(
     if params.len() > 16 || params.iter().any(|(k, v)| k.len() > 64 || v.len() > 256) {
         return Err("Action parameters exceed limits.".into());
     }
+    let download_settings = if pieall::downloads::is_download(&id) {
+        let mut settings = download_defaults(&app)?;
+        settings.preferences = settings.preferences.with_overrides(&params)?;
+        Some(settings)
+    } else {
+        None
+    };
     let from_ring = window.label() == "ring";
     let lease;
     let cancel = Arc::new(AtomicBool::new(false));
@@ -1060,9 +1190,12 @@ async fn run_action(
         s.editor = None;
         s.result = None;
         s.status = format!("Running {}…", action.title);
-        s.cancel = Some(cancel.clone());
-        s.dismissed_job = None;
-        s.job = Some(JobView {
+        // Keep recent results bounded without dropping any active job.
+        while s.jobs.values().filter(|j| !j.running()).count() >= 20 {
+            let oldest = *s.jobs.iter().find(|(_, j)| !j.running()).unwrap().0;
+            s.jobs.remove(&oldest);
+        }
+        let job = JobView {
             action: id.clone(),
             id: s.ticket,
             title: action.title.into(),
@@ -1072,7 +1205,18 @@ async fn run_action(
             state: "running",
             fraction: None,
             output: None,
-        });
+            has_report: false,
+        };
+        let ticket = s.ticket;
+        s.jobs.insert(
+            ticket,
+            Job {
+                view: job,
+                report: None,
+                cancel: Some(cancel.clone()),
+                dismissed: false,
+            },
+        );
         let selection = if from_ring { s.selection.take() } else { None };
         (
             s.paths.clone(),
@@ -1082,6 +1226,14 @@ async fn run_action(
             browser_source.then_some((s.source, s.source_pid)),
         )
     };
+    let guard = JobGuard {
+        app: app.clone(),
+        id: lease.ticket,
+    };
+    let job_revision = revision;
+    // Only actions that touch foreground input/clipboard keep the short interactive lease.
+    let input_action =
+        matches!(id.as_str(), "copy_paths" | "copy_pixels") || params.contains_key("source_hwnd");
     notify(&app);
     if from_ring {
         hide_ring(&app, true)?;
@@ -1091,7 +1243,7 @@ async fn run_action(
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(700));
             if shows_progress(&slow, ticket) {
-                show_job_toast(&slow);
+                show_job_toast(&slow, ticket);
             }
         });
     } else if let Some((source, _)) = browser_source {
@@ -1103,15 +1255,16 @@ async fn run_action(
         show_dashboard(&app)?;
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let _lease = lease;
+        let _guard = guard;
+        let mut input_lease = Some(lease);
         Capturing::wait();
         let started = std::time::Instant::now();
-        let ticket = _lease.ticket;
+        let ticket = _guard.id;
         let progress = |p: pieall::jobs::Progress| {
             {
                 let state = state(&app);
                 let mut s = state.lock().unwrap();
-                let status = if let Some(job) = s.job.as_mut().filter(|j| j.id == ticket) {
+                let status = if let Some(job) = s.jobs.get_mut(&ticket).map(|j| &mut j.view) {
                     job.completed = p.completed.min(p.total);
                     job.total = p.total;
                     job.detail = p.item;
@@ -1126,13 +1279,15 @@ async fn run_action(
                 } else {
                     None
                 };
-                if let Some(status) = status {
+                if let Some(status) =
+                    status.filter(|_| s.ticket == ticket && s.revision == job_revision)
+                {
                     s.status = status;
                 }
             }
             notify(&app);
             if started.elapsed().as_millis() >= 700 && shows_progress(&app, ticket) {
-                show_job_toast(&app);
+                show_job_toast(&app, ticket);
             }
         };
         let result = (|| {
@@ -1146,7 +1301,21 @@ async fn run_action(
             if pieall::downloads::is_download(&id) {
                 pieall::web_proxy::web_url(&text)?;
             }
+            if !input_action {
+                drop(input_lease.take());
+            }
             let mut engines = state(&app).lock().unwrap().engines.clone();
+            let needs_engines = pieall::downloads::is_download(&id)
+                || actions::media_action(&id)
+                || id == "setup_tools";
+            let setup = if needs_engines {
+                Some(engine_setup(&cancel)?)
+            } else {
+                None
+            };
+            if needs_engines {
+                engines = state(&app).lock().unwrap().engines.clone();
+            }
             pieall::engine_install::ensure(
                 &settings_path(&app)?,
                 &id,
@@ -1154,12 +1323,13 @@ async fn run_action(
                 &cancel,
                 &progress,
             )?;
-            state(&app).lock().unwrap().engines = engines.clone();
+            if needs_engines {
+                state(&app).lock().unwrap().engines = engines.clone();
+            }
+            drop(setup);
             if id == "setup_tools" {
                 Ok("Tools ready. Video, audio and downloads are available.".into())
-            } else if pieall::downloads::is_download(&id) {
-                let mut settings = download_defaults(&app)?;
-                settings.preferences = settings.preferences.with_overrides(&params)?;
+            } else if let Some(settings) = download_settings {
                 actions::execute_download(&id, &text, &settings, &engines, &cancel, progress)
             } else {
                 actions::execute_with_engines(
@@ -1170,47 +1340,22 @@ async fn run_action(
         {
             let s = state(&app);
             let mut s = s.lock().unwrap();
-            match &result {
-                Ok(result) => {
-                    s.result = Some(result.clone());
-                    s.status = "Action complete. Original files preserved.".into();
-                }
-                Err(error) => {
-                    s.status = error.clone();
-                }
-            }
-            s.cancel = None;
-            if let Some(job) = s.job.as_mut() {
-                job.output = result
-                    .as_ref()
-                    .ok()
-                    .filter(|_| pieall::downloads::is_download(&id))
-                    .and_then(|report| download_output(report));
-                job.fraction = None;
-                job.state = match &result {
-                    Ok(report) if report.contains("FAILED ") => "partial",
-                    Ok(_) => "complete",
-                    Err(e) if e.starts_with("Cancelled.") => "cancelled",
-                    Err(_) => "failed",
-                };
-                if result.is_ok() {
-                    job.completed = job.total;
-                }
-                job.detail = result.as_ref().map_or_else(
-                    |e| e.clone(),
-                    |r| r.lines().next().unwrap_or("Complete").into(),
-                );
-            }
+            s.finish_job(ticket, job_revision, &id, &result);
         }
-        let dismissed = state(&app).lock().unwrap().dismissed_job == Some(ticket);
+        let dismissed = state(&app)
+            .lock()
+            .unwrap()
+            .jobs
+            .get(&ticket)
+            .is_some_and(|j| j.dismissed);
+        drop(input_lease.take());
         if from_ring {
-            finish_in_place(&app, &id, result, selection, source, ticket);
+            finish_in_place(&app, &id, result, selection, source, ticket, job_revision);
         } else if !from_ring && !dismissed {
-            show_job_toast(&app);
+            show_job_toast(&app, ticket);
         }
-    })
-    .await
-    .map_err(|e| e.to_string())
+    });
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -1451,7 +1596,9 @@ fn dismiss_toast(window: WebviewWindow, app: AppHandle, id: u64, job: Option<u64
     if TOAST_GENERATION.load(Ordering::SeqCst) == id || job.is_some() && *current_job == job {
         TOAST_GENERATION.fetch_add(1, Ordering::SeqCst);
         if let Some(job) = job {
-            state(&app).lock().unwrap().dismissed_job = Some(job);
+            if let Some(job) = state(&app).lock().unwrap().jobs.get_mut(&job) {
+                job.dismissed = true;
+            }
         }
         hide_raw(&window);
         *current_job = None;
@@ -1461,17 +1608,16 @@ fn dismiss_toast(window: WebviewWindow, app: AppHandle, id: u64, job: Option<u64
 
 #[tauri::command]
 fn open_download_location(window: WebviewWindow, app: AppHandle, id: u64) -> Result<()> {
-    if window.label() != "toast" {
+    if !matches!(window.label(), "dashboard" | "toast") {
         return Err("Unknown surface.".into());
     }
     let path = {
         let s = state(&app);
         let s = s.lock().unwrap();
-        s.job
-            .as_ref()
-            .filter(|j| {
-                j.id == id && j.state == "complete" && pieall::downloads::is_download(&j.action)
-            })
+        s.jobs
+            .get(&id)
+            .map(|j| &j.view)
+            .filter(|j| j.state == "complete" && pieall::downloads::is_download(&j.action))
             .and_then(|j| j.output.clone())
             .ok_or("This download is no longer available.")?
     };
@@ -1481,25 +1627,30 @@ fn open_download_location(window: WebviewWindow, app: AppHandle, id: u64) -> Res
 }
 
 #[tauri::command]
+fn job_report(window: WebviewWindow, app: AppHandle, id: u64) -> Result<String> {
+    dashboard_only(&window)?;
+    state(&app)
+        .lock()
+        .unwrap()
+        .jobs
+        .get(&id)
+        .and_then(|j| j.report.clone())
+        .ok_or("This result is no longer available.")
+        .map_err(Into::into)
+}
+
+#[tauri::command]
 fn cancel_job(window: WebviewWindow, app: AppHandle, id: u64) -> Result<()> {
     if !matches!(window.label(), "dashboard" | "toast") {
         return Err("Unknown surface.".into());
     }
     let state = state(&app);
     let mut s = state.lock().unwrap();
-    if s.operation != Some("action") || s.job.as_ref().is_none_or(|j| j.id != id) {
-        return Err("This job has already finished.".into());
-    }
-    if let Some(cancel) = &s.cancel {
-        cancel.store(true, Ordering::SeqCst);
-    }
-    if let Some(job) = s.job.as_mut() {
-        job.state = "cancelling";
-    }
+    s.cancel_job(id)?;
     s.status = "Cancelling… Completed outputs will be kept.".into();
     drop(s);
     notify(&app);
-    show_job_toast(&app);
+    show_job_toast(&app, id);
     Ok(())
 }
 
@@ -1509,24 +1660,28 @@ fn cancel_job(window: WebviewWindow, app: AppHandle, id: u64) -> Result<()> {
 fn shows_progress(app: &AppHandle, ticket: u64) -> bool {
     let s = state(app);
     let s = s.lock().unwrap();
-    s.operation == Some("action")
-        && s.ticket == ticket
-        && s.job.as_ref().is_some_and(|j| {
-            j.id == ticket
-                && j.state == "running"
-                && j.completed < j.total
-                && (j.total > 1
-                    || j.fraction.is_some()
-                    || pieall::downloads::is_download(&j.action)
-                    || actions::media_action(&j.action)
-                    || j.action == "setup_tools")
-        })
+    s.jobs.get(&ticket).is_some_and(|job| {
+        let j = &job.view;
+        j.id == ticket
+            && j.state == "running"
+            && j.completed < j.total
+            && (j.total > 1
+                || j.fraction.is_some()
+                || pieall::downloads::is_download(&j.action)
+                || actions::media_action(&j.action)
+                || j.action == "setup_tools")
+    })
 }
 
-fn show_job_toast(app: &AppHandle) {
+fn show_job_toast(app: &AppHandle, ticket: u64) {
     let s = state(app);
     let s = s.lock().unwrap();
-    let Some(job) = s.job.as_ref().filter(|j| s.dismissed_job != Some(j.id)) else {
+    let Some(job) = s
+        .jobs
+        .get(&ticket)
+        .filter(|j| !j.dismissed)
+        .map(|j| &j.view)
+    else {
         return;
     };
     let job = job.clone();
@@ -1576,9 +1731,10 @@ fn show_notice(
         let s = state(app);
         let s = s.lock().unwrap();
         let Some(latest) = s
-            .job
-            .as_ref()
-            .filter(|j| j.id == snapshot.id && s.dismissed_job != Some(j.id))
+            .jobs
+            .get(&snapshot.id)
+            .filter(|j| !j.dismissed)
+            .map(|j| &j.view)
         else {
             return;
         };
@@ -1591,6 +1747,9 @@ fn show_notice(
         title = latest.title.clone();
         detail = latest.detail.clone();
         job = Some(latest.clone());
+    }
+    if tone == "busy" && current_job.is_some() && job.as_ref().map(|j| j.id) != *current_job {
+        return;
     }
     let Some(window) = app.get_webview_window("toast") else {
         return;
@@ -1683,9 +1842,10 @@ fn show_notice(
             let _ = app.emit_to("toast", "toast-hide", ());
             drop(gate);
             std::thread::sleep(std::time::Duration::from_millis(OUTRO_MS + 60));
-            let _gate = TOAST_GATE.lock().unwrap();
+            let mut gate = TOAST_GATE.lock().unwrap();
             if TOAST_GENERATION.load(Ordering::SeqCst) == generation {
                 hide_raw(&window);
+                *gate = None;
             }
         });
     }
@@ -1797,7 +1957,7 @@ fn action_toast(
     {
         let s = state(app);
         let mut s = s.lock().unwrap();
-        let Some(job) = s.job.as_mut().filter(|j| j.id == ticket) else {
+        let Some(job) = s.jobs.get_mut(&ticket).map(|j| &mut j.view) else {
             return;
         };
         job.title = title.into();
@@ -1806,7 +1966,7 @@ fn action_toast(
             job.state = "failed";
         }
     }
-    show_job_toast(app);
+    show_job_toast(app, ticket);
 }
 fn finish_in_place(
     app: &AppHandle,
@@ -1815,6 +1975,7 @@ fn finish_in_place(
     selection: Option<platform::ClipboardSnapshot>,
     source: usize,
     ticket: u64,
+    revision: u64,
 ) {
     let report = match result {
         Ok(report) => report,
@@ -1829,6 +1990,26 @@ fn finish_in_place(
         action_toast(app, ticket, tone, title, detail);
         return;
     }
+    let _input = if REPORTS.contains(&id) || selection.is_some() {
+        match Lease::acquire(app, "clipboard") {
+            Ok(lease) if state(app).lock().unwrap().revision == revision => {
+                Capturing::wait();
+                Some(lease)
+            }
+            _ => {
+                action_toast(
+                    app,
+                    ticket,
+                    "info",
+                    "Result ready",
+                    "View the result in PieAll's jobs list.",
+                );
+                return;
+            }
+        }
+    } else {
+        None
+    };
     if REPORTS.contains(&id) {
         let body = report
             .split_once("\r\n\r\n")
@@ -1901,8 +2082,29 @@ async fn update(app: &AppHandle, action: &str, expected_version: Option<&str>) -
             "Updates require a signed release configured with PieAll's own public key.".into(),
         );
     }
-    state(app).lock().unwrap().idle()?;
-    let _lease = Lease::acquire(app, "update")?;
+    let _update = {
+        let state = state(app);
+        let mut s = state.lock().unwrap();
+        if s.updating {
+            return Err("An update operation is already running.".into());
+        }
+        let install = if action == "install" {
+            s.quiescent()?;
+            s.ticket += 1;
+            s.operation = Some("update");
+            Some(Lease {
+                app: app.clone(),
+                ticket: s.ticket,
+            })
+        } else {
+            None
+        };
+        s.updating = true;
+        UpdateGuard {
+            app: app.clone(),
+            install,
+        }
+    };
     state(app).lock().unwrap().update_message = match action {
         "check" => "Checking for updates…",
         "download" => "Downloading update…",
@@ -2048,6 +2250,7 @@ pub fn run() {
             dismiss_toast,
             open_download_location,
             cancel_job,
+            job_report,
             tool_engines,
             configure_engine,
             download_settings,
@@ -2195,7 +2398,7 @@ pub fn run() {
                             result.and(checked)
                         }
                         "exit" => {
-                            let idle = state(app).lock().unwrap().idle();
+                            let idle = state(app).lock().unwrap().quiescent();
                             if idle.is_ok() {
                                 app.exit(0);
                             }
@@ -2456,6 +2659,97 @@ mod tests {
         assert_eq!(s.revision, 2);
         assert!(s.paths.is_empty());
         assert_eq!(s.view().kind, "text");
+    }
+
+    fn running_job(id: u64) -> Job {
+        Job {
+            view: JobView {
+                action: "download_video".into(),
+                id,
+                title: format!("Download {id}"),
+                detail: "Downloading".into(),
+                completed: 0,
+                total: 1,
+                state: "running",
+                fraction: Some(0.3),
+                output: None,
+                has_report: false,
+            },
+            report: None,
+            cancel: Some(Arc::new(AtomicBool::new(false))),
+            dismissed: false,
+        }
+    }
+
+    #[test]
+    fn concurrent_jobs_allow_new_context_and_cancel_independently() {
+        let mut s = Session {
+            ticket: 2,
+            jobs: BTreeMap::from([(1, running_job(1)), (2, running_job(2))]),
+            ..Session::default()
+        };
+        assert!(s.idle().is_ok());
+        assert!(s.quiescent().is_err());
+        let first_cancel = s.jobs[&1].cancel.clone().unwrap();
+        let second_cancel = s.jobs[&2].cancel.clone().unwrap();
+        s.cancel_job(1).unwrap();
+        assert!(first_cancel.load(Ordering::SeqCst));
+        assert!(!second_cancel.load(Ordering::SeqCst));
+        assert_eq!(s.jobs[&2].view.state, "running");
+        s.replace(vec![PathBuf::from("C:/another.png")], String::new());
+        s.finish_job(1, 0, "download_video", &Err("Cancelled. Stopped.".into()));
+        assert_eq!(s.jobs[&1].view.state, "cancelled");
+        assert!(s.cancel_job(1).is_err());
+        assert!(s.jobs[&2].running());
+        assert_eq!(s.paths, vec![PathBuf::from("C:/another.png")]);
+        assert!(s.result.is_none());
+        assert!(s.idle().is_ok());
+    }
+
+    #[test]
+    fn out_of_order_completion_retains_each_result_and_dismissal() {
+        let mut s = Session {
+            ticket: 2,
+            jobs: BTreeMap::from([(1, running_job(1)), (2, running_job(2))]),
+            ..Session::default()
+        };
+        s.jobs.get_mut(&1).unwrap().dismissed = true;
+        s.finish_job(
+            2,
+            0,
+            "download_video",
+            &Ok("Saved C:\\Downloads\\second.mkv".into()),
+        );
+        s.finish_job(
+            1,
+            0,
+            "download_video",
+            &Ok("Saved C:\\Downloads\\first.mkv".into()),
+        );
+        assert_eq!(s.result.as_deref(), Some("Saved C:\\Downloads\\second.mkv"));
+        assert_eq!(
+            s.jobs[&1].view.output,
+            Some(PathBuf::from("C:\\Downloads\\first.mkv"))
+        );
+        assert_eq!(
+            s.jobs[&2].view.output,
+            Some(PathBuf::from("C:\\Downloads\\second.mkv"))
+        );
+        assert!(s.jobs[&1].dismissed);
+        assert!(!s.jobs[&2].dismissed);
+        assert!(s.jobs.values().all(|j| j.cancel.is_none()));
+        assert_eq!(s.view().jobs.len(), 2);
+        assert!(s.quiescent().is_ok());
+    }
+
+    #[test]
+    fn waiting_for_shared_engine_setup_is_cancellable() {
+        let _setup = ENGINE_SETUP.lock().unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let worker_cancel = cancel.clone();
+        let waiter = std::thread::spawn(move || engine_setup(&worker_cancel).is_err());
+        cancel.store(true, Ordering::SeqCst);
+        assert!(waiter.join().unwrap());
     }
     #[test]
     fn empty_session_disables_window_actions_and_busy_editor_blocks_changes() {
