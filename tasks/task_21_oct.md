@@ -12,3 +12,5 @@
 - Redesigned dashboard navigation and empty state; added Customize ring (hold-key choice, per file type and per app ring layouts).
 - Rebuilt Customize ring as a fixed three-pane editor (rail with active app and app search, full ring preview, slice list and add picker); removed filler copy and made the dashboard non-scrolling.
 - Added a native Use shortcut tray toggle to pause hold-key and Ctrl+backtick invocation for the current session, preserve manual ring access, and guard hotkey restoration; verified disabled-key passthrough and active-hold release with a focused Rust unit test.
+- Replaced the hand-drawn icon set with Lucide plus a keyword resolver that gives app commands relevant icons (782 of 870 shortcut titles matched, generic fallback for the rest).
+- The ring no longer flashes the previous target's slices while reading the selection: it shows the empty tray and "Reading…" hub, then the real slices fade in once.

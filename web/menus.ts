@@ -1,5 +1,6 @@
 import type { Action, Session } from "./native";
 import { contextualActions } from "./action-search";
+import { iconFor } from "./Icon";
 import { getPrefs, type Prefs } from "./prefs";
 
 /** One ring slice: a preset action or a submenu of them. */
@@ -15,48 +16,6 @@ export interface MenuItem {
 }
 
 const MAX = 8;
-const shortcutIcons: Record<string, string> = {
-  "frame-tool": "frame",
-  "rectangle-tool": "crop",
-  "add-auto-layout": "grid",
-  "quick-actions": "search",
-  "group-selection": "grid",
-  export: "open",
-  brush: "images",
-  "free-transform": "resize",
-  "layer-via-copy": "duplicate",
-  "image-size": "resize",
-  "select-and-mask": "crop",
-  "save-a-copy": "copy",
-  "new-tab": "window",
-  "reopen-closed-tab": "window",
-  downloads: "open",
-  "find-on-page": "search",
-  "bookmark-page": "pin",
-  "new-folder": "files",
-  rename: "text",
-  properties: "info",
-  "address-bar": "link",
-  "search-folder": "search",
-  "details-view": "grid",
-  "command-palette": "search",
-  "quick-open": "open",
-  "format-document": "code",
-  "toggle-line-comment": "code",
-  "search-files": "search",
-  "focus-terminal": "terminal",
-  terminal: "terminal",
-  copy: "copy",
-  paste: "clipboard",
-  "new-note": "text",
-  "new-page": "text",
-  find: "search",
-  search: "search",
-};
-function shortcutIcon(id: string): string {
-  return shortcutIcons[id.split(":").at(-1) ?? ""] ?? "apps";
-}
-
 function run(
   action: string,
   label: string,
@@ -175,7 +134,7 @@ export function shortcutItem(action: Action): MenuItem {
   return run(
     action.id,
     action.title,
-    shortcutIcon(action.id),
+    iconFor(action.title),
     {},
     action.shortcut ?? undefined,
   );

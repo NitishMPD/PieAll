@@ -180,7 +180,7 @@ export function Ring({
 
   function track(clientX: number, clientY: number) {
     const box = svg.current?.getBoundingClientRect();
-    if (!box || !items.length) return;
+    if (!box || !items.length || reading) return;
     const x = ((clientX - box.left) * SIZE) / box.width;
     const y = ((clientY - box.top) * SIZE) / box.height;
     setCentered(Math.hypot(x - SIZE / 2, y - SIZE / 2) < DEAD_ZONE);
@@ -292,92 +292,102 @@ export function Ring({
           </defs>
           <circle className="ring-rim" cx="220" cy="220" r={OUTER + 10} />
           <circle className="ring-well" cx="220" cy="220" r={INNER - 7} />
-          <g className="sectors" key={path.join("/")}>
-            {Array.from({ length: count }, (_, index) => {
-              const item = items[index];
-              const angle = (index * 360) / count;
-              const [x, y] = point((OUTER + INNER) / 2, angle);
-              const [px, py] = point(5, angle);
-              const active = !!item && selected === index;
-              return (
-                <g key={item?.key ?? `empty-${index}`} className="sector-shell">
+          {/* Slices appear only once the selection is read: the previous target's
+              slices would show first and then reshape, which read as a jump. */}
+          {!reading && (
+            <g className="sectors" key={path.join("/")}>
+              {Array.from({ length: count }, (_, index) => {
+                const item = items[index];
+                const angle = (index * 360) / count;
+                const [x, y] = point((OUTER + INNER) / 2, angle);
+                const [px, py] = point(5, angle);
+                const active = !!item && selected === index;
+                return (
                   <g
-                    className={`sector ${active ? "is-selected" : ""} ${item ? "" : "is-placeholder"}`}
-                    style={
-                      {
-                        "--pop-x": `${px - SIZE / 2}px`,
-                        "--pop-y": `${py - SIZE / 2}px`,
-                      } as CSSProperties
-                    }
-                    role={item ? "menuitem" : undefined}
-                    aria-label={
-                      item
-                        ? [item.label, item.hint].filter(Boolean).join(", ")
-                        : undefined
-                    }
-                    aria-haspopup={item?.children ? "menu" : undefined}
-                    aria-disabled={blocked || undefined}
-                    tabIndex={
-                      item
-                        ? active || (selected === null && index === 0)
-                          ? 0
-                          : -1
-                        : undefined
-                    }
-                    ref={(el) => {
-                      refs.current[index] = el;
-                    }}
-                    onFocus={() => item && setSelected(index)}
-                    onClick={() => item && activate(item)}
+                    key={item?.key ?? `empty-${index}`}
+                    className="sector-shell"
                   >
-                    {item && (
-                      <title>
-                        {`${item.label}${item.hint ? ` · ${item.hint}` : ""}`}
-                      </title>
-                    )}
-                    <path className="sector-shape" d={shapes[index]} />
-                    <path className="sector-sheen" d={shapes[index]} />
-                    {active && item?.children && !blocked && (
-                      <path
-                        key={`dwell-${item.key}`}
-                        className="dwell"
-                        d={arcPath(index, count)}
-                        pathLength={1}
-                        style={{ "--dwell": `${DWELL_MS}ms` } as CSSProperties}
-                      />
-                    )}
-                    {item && (
-                      <g
-                        transform={`translate(${x},${y})`}
-                        className="sector-content"
-                      >
-                        <foreignObject x="-14" y="-29" width="28" height="28">
-                          <span className="wedge-icon">
-                            <Icon name={item.icon} size={22} />
-                          </span>
-                        </foreignObject>
-                        <text textAnchor="middle">
-                          {labelLines(item.label).map(
-                            (line, lineIndex, lines) => (
-                              <tspan
-                                key={lineIndex}
-                                x="0"
-                                y={
-                                  (lines.length === 1 ? 15 : 9) + lineIndex * 14
-                                }
-                              >
-                                {line}
-                              </tspan>
-                            ),
-                          )}
-                        </text>
-                      </g>
-                    )}
+                    <g
+                      className={`sector ${active ? "is-selected" : ""} ${item ? "" : "is-placeholder"}`}
+                      style={
+                        {
+                          "--pop-x": `${px - SIZE / 2}px`,
+                          "--pop-y": `${py - SIZE / 2}px`,
+                        } as CSSProperties
+                      }
+                      role={item ? "menuitem" : undefined}
+                      aria-label={
+                        item
+                          ? [item.label, item.hint].filter(Boolean).join(", ")
+                          : undefined
+                      }
+                      aria-haspopup={item?.children ? "menu" : undefined}
+                      aria-disabled={blocked || undefined}
+                      tabIndex={
+                        item
+                          ? active || (selected === null && index === 0)
+                            ? 0
+                            : -1
+                          : undefined
+                      }
+                      ref={(el) => {
+                        refs.current[index] = el;
+                      }}
+                      onFocus={() => item && setSelected(index)}
+                      onClick={() => item && activate(item)}
+                    >
+                      {item && (
+                        <title>
+                          {`${item.label}${item.hint ? ` · ${item.hint}` : ""}`}
+                        </title>
+                      )}
+                      <path className="sector-shape" d={shapes[index]} />
+                      <path className="sector-sheen" d={shapes[index]} />
+                      {active && item?.children && !blocked && (
+                        <path
+                          key={`dwell-${item.key}`}
+                          className="dwell"
+                          d={arcPath(index, count)}
+                          pathLength={1}
+                          style={
+                            { "--dwell": `${DWELL_MS}ms` } as CSSProperties
+                          }
+                        />
+                      )}
+                      {item && (
+                        <g
+                          transform={`translate(${x},${y})`}
+                          className="sector-content"
+                        >
+                          <foreignObject x="-14" y="-29" width="28" height="28">
+                            <span className="wedge-icon">
+                              <Icon name={item.icon} size={22} />
+                            </span>
+                          </foreignObject>
+                          <text textAnchor="middle">
+                            {labelLines(item.label).map(
+                              (line, lineIndex, lines) => (
+                                <tspan
+                                  key={lineIndex}
+                                  x="0"
+                                  y={
+                                    (lines.length === 1 ? 15 : 9) +
+                                    lineIndex * 14
+                                  }
+                                >
+                                  {line}
+                                </tspan>
+                              ),
+                            )}
+                          </text>
+                        </g>
+                      )}
+                    </g>
                   </g>
-                </g>
-              );
-            })}
-          </g>
+                );
+              })}
+            </g>
+          )}
         </svg>
         <button
           className={`ring-center ${centered && path.length ? "is-dwelling" : ""}`}

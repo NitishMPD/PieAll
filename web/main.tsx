@@ -15,7 +15,7 @@ import {
 } from "./action-search";
 import { Ring } from "./Ring";
 import { Toast } from "./Toast";
-import { Icon } from "./Icon";
+import { Icon, iconFor } from "./Icon";
 import { Customize, applyTrigger } from "./Customize";
 import { TRIGGER_KEYS, usePrefs } from "./prefs";
 import "./styles.css";
@@ -628,15 +628,17 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                             >
                               <Icon
                                 name={
-                                  [
-                                    "convert",
-                                    "crop",
-                                    "resize",
-                                    "frame",
-                                    "compress",
-                                  ].includes(action.id)
-                                    ? action.id
-                                    : action.group
+                                  action.shortcut
+                                    ? iconFor(action.title)
+                                    : [
+                                          "convert",
+                                          "crop",
+                                          "resize",
+                                          "frame",
+                                          "compress",
+                                        ].includes(action.id)
+                                      ? action.id
+                                      : action.group
                                 }
                                 size={20}
                               />

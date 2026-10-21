@@ -195,22 +195,22 @@ body,
   color: var(--ink);
   outline: none;
 }
-.cz-slice path {
+.cz-slice > path {
   fill: var(--wedge);
   stroke: none;
   cursor: pointer;
   transition: fill 0.12s;
 }
-.cz-slice:hover path {
+.cz-slice:hover > path {
   fill: #f0c796;
 }
 .cz-slice.is-selected {
   color: #fff8ee;
 }
-.cz-slice.is-selected path {
+.cz-slice.is-selected > path {
   fill: var(--accent);
 }
-.cz-slice:focus-visible path {
+.cz-slice:focus-visible > path {
   stroke: var(--ink);
   stroke-width: 3;
 }
@@ -230,13 +230,13 @@ body,
 .cz-slice.is-ghost {
   color: var(--muted);
 }
-.cz-slice.is-ghost path {
+.cz-slice.is-ghost > path {
   fill: transparent;
   stroke: #cdb89b;
   stroke-width: 2;
   stroke-dasharray: 7 6;
 }
-.cz-slice.is-placeholder path {
+.cz-slice.is-placeholder > path {
   fill: #f1e6d4;
   cursor: default;
 }
