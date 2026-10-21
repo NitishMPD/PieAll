@@ -1,6 +1,23 @@
 ﻿# Verification record
 Author: Nitish
 
+## Contextual app library — 21 October 2026
+
+The shipped catalog expands shared keymaps into 3,079 action IDs across 57 profiles, plus the existing 44 local tools. Source validation checks unique profile/executable/action IDs, known key grammar, resolvable IDs and six valid quick choices per profile. It does not prove every default binding against installed app versions.
+
+Passed for this change:
+
+- `cargo test -p pieall --lib shortcut --locked`: 4 passed, covering the bundled catalog/parser, global-invocation collision detection and fail-closed invalid window input (no real keystrokes sent).
+- `cargo test -p pieall-desktop --bin pieall-desktop shell::tests --locked`: 5 passed, including session exposure restricted to the captured profile.
+- `pnpm test`: 14 passed, covering geometry, recursive menu reachability, ranked direct actions, long labels, whole-chord/token search, profile eligibility and pagination across the full shipped catalog.
+- `pnpm run typecheck` and `cargo clippy --workspace --all-targets --locked -- -D warnings`.
+- `node scripts/preview-ui.cjs --shortcuts`: static rendering asserts 60 rows, app quick choices and pagination; its fixture includes 3,083 rows (full app library plus four window tools). A 1,000-query Node run reported about 0.16 ms mean search time and 0.64 ms index construction on this machine. These are microbenchmarks, not native app latency or UI frame-rate measurements.
+- One 1040×740 browser image of the static actual React fixture checked eight Figma choices and bounded results. A root-relative logo preload produced an access-denied message in the headless fixture; its inlined logo rendered. No app, dev server or build was launched.
+
+The broad frontend formatter also flagged five untouched files (`web/bootstrap.tsx`, `web/geometry.test.ts`, `web/geometry.ts`, `web/Toast.tsx`, `web/tokens.css`); they were not reformatted as part of catalog work. Changed frontend files are checked separately. A transient Windows incremental-cache access warning during an earlier test invocation did not recur in the later checks.
+
+User-run acceptance: start with `pnpm tauri dev` (or build without an installer using `pnpm tauri build --no-bundle`). From Explorer, Chrome/Edge, Word/Excel, Figma, Photoshop, a code editor and a terminal, verify all six quick choices, All shortcuts categories/More pages, keyboard navigation, immediate release after a flick, click while holding, dashboard app filtering/search/pagination, Escape/focus restoration and Narrator. Exercise mode-dependent commands in their intended mode. Explicitly check Ctrl+backtick actions in VS Code and Excel, then confirm PieAll's own hotkey still works. Change focus or close the source before dispatch and during a multi-chord action; no further keys should reach another app. Check clipboard behavior, elevated targets, US/alternate layouts, dialogs, app-customized keymaps and actual aliases. Measure cold/warm invocation, hold-to-action latency, frame consistency and process-tree memory. None of those native checks was run in this session.
+
 ## Hold-to-open, in-place actions — 20 October 2026
 
 Passed after the invocation rework:

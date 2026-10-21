@@ -1,4 +1,4 @@
-import type { Action } from "./native";
+import type { Action, Session } from "./native";
 
 /** One ring slice: a preset action or a submenu of them. */
 export interface MenuItem {
@@ -12,6 +12,47 @@ export interface MenuItem {
 }
 
 const MAX = 8;
+const shortcutIcons: Record<string, string> = {
+  "frame-tool": "frame",
+  "rectangle-tool": "crop",
+  "add-auto-layout": "grid",
+  "quick-actions": "search",
+  "group-selection": "grid",
+  export: "open",
+  brush: "images",
+  "free-transform": "resize",
+  "layer-via-copy": "duplicate",
+  "image-size": "resize",
+  "select-and-mask": "crop",
+  "save-a-copy": "copy",
+  "new-tab": "window",
+  "reopen-closed-tab": "window",
+  downloads: "open",
+  "find-on-page": "search",
+  "bookmark-page": "pin",
+  "new-folder": "files",
+  rename: "text",
+  properties: "info",
+  "address-bar": "link",
+  "search-folder": "search",
+  "details-view": "grid",
+  "command-palette": "search",
+  "quick-open": "open",
+  "format-document": "code",
+  "toggle-line-comment": "code",
+  "search-files": "search",
+  "focus-terminal": "terminal",
+  terminal: "terminal",
+  copy: "copy",
+  paste: "clipboard",
+  "new-note": "text",
+  "new-page": "text",
+  find: "search",
+  search: "search",
+};
+function shortcutIcon(id: string): string {
+  return shortcutIcons[id.split(":").at(-1) ?? ""] ?? "apps";
+}
 
 function run(
   action: string,
@@ -111,6 +152,76 @@ export const menus: Record<string, MenuItem[]> = {
   ],
 };
 
+/** Only native eligible app actions enter the ring, never the browse library. */
+export function contextMenu(session: Session): MenuItem[] {
+  const base = menus[session.kind] ?? [];
+  const shortcuts = session.actions.filter((a) => a.eligible && a.shortcut);
+  if (!shortcuts.length) return base;
+  const categories = new Map<string, MenuItem[]>();
+  for (const action of shortcuts) {
+    const category = action.category ?? "Shortcuts";
+    const items = categories.get(category) ?? [];
+    items.push(
+      run(
+        action.id,
+        action.title,
+        shortcutIcon(action.id),
+        {},
+        action.shortcut ?? undefined,
+      ),
+    );
+    categories.set(category, items);
+  }
+  const app = Array.from(categories, ([name, children]) =>
+    sub(`app:${name}`, name, "code", children),
+  );
+  const quick = shortcuts
+    .filter((action) => action.priority != null)
+    .sort((a, b) => a.priority! - b.priority!)
+    .slice(0, 6)
+    .map((action) =>
+      run(
+        action.id,
+        action.title,
+        shortcutIcon(action.id),
+        {},
+        action.shortcut ?? undefined,
+      ),
+    );
+  const appMenu = quick.length
+    ? [...quick, sub("app-all", "All shortcuts", "apps", app)]
+    : app;
+  return session.kind === "window"
+    ? [...appMenu, sub("window-tools", "Window", "window", base)]
+    : [...base, sub("app-shortcuts", "App shortcuts", "apps", appMenu)];
+}
+
+/** Recursively page every level; no catalog entry may disappear past a slice limit. */
+function paginate(items: MenuItem[], page = 0): MenuItem[] {
+  if (items.length <= MAX) return items;
+  return [
+    ...items.slice(0, MAX - 1),
+    sub(
+      `overflow:${page}`,
+      "More",
+      "more",
+      paginate(items.slice(MAX - 1), page + 1),
+    ),
+  ];
+}
+
+/** Keep long app command names inside their wedge; the accessible label stays complete. */
+export function labelLines(label: string): string[] {
+  if (label.length <= 16) return [label];
+  const split = label.lastIndexOf(" ", 16);
+  const at = split > 0 ? split : 16;
+  const rest = label.slice(at).trim();
+  return [
+    label.slice(0, at),
+    rest.length > 16 ? `${rest.slice(0, 15).trimEnd()}…` : rest,
+  ];
+}
+
 /**
  * Keeps only what the native registry says fits this selection, minus
  * conversions to the selection's own format. Empty submenus
@@ -140,14 +251,9 @@ export function resolve(
       if (item.children) {
         const children = walk(item.children);
         if (children.length < 2) return children;
-        return [{ ...item, children: children.slice(0, MAX) }];
+        return [{ ...item, children: paginate(children) }];
       }
       return item.action && ok.has(item.action) ? [item] : [];
     });
-  const out = walk(items);
-  if (out.length <= MAX) return out;
-  return [
-    ...out.slice(0, MAX - 1),
-    sub("overflow", "More", "more", out.slice(MAX - 1, MAX * 2 - 2)),
-  ];
+  return paginate(walk(items));
 }

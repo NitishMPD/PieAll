@@ -86,6 +86,70 @@ const session = {
     progress: 0,
   },
 };
+if (process.argv.includes("--shortcuts")) {
+  const source = JSON.parse(
+    fs.readFileSync(path.join(root, "src/shortcuts.json"), "utf8"),
+  );
+  const library = {
+    profiles: source.profiles,
+    actions: source.profiles.flatMap((profile) =>
+      profile.sets.flatMap((set) =>
+        source.sets[set].map((binding) => ({
+          ...binding,
+          id: `app:${profile.id}:${binding.id}`,
+          profile: profile.id,
+          priority:
+            profile.quick.indexOf(binding.id) < 0
+              ? null
+              : profile.quick.indexOf(binding.id),
+        })),
+      ),
+    ),
+  };
+  const { libraryActions, indexActions, searchActions } = load(
+    path.join(root, "web/action-search.ts"),
+  );
+  // This static fixture includes the full browse library; native sessions send only their app subset.
+  session.target = "Figma";
+  session.kind = "window";
+  session.app = "figma";
+  session.names = [];
+  session.actions = [
+    ...["center_window", "always_top", "fit_window", "window_details"].map(
+      (id) => ({
+        id,
+        title: id.replaceAll("_", " "),
+        group: "Window",
+        fields: [],
+        eligible: true,
+      }),
+    ),
+    ...libraryActions(library, "figma"),
+  ];
+  const { performance } = require("node:perf_hooks");
+  const startIndex = performance.now();
+  const index = indexActions(session.actions);
+  const indexMs = performance.now() - startIndex;
+  const queries = [
+    "",
+    "figma layout",
+    "photoshop Ctrl+M",
+    "excel filter",
+    "code format",
+    "not-found",
+  ];
+  const startSearch = performance.now();
+  for (let i = 0; i < 1000; i++)
+    searchActions(index, queries[i % queries.length], "All actions");
+  console.log(
+    JSON.stringify({
+      actions: index.length,
+      profiles: source.profiles.length,
+      indexMs,
+      meanSearchMs: (performance.now() - startSearch) / 1000,
+    }),
+  );
+}
 const css =
   fs.readFileSync(path.join(root, "web/tokens.css"), "utf8") +
   fs
@@ -94,6 +158,17 @@ const css =
 const markup = renderToStaticMarkup(
   React.createElement(App, { initialSession: session }),
 );
+if (process.argv.includes("--shortcuts")) {
+  const rows = (markup.match(/class="action-row"/g) ?? []).length;
+  if (rows !== 60) throw new Error(`Expected 60 rendered rows, got ${rows}`);
+  if (!markup.includes("Frame tool") || !markup.includes("All shortcuts"))
+    throw new Error("Missing app ring choices");
+  if (!markup.includes("Next</button>"))
+    throw new Error("Missing action pagination");
+  console.log(
+    "Static render: 60 rows, app quick actions and accessible pagination verified.",
+  );
+}
 const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>${css}html,body,#root{height:740px;min-height:0}body{min-width:640px}</style></head><body><div id="root">${markup}</div></body></html>`;
 const output = path.join(root, "verification/tauri-layout.html");
 fs.mkdirSync(path.dirname(output), { recursive: true });

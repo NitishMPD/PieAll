@@ -279,6 +279,140 @@ pub fn capture_selection_direct(source: usize) -> Result<Vec<PathBuf>, String> {
 
 /// Marks keystrokes PieAll injects so its own keyboard hook lets them through.
 pub const INJECTED_MARKER: usize = 0x5049_4541;
+
+/// Query the process behind the captured HWND; titles and frontend hints are not identity.
+pub fn window_executable(source: usize, expected_pid: u32) -> Result<String, String> {
+    use windows_sys::Win32::{Foundation::CloseHandle, System::Threading::*};
+    unsafe {
+        let mut pid = 0;
+        GetWindowThreadProcessId(source as _, &mut pid);
+        if expected_pid == 0 || pid != expected_pid || IsWindow(source as _) == 0 {
+            return Err("Source window changed or closed. Invoke PieAll again.".into());
+        }
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process.is_null() {
+            return Err("Cannot identify the source app.".into());
+        }
+        let mut path = vec![0u16; 32768];
+        let mut length = path.len() as u32;
+        let ok = QueryFullProcessImageNameW(process, 0, path.as_mut_ptr(), &mut length);
+        CloseHandle(process);
+        if ok == 0 {
+            return Err("Cannot identify the source app.".into());
+        }
+        let path = String::from_utf16_lossy(&path[..length as usize]);
+        Ok(path.rsplit('\\').next().unwrap_or("").to_ascii_lowercase())
+    }
+}
+
+pub fn window_profile(
+    source: usize,
+    pid: u32,
+) -> Result<Option<&'static crate::shortcuts::Profile>, String> {
+    let executable = window_executable(source, pid)?;
+    Ok(
+        crate::shortcuts::for_executable(&executable).filter(|profile| {
+            // Explorer also hosts the desktop, where tab/address-bar commands do not apply.
+            profile.id != "explorer"
+                || matches!(
+                    window_class(source).as_str(),
+                    "CabinetWClass" | "ExploreWClass"
+                )
+        }),
+    )
+}
+
+/// One bounded batch per chord, with foreground/process revalidation between chords.
+/// The caller owns an operation lease and has already returned focus to the source.
+pub fn send_app_shortcut(
+    source: usize,
+    pid: u32,
+    action: &crate::shortcuts::Shortcut,
+) -> Result<(), String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+    let sequence = crate::shortcuts::parse_keys(&action.keys)?;
+    let validate = || -> Result<(), String> {
+        if unsafe { GetForegroundWindow() } as usize != source {
+            return Err("Focus changed. No further shortcut keys were sent.".into());
+        }
+        if window_profile(source, pid)?.is_none_or(|p| p.id != action.profile) {
+            return Err("The captured app no longer matches this shortcut.".into());
+        }
+        Ok(())
+    };
+    // Let the invocation key and mouse/key activation come up; never release physical keys.
+    // A slice clicked while ` is still held waits here for the user to let go.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        validate()?;
+        let held = (1..=254).any(|key| unsafe { GetAsyncKeyState(key) } < 0);
+        if !held {
+            break;
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err("Release held keys and invoke the action again.".into());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let event = |vk: u16, up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: (if up { KEYEVENTF_KEYUP } else { 0 })
+                    | if matches!(vk, 0x21..=0x28 | 0x2D..=0x2E) {
+                        KEYEVENTF_EXTENDEDKEY
+                    } else {
+                        0
+                    },
+                time: 0,
+                dwExtraInfo: INJECTED_MARKER,
+            },
+        },
+    };
+    for (index, chord) in sequence.iter().enumerate() {
+        if index != 0 {
+            std::thread::sleep(std::time::Duration::from_millis(70));
+        }
+        validate()?;
+        let inputs: Vec<_> = chord
+            .iter()
+            .map(|&vk| event(vk, false))
+            .chain(chord.iter().rev().map(|&vk| event(vk, true)))
+            .collect();
+        if (1..=254).any(|key| unsafe { GetAsyncKeyState(key) } < 0) {
+            return Err("Input changed. No further shortcut keys were sent.".into());
+        }
+        let sent = unsafe {
+            SendInput(
+                inputs.len() as u32,
+                inputs.as_ptr(),
+                std::mem::size_of::<INPUT>() as i32,
+            )
+        };
+        if sent != inputs.len() as u32 {
+            // SendInput can partially insert a batch. Release only keys actually injected down.
+            let mut down = Vec::new();
+            for (position, &vk) in chord.iter().enumerate() {
+                if position < sent as usize && chord.len() * 2 - 1 - position >= sent as usize {
+                    down.push(event(vk, true));
+                }
+            }
+            if !down.is_empty() {
+                unsafe {
+                    SendInput(
+                        down.len() as u32,
+                        down.as_ptr(),
+                        std::mem::size_of::<INPUT>() as i32,
+                    );
+                }
+            }
+            return Err("Windows blocked shortcut input. The target may be elevated.".into());
+        }
+    }
+    Ok(())
+}
 pub fn send_chord(modifier: u16, key: u16) {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
     let event = |vk: u16, up: bool| INPUT {
@@ -566,5 +700,15 @@ pub fn set_clipboard_image(width: u32, height: u32, bgra: &[u8]) -> Result<(), S
             return Err("Cannot publish clipboard bitmap.".into());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod shortcut_tests {
+    #[test]
+    fn invalid_source_is_rejected_before_input_is_sent() {
+        assert!(super::window_profile(0, 0).is_err());
+        let action = crate::shortcuts::find("app:figma:frame-tool").unwrap();
+        assert!(super::send_app_shortcut(0, 0, action).is_err());
     }
 }

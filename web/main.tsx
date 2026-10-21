@@ -1,5 +1,24 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { native, type Action, type Session, type Preview } from "./native";
+import React, {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  native,
+  type Action,
+  type Session,
+  type Preview,
+  type ShortcutLibrary,
+} from "./native";
+import {
+  indexActions,
+  libraryActions,
+  PAGE_SIZE,
+  searchActions,
+} from "./action-search";
 import { Ring } from "./Ring";
 import { Toast } from "./Toast";
 import { Icon } from "./Icon";
@@ -29,10 +48,72 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
   const [thumbnail, setThumbnail] = useState<Preview | null>(null);
   const [group, setGroup] = useState("All actions");
   const [query, setQuery] = useState("");
+  const [library, setLibrary] = useState<ShortcutLibrary | null>(null);
+  const [libraryError, setLibraryError] = useState("");
+  const [profile, setProfile] = useState("");
+  const [page, setPage] = useState(0);
+  const deferredQuery = useDeferredValue(query);
   const [updates, setUpdates] = useState(false);
   const [confirmInstall, setConfirmInstall] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const sequence = useRef(0);
+  const appActions = useMemo(
+    () => (library ? libraryActions(library, session?.app) : []),
+    [library, session?.app],
+  );
+  const appIndex = useMemo(() => indexActions(appActions), [appActions]);
+  const actionIndex = useMemo(
+    () => [
+      ...indexActions(
+        (session?.actions ?? []).filter((a) => !library || !a.shortcut),
+      ),
+      ...appIndex,
+    ],
+    [session?.actions, library, appIndex],
+  );
+  const counts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const { action } of actionIndex)
+      counts.set(action.group, (counts.get(action.group) ?? 0) + 1);
+    return counts;
+  }, [actionIndex]);
+  const actions = useMemo(
+    () =>
+      searchActions(
+        actionIndex,
+        deferredQuery,
+        group,
+        group === "Apps" ? profile : "",
+      ),
+    [actionIndex, deferredQuery, group, profile],
+  );
+  const currentPage = Math.min(
+    page,
+    Math.max(0, Math.ceil(actions.length / PAGE_SIZE) - 1),
+  );
+  const visibleActions = actions.slice(
+    currentPage * PAGE_SIZE,
+    (currentPage + 1) * PAGE_SIZE,
+  );
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    list.current?.scrollTo(0, 0);
+  }, [currentPage, deferredQuery, group, profile]);
+  useEffect(() => {
+    if (standalone) return;
+    let active = true;
+    native
+      .shortcutLibrary()
+      .then((value) => {
+        if (active) setLibrary(value);
+      })
+      .catch((error) => {
+        if (active) setLibraryError(String(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const refresh = useCallback(async () => {
     const seq = ++sequence.current;
     const next = await native.session();
@@ -160,11 +241,6 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
         )}
       </main>
     );
-  const actions = session.actions.filter(
-    (a) =>
-      (group === "All actions" || a.group === group) &&
-      `${a.title} ${a.group}`.toLowerCase().includes(query.toLowerCase()),
-  );
   const editor = session.actions.find((a) => a.id === session.editor);
   return (
     <div className="app-shell">
@@ -213,6 +289,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
             "Text",
             "PDF",
             "Window",
+            "Apps",
           ].map((name) => (
             <button
               key={name}
@@ -221,6 +298,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               }
               onClick={() => {
                 setGroup(name);
+                setPage(0);
                 setUpdates(false);
               }}
               aria-current={group === name && !updates ? "page" : undefined}
@@ -229,14 +307,14 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               {name}
               <span>
                 {name === "All actions"
-                  ? session.actions.length
-                  : session.actions.filter((a) => a.group === name).length}
+                  ? actionIndex.length
+                  : (counts.get(name) ?? 0)}
               </span>
             </button>
           ))}
           <div className="sidebar-bottom">
             <p>
-              Made for the files
+              Made for the work
               <br />
               already in your hands.
             </p>
@@ -392,11 +470,12 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                     <Icon name="ring" size={16} />
                   </span>
                   <p>
-                    Anywhere in Windows, select a file or text and hold{" "}
-                    <kbd>`</kbd>
+                    Anywhere in Windows, hold <kbd>`</kbd>
                     <br />
                     <span>
-                      Release on an action. Results save beside the original.
+                      {session.app
+                        ? "App shortcuts run in the captured app."
+                        : "Release on an action. Results save beside the original."}
                     </span>
                   </p>
                 </div>
@@ -451,13 +530,67 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                         placeholder="Find an action…"
                         aria-label="Search actions"
                         value={query}
-                        onChange={(e) => setQuery(e.target.value)}
+                        onChange={(e) => {
+                          setQuery(e.target.value);
+                          setPage(0);
+                        }}
                       />
                       <kbd>/</kbd>
                     </label>
-                    <div className="action-list">
+                    {group === "Apps" && (
+                      <div className="app-filter">
+                        <label htmlFor="app-filter">App</label>
+                        <select
+                          id="app-filter"
+                          value={profile}
+                          onChange={(e) => {
+                            setProfile(e.target.value);
+                            setPage(0);
+                          }}
+                        >
+                          <option value="">All apps</option>
+                          {library?.profiles.map((app) => (
+                            <option key={app.id} value={app.id}>
+                              {app.name}
+                              {app.id === session.app ? " · current app" : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <p>
+                          Windows US keyboard defaults. Invoke PieAll from the
+                          matching app to run them. Editing mode and custom
+                          keymaps can change what they do.
+                        </p>
+                        {libraryError ? (
+                          <p role="alert">
+                            Couldn’t load the app library.{" "}
+                            <button
+                              className="text-button"
+                              onClick={() => {
+                                setLibraryError("");
+                                void native
+                                  .shortcutLibrary()
+                                  .then(setLibrary)
+                                  .catch((e) => setLibraryError(String(e)));
+                              }}
+                            >
+                              Try again
+                            </button>
+                          </p>
+                        ) : (
+                          !library && (
+                            <p role="status">Loading app shortcuts…</p>
+                          )
+                        )}
+                      </div>
+                    )}
+                    <div
+                      className="action-list"
+                      ref={list}
+                      aria-busy={query !== deferredQuery}
+                    >
                       {actions.length ? (
-                        actions.map((action) => (
+                        visibleActions.map((action) => (
                           <button
                             className="action-row"
                             key={action.id}
@@ -485,12 +618,20 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                             <span>
                               <strong>{action.title}</strong>
                               <small>
-                                {action.eligible
-                                  ? action.group
-                                  : `Needs ${action.group === "Window" ? "a captured window" : action.group === "Text" ? "clipboard text" : "compatible files"}`}
+                                {action.shortcut
+                                  ? `${action.appName ?? "Current app"} · ${action.category ?? "Shortcut"}${action.eligible ? "" : " · invoke from this app"}`
+                                  : action.eligible
+                                    ? action.group
+                                    : `Needs ${action.group === "Window" ? "a captured window" : action.group === "Text" ? "clipboard text" : "compatible files"}`}
                               </small>
                             </span>
-                            <Icon name="arrow" size={16} />
+                            {action.shortcut ? (
+                              <kbd className="action-keys">
+                                {action.shortcut}
+                              </kbd>
+                            ) : (
+                              <Icon name="arrow" size={16} />
+                            )}
                           </button>
                         ))
                       ) : (
@@ -499,6 +640,35 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                         </p>
                       )}
                     </div>
+                    {actions.length > PAGE_SIZE && (
+                      <nav
+                        className="action-pages"
+                        aria-label="Action result pages"
+                      >
+                        <button
+                          disabled={currentPage === 0}
+                          onClick={() => setPage(currentPage - 1)}
+                        >
+                          Previous
+                        </button>
+                        <span role="status">
+                          {currentPage * PAGE_SIZE + 1}–
+                          {Math.min(
+                            (currentPage + 1) * PAGE_SIZE,
+                            actions.length,
+                          )}{" "}
+                          of {actions.length}
+                        </span>
+                        <button
+                          disabled={
+                            (currentPage + 1) * PAGE_SIZE >= actions.length
+                          }
+                          onClick={() => setPage(currentPage + 1)}
+                        >
+                          Next
+                        </button>
+                      </nav>
+                    )}
                   </>
                 )}
               </section>

@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import type { Session } from "./native";
 import {
   INNER,
@@ -9,7 +15,7 @@ import {
   sectorAt,
   wedgePath,
 } from "./geometry";
-import { menus, resolve, type MenuItem } from "./menus";
+import { contextMenu, labelLines, resolve, type MenuItem } from "./menus";
 import { native } from "./native";
 import { Icon } from "./Icon";
 
@@ -39,7 +45,7 @@ function useListener(enabled: boolean, subscribe: () => Promise<() => void>) {
 
 function targetName(session: Session): string {
   if (session.kind === "text") return "Selected text";
-  if (session.kind === "window") return "This window";
+  if (session.kind === "window") return session.target;
   if (session.names.length > 1) return `${session.names.length} items`;
   return session.names[0] ?? "Nothing selected";
 }
@@ -73,10 +79,9 @@ export function Ring({
 
   const reading = session.busy === "capture";
   const blocked = !!session.busy || !!session.editor;
-  const root = resolve(
-    menus[session.kind] ?? [],
-    session.actions,
-    session.names,
+  const root = useMemo(
+    () => resolve(contextMenu(session), session.actions, session.names),
+    [session],
   );
   let items = root;
   let parent: MenuItem | null = null;
@@ -101,15 +106,16 @@ export function Ring({
     if (item.children) enter(item);
     else if (item.action) onRun(item.action, item.params ?? {});
   }
-  // Releasing the held key always ends the ring: it runs the action slice in the
-  // cursor's direction, otherwise it closes. Submenus open by resting, not by
-  // releasing. A release during capture waits for the selection.
+  // Releasing the held key always ends the ring: it runs the highlighted action
+  // slice, otherwise it closes. The highlight wins over the reported point, which
+  // only decides when nothing is highlighted (a flick past the rim). Submenus open
+  // by resting, not by releasing. A release during capture waits for the selection.
   function release(x: number, y: number) {
     if (reading) {
       pending.current = [x, y];
       return;
     }
-    const index = sectorAt(x, y, items.length, DEAD_ZONE);
+    const index = selected ?? sectorAt(x, y, items.length, DEAD_ZONE);
     const item = index !== null ? items[index] : undefined;
     if (item?.action && !blocked) onRun(item.action, item.params ?? {});
     else onClose();
@@ -179,6 +185,10 @@ export function Ring({
 
   const placeholder = items.length === 0;
   const count = placeholder ? 4 : Math.max(items.length, 2);
+  const shapes = useMemo(
+    () => Array.from({ length: count }, (_, index) => wedgePath(index, count)),
+    [count],
+  );
   const caption = reading
     ? "Reading…"
     : placeholder
@@ -315,14 +325,13 @@ export function Ring({
                     onFocus={() => item && setSelected(index)}
                     onClick={() => item && activate(item)}
                   >
-                    <path
-                      className="sector-shape"
-                      d={wedgePath(index, count)}
-                    />
-                    <path
-                      className="sector-sheen"
-                      d={wedgePath(index, count)}
-                    />
+                    {item && (
+                      <title>
+                        {`${item.label}${item.hint ? ` · ${item.hint}` : ""}`}
+                      </title>
+                    )}
+                    <path className="sector-shape" d={shapes[index]} />
+                    <path className="sector-sheen" d={shapes[index]} />
                     {active && item?.children && !blocked && (
                       <path
                         key={`dwell-${item.key}`}
@@ -342,8 +351,20 @@ export function Ring({
                             <Icon name={item.icon} size={22} />
                           </span>
                         </foreignObject>
-                        <text y="15" textAnchor="middle">
-                          {item.label}
+                        <text textAnchor="middle">
+                          {labelLines(item.label).map(
+                            (line, lineIndex, lines) => (
+                              <tspan
+                                key={lineIndex}
+                                x="0"
+                                y={
+                                  (lines.length === 1 ? 15 : 9) + lineIndex * 14
+                                }
+                              >
+                                {line}
+                              </tspan>
+                            ),
+                          )}
                         </text>
                       </g>
                     )}

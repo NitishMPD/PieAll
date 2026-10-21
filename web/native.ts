@@ -17,12 +17,29 @@ export interface Action {
   group: string;
   eligible: boolean;
   fields: Field[];
+  shortcut?: string | null;
+  category?: string | null;
+  profile?: string;
+  appName?: string;
+  priority?: number | null;
+}
+export interface ShortcutLibrary {
+  profiles: { id: string; name: string; source: string }[];
+  actions: {
+    id: string;
+    profile: string;
+    title: string;
+    keys: string;
+    category: string;
+    priority?: number | null;
+  }[];
 }
 export interface Session {
   revision: number;
   target: string;
   names: string[];
   kind: "images" | "files" | "text" | "window" | "empty";
+  app?: string | null;
   busy: string | null;
   editor: string | null;
   status: string;
@@ -39,6 +56,7 @@ export interface Session {
 }
 export const native = {
   session: () => invoke<Session>("session"),
+  shortcutLibrary: () => invoke<ShortcutLibrary>("shortcut_library"),
   surface: (action: "dashboard" | "ring" | "dismiss") =>
     invoke<void>("surface", { action }),
   load: (kind: "files" | "clipboard") => invoke<void>("load_context", { kind }),

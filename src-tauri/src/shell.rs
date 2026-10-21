@@ -1,6 +1,6 @@
 use crate::hold;
 use base64::Engine;
-use pieall::{actions, platform};
+use pieall::{actions, platform, shortcuts};
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
@@ -14,7 +14,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use windows_sys::Win32::{
-    Foundation::{HWND, POINT},
+    Foundation::{HWND, POINT, RECT},
     Graphics::Gdi::*,
     System::Threading::{AttachThreadInput, GetCurrentThreadId},
     UI::WindowsAndMessaging::*,
@@ -32,6 +32,7 @@ struct Session {
     selection: Option<platform::ClipboardSnapshot>,
     source: usize,
     source_pid: u32,
+    source_app: Option<&'static shortcuts::Profile>,
     operation: Option<&'static str>,
     ticket: u64,
     editor: Option<String>,
@@ -56,6 +57,9 @@ struct ActionView {
     group: &'static str,
     eligible: bool,
     fields: Vec<FieldView>,
+    shortcut: Option<&'static str>,
+    category: Option<&'static str>,
+    priority: Option<usize>,
 }
 #[derive(Serialize)]
 struct UpdateView {
@@ -72,6 +76,7 @@ struct View {
     target: String,
     names: Vec<String>,
     kind: &'static str,
+    app: Option<&'static str>,
     busy: Option<&'static str>,
     editor: Option<String>,
     status: String,
@@ -125,7 +130,10 @@ impl Session {
                 },
                 self.text.chars().count()
             ),
-            0 if self.source != 0 => "Active window".into(),
+            0 if self.source != 0 => self
+                .source_app
+                .map_or("Active window", |p| p.name.as_str())
+                .into(),
             0 => "Choose your files".into(),
             1 => names[0].clone(),
             n => format!("{n} selected files"),
@@ -133,6 +141,7 @@ impl Session {
         View {
             revision: self.revision,
             target,
+            app: self.source_app.map(|p| p.id.as_str()),
             names,
             kind: if images {
                 "images"
@@ -157,6 +166,9 @@ impl Session {
                     id: a.id,
                     title: a.title,
                     group: a.group,
+                    shortcut: None,
+                    category: None,
+                    priority: None,
                     fields: a
                         .fields
                         .into_iter()
@@ -167,6 +179,18 @@ impl Session {
                         })
                         .collect(),
                 })
+                .chain(self.source_app.into_iter().flat_map(|profile| {
+                    shortcuts::for_profile(&profile.id).map(|a| ActionView {
+                        id: &a.id,
+                        title: &a.title,
+                        group: "Apps",
+                        eligible: true,
+                        fields: vec![],
+                        shortcut: Some(&a.keys),
+                        category: Some(&a.category),
+                        priority: a.priority,
+                    })
+                }))
                 .collect(),
             update: UpdateView {
                 configured: updates_configured(),
@@ -285,6 +309,11 @@ fn hide_raw(window: &WebviewWindow) {
 const OUTRO_MS: u64 = 110;
 static RING_OPEN: AtomicBool = AtomicBool::new(false);
 static RING_GENERATION: AtomicU64 = AtomicU64::new(0);
+/// Generation of the ring that last gained focus. Focus loss only closes that ring;
+/// Windows delivers a hidden ring's focus loss late, after the next one has opened.
+static RING_FOCUSED: AtomicU64 = AtomicU64::new(u64::MAX);
+/// The backtick is physically down. While held, only its release closes the ring.
+static RING_HELD: AtomicBool = AtomicBool::new(false);
 /// Physical screen point of the last ring's center; results appear there.
 static RING_X: AtomicI32 = AtomicI32::new(i32::MIN);
 static RING_Y: AtomicI32 = AtomicI32::new(i32::MIN);
@@ -349,7 +378,14 @@ fn focus_ring(app: &AppHandle) {
     let Some(ring) = app.get_webview_window("ring") else {
         return;
     };
+    let generation = RING_GENERATION.load(Ordering::SeqCst);
     let _ = app.run_on_main_thread(move || {
+        // Never focus a ring that closed meanwhile: set_focus would show it again
+        // behind PieAll's back, leaving a ring nothing can close.
+        if !RING_OPEN.load(Ordering::SeqCst) || RING_GENERATION.load(Ordering::SeqCst) != generation
+        {
+            return;
+        }
         if let Ok(hwnd) = ring.hwnd() {
             unsafe { force_foreground(hwnd.0 as _) };
         }
@@ -386,12 +422,13 @@ fn place_ring(app: &AppHandle, held: bool) -> Result<()> {
     RING_Y.store(y + size / 2, Ordering::SeqCst);
     RING_GENERATION.fetch_add(1, Ordering::SeqCst);
     RING_OPEN.store(true, Ordering::SeqCst);
+    // Click-mode opens clear a stale hold, so focus loss can still close them.
+    RING_HELD.store(held, Ordering::SeqCst);
     let _ = app.emit_to("ring", "ring-opened", held);
     let hwnd = ring.hwnd().map_err(|e| e.to_string())?.0 as HWND;
     unsafe {
-        // Undecorated windows keep caption/frame styles. Once a window region is set,
-        // Windows paints its classic inactive caption, which showed as a pale crescent
-        // above the top slice. Strip them before clipping.
+        // Undecorated windows can keep caption/frame styles, which Windows paints as a
+        // pale band once a window region is set. Strip them before clipping.
         let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
         let bare = style & !((WS_CAPTION | WS_THICKFRAME) as isize);
         if bare != style {
@@ -407,8 +444,16 @@ fn place_ring(app: &AppHandle, held: bool) -> Result<()> {
             );
         }
         // Clip the native hit surface too; transparent corners must not eat desktop clicks.
+        // The region is in window coordinates but the content starts at the client
+        // origin, so center it on the client area; any leftover frame stays clipped.
+        let mut client = POINT { x: 0, y: 0 };
+        let mut frame: RECT = std::mem::zeroed();
+        ClientToScreen(hwnd, &mut client);
+        GetWindowRect(hwnd, &mut frame);
+        let (dx, dy) = (client.x - frame.left, client.y - frame.top);
         let inset = (17.0 * scale).round() as i32;
-        let region = CreateEllipticRgn(inset, inset, size - inset, size - inset);
+        let region =
+            CreateEllipticRgn(dx + inset, dy + inset, dx + size - inset, dy + size - inset);
         if !region.is_null() && SetWindowRgn(hwnd, region, 1) == 0 {
             DeleteObject(region);
         }
@@ -423,13 +468,15 @@ fn release_ring(app: &AppHandle) {
         return;
     };
     if !RING_OPEN.load(Ordering::SeqCst) {
+        // Already closed as far as PieAll knows; make sure nothing is still on screen.
+        hide_raw(&ring);
         return;
     }
     let mut point = POINT { x: 0, y: 0 };
     unsafe {
         GetCursorPos(&mut point);
     }
-    if let (Ok(origin), Ok(scale)) = (ring.outer_position(), ring.scale_factor()) {
+    if let (Ok(origin), Ok(scale)) = (ring.inner_position(), ring.scale_factor()) {
         let x = (point.x - origin.x) as f64 / scale;
         let y = (point.y - origin.y) as f64 / scale;
         let _ = app.emit_to("ring", "ring-release", (x, y));
@@ -476,17 +523,26 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
         s.replace(Vec::new(), String::new());
         s.source = source;
         s.source_pid = 0;
+        s.source_app = None;
         if source != 0 {
             unsafe {
                 GetWindowThreadProcessId(source as _, &mut s.source_pid);
             }
+            s.source_app = platform::window_profile(source, s.source_pid)
+                .ok()
+                .flatten();
         }
         s.status = "Reading selection…".into();
     }
     notify(app);
     place_ring(app, held)?;
     let shell = source != 0 && platform::is_shell_window(source);
-    let wants_text = source != 0 && !shell && !platform::is_terminal_window(source);
+    let skip_text = state(app)
+        .lock()
+        .unwrap()
+        .source_app
+        .is_some_and(|p| !p.capture_text);
+    let wants_text = source != 0 && !shell && !skip_text && !platform::is_terminal_window(source);
     if !wants_text {
         // Explorer is read over COM, which does not need its window focused.
         focus_ring(app);
@@ -519,7 +575,10 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
                         }
                         None => s.replace(paths, String::new()),
                     }
-                    s.status = "Choose an action. Your originals stay untouched.".into();
+                    s.status = s.source_app.map_or_else(
+                        || "Choose an action. Your originals stay untouched.".into(),
+                        |profile| format!("Choose an action for {}.", profile.name),
+                    );
                 }
                 Err(error) => {
                     s.status = format!("{error} Window actions remain available.");
@@ -584,6 +643,7 @@ async fn load_context(window: WebviewWindow, app: AppHandle, kind: String) -> Re
         s.replace(paths, text);
         s.source = 0;
         s.source_pid = 0;
+        s.source_app = None;
         s.status = "Selection ready. Choose an action.".into();
         Ok(())
     })
@@ -628,6 +688,12 @@ async fn run_action(
     mut params: BTreeMap<String, String>,
 ) -> Result<()> {
     local(&window)?;
+    if id.starts_with("app:") {
+        if !params.is_empty() {
+            return Err("App shortcuts do not accept parameters.".into());
+        }
+        return run_app_shortcut(window, app, id, revision).await;
+    }
     if params.len() > 16 || params.iter().any(|(k, v)| k.len() > 64 || v.len() > 256) {
         return Err("Action parameters exceed limits.".into());
     }
@@ -718,6 +784,120 @@ async fn run_action(
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+struct ShortcutLibrary {
+    profiles: &'static [shortcuts::Profile],
+    actions: &'static [shortcuts::Shortcut],
+}
+#[tauri::command]
+fn shortcut_library(window: WebviewWindow) -> Result<ShortcutLibrary> {
+    dashboard_only(&window)?;
+    let catalog = shortcuts::catalog();
+    Ok(ShortcutLibrary {
+        profiles: &catalog.profiles,
+        actions: &catalog.actions,
+    })
+}
+
+async fn run_app_shortcut(
+    window: WebviewWindow,
+    app: AppHandle,
+    id: String,
+    revision: u64,
+) -> Result<()> {
+    let action = shortcuts::find(&id).ok_or("Unknown app shortcut")?;
+    let (source, pid, lease) = {
+        let state = state(&app);
+        let mut s = state.lock().unwrap();
+        s.idle()?;
+        if revision != s.revision {
+            return Err("Selection changed. Invoke PieAll again.".into());
+        }
+        if s.source_app
+            .is_none_or(|profile| profile.id != action.profile)
+            || s.source == 0
+        {
+            return Err("Invoke PieAll from the app this shortcut belongs to.".into());
+        }
+        // The action ID selects bundled keys. IPC cannot supply keys, HWND, PID or app identity.
+        if platform::window_profile(s.source, s.source_pid)?.is_none_or(|p| p.id != action.profile)
+        {
+            return Err("The source app changed. Invoke PieAll again.".into());
+        }
+        s.ticket += 1;
+        s.operation = Some("shortcut");
+        s.result = None;
+        s.status = format!("Sending {}…", action.title);
+        (
+            s.source,
+            s.source_pid,
+            Lease {
+                app: app.clone(),
+                ticket: s.ticket,
+            },
+        )
+    };
+    notify(&app);
+    hide_ring(&app, true)?;
+    if window.label() == "dashboard" {
+        window.hide().map_err(|error| error.to_string())?;
+        unsafe {
+            SetForegroundWindow(source as _);
+        }
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let _lease = lease;
+        let result = dispatch_app_shortcut(&app, source, pid, action);
+        let (tone, status) = match result {
+            Ok(()) => (
+                "ok",
+                format!("Shortcut sent: {} · {}", action.title, action.keys),
+            ),
+            Err(error) => ("error", error),
+        };
+        {
+            let state = state(&app);
+            let mut s = state.lock().unwrap();
+            // A shortcut can change the selection or document. Never reuse its old captured content.
+            s.replace(Vec::new(), String::new());
+            s.status = status.clone();
+        }
+        toast(&app, tone, status, "");
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
+fn dispatch_app_shortcut(
+    app: &AppHandle,
+    source: usize,
+    pid: u32,
+    action: &shortcuts::Shortcut,
+) -> Result<()> {
+    const INVOCATION: &str = "Ctrl+Backquote";
+    let collision = shortcuts::uses_invocation_shortcut(action)
+        && app.global_shortcut().is_registered(INVOCATION);
+    if !collision {
+        return platform::send_app_shortcut(source, pid, action);
+    }
+    app.global_shortcut()
+        .unregister(INVOCATION)
+        .map_err(|e| format!("Could not release PieAll's shortcut: {e}"))?;
+    let result = platform::send_app_shortcut(source, pid, action);
+    // RegisterHotKey would swallow injected Ctrl+` too. Keep it free while input is dispatched.
+    std::thread::sleep(std::time::Duration::from_millis(80));
+    let restore = app.global_shortcut().register(INVOCATION);
+    match (result, restore) {
+        (result, Ok(())) => result,
+        (Ok(()), Err(error)) => Err(format!(
+            "Shortcut sent, but Ctrl+` could not be restored: {error}. Hold ` or use the tray."
+        )),
+        (Err(error), Err(restore)) => Err(format!(
+            "{error} Ctrl+` could not be restored: {restore}. Hold ` or use the tray."
+        )),
+    }
 }
 
 #[tauri::command]
@@ -1128,6 +1308,7 @@ fn accept_paths(app: &AppHandle, paths: Vec<PathBuf>) -> Result<()> {
     s.replace(paths, String::new());
     s.source = 0;
     s.source_pid = 0;
+    s.source_app = None;
     s.status = "Files ready. Choose an action.".into();
     drop(s);
     notify(app);
@@ -1178,11 +1359,14 @@ pub fn run() {
             load_context,
             prepare,
             run_action,
+            shortcut_library,
             copy_result,
             preview,
             update_action
         ])
         .setup(|app| {
+            // Parse and index bundled keymaps once, before the first hold invocation.
+            let _ = shortcuts::catalog();
             let cwd = std::env::current_dir()?.to_string_lossy().into_owned();
             if let Err(error) =
                 accept_paths(app.handle(), file_args(std::env::args().skip(1), &cwd))
@@ -1211,8 +1395,12 @@ pub fn run() {
             let handle = app.handle().clone();
             let hook = hold::install(move |event| {
                 let result = match event {
-                    hold::Hold::Start => invoke_ring(&handle, true),
+                    hold::Hold::Start => {
+                        RING_HELD.store(true, Ordering::SeqCst);
+                        invoke_ring(&handle, true)
+                    }
                     hold::Hold::End => {
+                        RING_HELD.store(false, Ordering::SeqCst);
                         release_ring(&handle);
                         Ok(())
                     }
@@ -1312,7 +1500,18 @@ pub fn run() {
                     api.prevent_close();
                     let _ = window.hide();
                 }
-                tauri::WindowEvent::Focused(false) if window.label() == "ring" => {
+                tauri::WindowEvent::Focused(true) if window.label() == "ring" => {
+                    if RING_OPEN.load(Ordering::SeqCst) {
+                        RING_FOCUSED
+                            .store(RING_GENERATION.load(Ordering::SeqCst), Ordering::SeqCst);
+                    }
+                }
+                tauri::WindowEvent::Focused(false)
+                    if window.label() == "ring"
+                        && !RING_HELD.load(Ordering::SeqCst)
+                        && RING_FOCUSED.load(Ordering::SeqCst)
+                            == RING_GENERATION.load(Ordering::SeqCst) =>
+                {
                     let _ = hide_ring(app, false);
                 }
                 tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
@@ -1333,6 +1532,32 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn session_only_exposes_the_captured_apps_shortcuts() {
+        let figma = shortcuts::for_executable("figma.exe").unwrap();
+        let mut s = Session {
+            source: 1,
+            source_app: Some(figma),
+            ..Session::default()
+        };
+        let view = s.view();
+        assert_eq!(view.app, Some("figma"));
+        let shortcuts: Vec<_> = view
+            .actions
+            .iter()
+            .filter(|a| a.shortcut.is_some())
+            .collect();
+        assert_eq!(
+            shortcuts.len(),
+            pieall::shortcuts::for_profile("figma").count()
+        );
+        assert!(shortcuts
+            .iter()
+            .all(|a| a.eligible && a.id.starts_with("app:figma:")));
+        s.source = 0;
+        s.source_app = None;
+        assert!(s.view().actions.iter().all(|a| a.shortcut.is_none()));
+    }
     use super::*;
     #[test]
     fn update_install_requires_the_reviewed_version_and_valid_key() {

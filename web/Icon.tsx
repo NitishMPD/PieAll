@@ -1,4 +1,5 @@
 const paths: Record<string, string> = {
+  apps: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z",
   convert: "M4 8h14m-4-4 4 4-4 4M20 16H6m4-4-4 4 4 4",
   crop: "M7 3v14h14M3 7h14v14",
   resize: "M4 9V4h5M4 4l6 6m10 5v5h-5m5 0-6-6",

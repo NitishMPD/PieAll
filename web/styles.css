@@ -229,6 +229,8 @@ kbd {
   min-height: 0;
 }
 .sidebar {
+  min-height: 0;
+  overflow-y: auto;
   width: 180px;
   flex-shrink: 0;
   padding: 28px 14px 18px;
@@ -547,10 +549,54 @@ kbd {
   font-size: 13px;
 }
 .action-list {
+  min-height: 120px;
   overflow: auto;
   flex: 1;
   margin: 15px -8px 0;
   padding: 0 5px;
+}
+.app-filter {
+  margin-top: 12px;
+  flex-shrink: 0;
+}
+.app-filter label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.app-filter select {
+  width: 100%;
+  max-width: 100%;
+  font-size: 12px;
+}
+.app-filter p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+.action-pages {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.action-pages button {
+  font-size: 11px;
+  padding: 6px 8px;
+}
+.action-keys {
+  max-width: 40%;
+  align-self: center;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  flex-shrink: 0;
+  font-size: 10px;
+  text-align: right;
 }
 .action-row {
   display: flex;
@@ -941,7 +987,7 @@ html[data-surface="toast"] body {
   opacity: 1;
 }
 .radial-standalone .sector text {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   fill: currentColor;
   paint-order: stroke;
@@ -955,8 +1001,8 @@ html[data-surface="toast"] body {
 .radial-standalone .dwell {
   display: block;
   fill: none;
-  stroke: #141416;
-  stroke-width: 2.5;
+  stroke: #fff;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;

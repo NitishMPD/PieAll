@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { menus, resolve } from "./menus";
+import {
+  contextMenu,
+  labelLines,
+  menus,
+  resolve,
+  type MenuItem,
+} from "./menus";
+import type { Session } from "./native";
 
 const actions = (eligible: string[]) =>
   [
@@ -26,6 +33,122 @@ const actions = (eligible: string[]) =>
   }));
 
 describe("context menus", () => {
+  it("offers six ranked app actions without a submenu and keeps the complete library", () => {
+    const shortcuts = Array.from({ length: 12 }, (_, n) => ({
+      id: `app:test:${n}`,
+      title: `Shortcut ${n}`,
+      group: "Apps",
+      fields: [],
+      shortcut: `Ctrl+${n % 10}`,
+      category: "Editing",
+      eligible: true,
+      priority: n < 6 ? 5 - n : null,
+    }));
+    const session = {
+      kind: "window",
+      names: [],
+      actions: [
+        ...shortcuts,
+        {
+          id: "center_window",
+          title: "Center",
+          group: "Window",
+          eligible: true,
+          fields: [],
+        },
+      ],
+    } as unknown as Session;
+    const menu = resolve(contextMenu(session), session.actions);
+    expect(menu).toHaveLength(8);
+    expect(menu.slice(0, 6).map((item) => item.action)).toEqual(
+      shortcuts
+        .slice(0, 6)
+        .reverse()
+        .map((action) => action.id),
+    );
+    function leaves(items: MenuItem[]): string[] {
+      return items.flatMap((item) =>
+        item.children
+          ? leaves(item.children)
+          : item.action
+            ? [item.action]
+            : [],
+      );
+    }
+    expect(
+      new Set(leaves(menu).filter((id) => id.startsWith("app:"))).size,
+    ).toBe(12);
+    expect(leaves(menu)).toContain("center_window");
+  });
+  it("preserves every action through multiple pages at every depth", () => {
+    const leaves = Array.from({ length: 137 }, (_, n) => ({
+      key: `a${n}`,
+      label: `Action ${n}`,
+      icon: "code",
+      action: "terminal",
+    }));
+    const output = resolve(
+      [
+        { key: "nested", label: "Nested", icon: "more", children: leaves },
+        ...leaves,
+      ],
+      actions(["terminal"]),
+    );
+    const keys: string[] = [];
+    function walk(items: MenuItem[]) {
+      expect(items.length).toBeLessThanOrEqual(8);
+      for (const item of items) {
+        if (item.children) walk(item.children);
+        else keys.push(item.key);
+      }
+    }
+    walk(output);
+    expect(keys.length).toBe(274);
+    expect(new Set(keys).size).toBe(137);
+  });
+  it("keeps app commands with text tools and excludes ineligible shortcuts", () => {
+    const session = {
+      kind: "text",
+      actions: [
+        {
+          id: "app:figma:move",
+          title: "Move tool",
+          group: "Apps",
+          fields: [],
+          shortcut: "V",
+          category: "Tools",
+          eligible: true,
+        },
+        {
+          id: "app:photoshop:curves",
+          title: "Curves",
+          group: "Apps",
+          fields: [],
+          shortcut: "Ctrl+M",
+          category: "Adjustments",
+          eligible: false,
+        },
+      ],
+    } as unknown as Session;
+    const menu = contextMenu(session);
+    expect(menu.some((item) => item.action === "upper")).toBe(true);
+    const shortcuts = menu.find((item) => item.key === "app-shortcuts")!;
+    expect(JSON.stringify(shortcuts)).toContain("app:figma:move");
+    expect(JSON.stringify(shortcuts)).not.toContain("photoshop");
+    expect(contextMenu({ ...session, actions: [] })).toEqual(menus.text);
+  });
+  it("bounds long wedge labels without changing their accessible source names", () => {
+    for (const label of [
+      "Save",
+      "Toggle bookmarks toolbar",
+      "VeryLongCommandWithoutSpacesAndMoreCharacters",
+    ]) {
+      const lines = labelLines(label);
+      expect(lines.length).toBeLessThanOrEqual(2);
+      expect(lines.every((line) => line.length <= 16)).toBe(true);
+    }
+    expect(labelLines("Quick actions")).toEqual(["Quick actions"]);
+  });
   it("offers one-tap image presets, led by Compress 50%", () => {
     const ring = resolve(
       menus.images,

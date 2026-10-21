@@ -2,7 +2,7 @@
 
 <img src="public/brand/pieall.svg" width="80" height="80" alt="PieAll radial mark" />
 
-A Windows radial action utility with **44 implemented commands**, a searchable action browser, focused image editors and isolated local workers. Built from [the product plan](PieAll-plan.md). This is an early implementation, not a verified release of the full 100-action product.
+A Windows radial action utility with **44 local tools and 3,079 app shortcuts**, a searchable action browser, focused image editors and isolated local workers. Built from [the product plan](PieAll-plan.md). This is an early implementation; native app acceptance remains unverified.
 
 ## Run it yourself
 
@@ -20,6 +20,8 @@ To build the executable without installer signing: `pnpm tauri build --no-bundle
 Select files in Explorer and press **Ctrl + backtick**, drop files onto PieAll, or choose **Open files**. **Use clipboard text** is explicit. Closing the dashboard hides it; tray Exit quits when no action/editor/update is active. File arguments work on first and second launches. The image ring offers Convert, Crop, Resize, Add background, Compress and All actions. Convert opens PNG/JPEG/WebP choices. Arrows/Tab, Enter/Space, number keys and Escape work in the floating ring; the searchable dashboard is the alternative keyboard route.
 
 ## Implemented commands
+
+The default Tauri shell now also includes **3,079 contextual app shortcuts across 57 profiles**, for **3,123 entries** with the 44 local tools below. Shared browser/editor keymaps are counted separately for each matching app. Hold backtick in a supported app for six quick choices and the complete categorized shortcut list, or browse/search Apps in the dashboard. Explorer, everyday browsers, Office, chat/notes/media tools, Figma, Photoshop, Adobe video tools, Blender and specialist editors are covered. Native matching uses the captured window/process and exact executable names; Figma running in a browser currently receives browser shortcuts. App commands use Windows US defaults and depend on the target's editing mode/keymap. Dispatch confirms “shortcut sent,” not app-side completion. See [project behavior](project.md) for ownership and limits.
 
 - **14 image tools:** crop; resize within bounds without upscaling; PNG/JPEG/lossless WebP conversion; JPEG compression with size-reduction check; left/right rotation; horizontal/vertical flip; re-encode without source metadata; basic image details; quantized palette; decoded pixels to clipboard; solid-color frame with padding and rounded image corners; grayscale.
 - **2 combined-image tools:** contact sheet (selection order, no labels) and images to PDF (A4, JPEG raster pages, white alpha background).
