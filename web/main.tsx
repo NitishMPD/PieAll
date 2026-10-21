@@ -18,7 +18,15 @@ import { Toast } from "./Toast";
 import { WindowControls } from "./TitleBar";
 import { Icon, iconFor } from "./Icon";
 import { Customize, applyTrigger } from "./Customize";
+import { Engines } from "./Engines";
 import { TRIGGER_KEYS, usePrefs } from "./prefs";
+import {
+  fieldVisible,
+  frameDimensions,
+  initialParams,
+  previewNumber,
+  resizeDimensions,
+} from "./editor-fields";
 import "./styles.css";
 import "./dashboard.css";
 import "./customize.css";
@@ -49,9 +57,9 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const deferredQuery = useDeferredValue(query);
-  const [view, setView] = useState<"actions" | "customize" | "updates">(
-    "actions",
-  );
+  const [view, setView] = useState<
+    "actions" | "customize" | "updates" | "engines"
+  >("actions");
   const updates = view === "updates";
   const setUpdates = useCallback(
     (open: boolean) => setView(open ? "updates" : "actions"),
@@ -337,6 +345,14 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
           </button>
           <div className="sidebar-bottom">
             <button
+              className={`nav-item ${view === "engines" ? "active" : ""}`}
+              aria-current={view === "engines" ? "page" : undefined}
+              onClick={() => setView("engines")}
+            >
+              <Icon name="sliders" />
+              Tool engines
+            </button>
+            <button
               className={`nav-item ${updates ? "active" : ""}`}
               aria-current={updates ? "page" : undefined}
               onClick={() => setUpdates(true)}
@@ -347,7 +363,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
           </div>
         </nav>
         <main className="workspace">
-          {view !== "customize" && (
+          {view !== "customize" && view !== "engines" && (
             <section className="selection-bar" aria-label="Current selection">
               <div className="selection-icon">
                 <Icon
@@ -377,7 +393,9 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               </div>
             </section>
           )}
-          {view === "customize" ? (
+          {view === "engines" ? (
+            <Engines busy={disabled} />
+          ) : view === "customize" ? (
             <Customize session={session} />
           ) : updates ? (
             <section className="updates-panel">
@@ -650,9 +668,11 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                               <small>
                                 {action.shortcut
                                   ? `${action.appName ?? "Current app"} · ${action.category ?? "Shortcut"}${action.eligible ? "" : " · invoke from this app"}`
-                                  : action.eligible
-                                    ? action.group
-                                    : `Needs ${action.group === "Window" ? "a captured window" : action.group === "Text" ? "clipboard text" : "compatible files"}`}
+                                  : action.unavailable
+                                    ? action.unavailable
+                                    : action.eligible
+                                      ? action.group
+                                      : `Needs ${action.group === "Window" ? "a captured window" : action.group === "Text" ? "clipboard text" : "compatible files"}`}
                               </small>
                             </span>
                             {action.shortcut ? (
@@ -715,6 +735,25 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               <Icon name="check" size={16} />
             )}
             <span>{session.status}</span>
+            {session.job && session.busy === "action" && (
+              <>
+                <progress
+                  aria-label="Files processed"
+                  max={session.job.total || 1}
+                  value={session.job.completed + (session.job.fraction ?? 0)}
+                />
+                <button
+                  disabled={session.job.state === "cancelling"}
+                  onClick={() =>
+                    void perform(() => native.cancelJob(session.job!.id))
+                  }
+                >
+                  {session.job.state === "cancelling"
+                    ? "Cancelling…"
+                    : "Cancel"}
+                </button>
+              </>
+            )}
           </footer>
           {error && (
             <div className="error-banner" role="alert">
@@ -750,9 +789,19 @@ function Editor({
   onRun: (params: Record<string, string>) => void;
 }) {
   const [params, setParams] = useState<Record<string, string>>(() =>
-    Object.fromEntries(action.fields.map((f) => [f.key, f.default])),
+    initialParams(action, preview),
   );
   const first = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+  const cropEdited = useRef(false);
+  useEffect(() => {
+    if (action.id === "crop" && preview && !cropEdited.current) {
+      setParams((p) => ({
+        ...p,
+        width: String(preview.width),
+        height: String(preview.height),
+      }));
+    }
+  }, [action.id, preview]);
   useEffect(() => {
     first.current?.focus();
   }, []);
@@ -771,49 +820,122 @@ function Editor({
       <h2>{action.title}</h2>
       <p className="muted">A new file is saved beside the original.</p>
       {preview && (
-        <ImagePreview preview={preview} action={action.id} params={params} />
+        <ImagePreview
+          preview={preview}
+          action={action.id}
+          params={params}
+          onCrop={(crop) => {
+            cropEdited.current = true;
+            setParams((p) => ({ ...p, ...crop }));
+          }}
+        />
       )}
-      {action.fields.map((field, index) => (
-        <label className="field" key={field.key}>
-          <span>{field.label}</span>
-          {field.key === "format" ? (
-            <select
-              ref={(el) => {
-                if (index === 0) first.current = el;
+      {action.id === "crop" && preview && (
+        <div className="button-row" aria-label="Crop aspect presets">
+          {[
+            ["Original", preview.width / preview.height],
+            ["Square", 1],
+            ["16:9", 16 / 9],
+            ["4:5", 4 / 5],
+          ].map(([label, value]) => (
+            <button
+              key={String(label)}
+              type="button"
+              onClick={() => {
+                cropEdited.current = true;
+                const ratio = Number(value),
+                  w = Math.min(
+                    preview.width,
+                    Math.floor(preview.height * ratio),
+                  ),
+                  h = Math.min(preview.height, Math.floor(w / ratio));
+                setParams({
+                  ...params,
+                  x: String(Math.floor((preview.width - w) / 2)),
+                  y: String(Math.floor((preview.height - h) / 2)),
+                  width: String(w),
+                  height: String(h),
+                });
               }}
-              value={params[field.key]}
-              onChange={(e) =>
-                setParams({ ...params, [field.key]: e.target.value })
-              }
             >
-              <option value="png">PNG</option>
-              <option value="jpg">JPEG</option>
-              <option value="webp">WebP (lossless)</option>
-            </select>
-          ) : (
-            <input
-              ref={(el) => {
-                if (index === 0) first.current = el;
-              }}
-              required
-              maxLength={field.key === "background" ? 7 : 10}
-              type={field.key === "background" ? "text" : "number"}
-              min={0}
-              step={1}
-              value={params[field.key]}
-              onChange={(e) =>
-                setParams({ ...params, [field.key]: e.target.value })
-              }
-            />
-          )}
-        </label>
-      ))}
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {action.fields
+        .filter((f) => fieldVisible(action.id, f.key, params))
+        .map((field, index) => (
+          <label className="field" key={field.key}>
+            <span>{field.label}</span>
+            {field.options?.length || field.key === "format" ? (
+              <select
+                ref={(el) => {
+                  if (index === 0) first.current = el;
+                }}
+                value={params[field.key]}
+                onChange={(e) => {
+                  cropEdited.current = true;
+                  setParams({ ...params, [field.key]: e.target.value });
+                }}
+              >
+                {(field.options?.length
+                  ? field.options
+                  : [
+                      ["png", "PNG"],
+                      ["jpg", "JPEG"],
+                      ["webp", "WebP (lossless)"],
+                    ]
+                ).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                ref={(el) => {
+                  if (index === 0) first.current = el;
+                }}
+                required
+                maxLength={
+                  field.key === "pages"
+                    ? 256
+                    : ["background", "secondary"].includes(field.key)
+                      ? 7
+                      : 10
+                }
+                type={
+                  ["background", "secondary", "pages"].includes(field.key)
+                    ? "text"
+                    : "number"
+                }
+                min={0}
+                step={
+                  ["start", "duration", "gain", "fps"].includes(field.key)
+                    ? "any"
+                    : 1
+                }
+                value={params[field.key]}
+                onChange={(e) => {
+                  cropEdited.current = true;
+                  setParams({ ...params, [field.key]: e.target.value });
+                }}
+              />
+            )}
+          </label>
+        ))}
       <p className="editor-note">
         {session.names.length > 1
           ? `Applies to all ${session.names.length} selected files. `
           : ""}
-        Preview uses the first image. Final dimensions and validation are
-        applied by the native worker.
+        {action.id === "images_pdf"
+          ? "Pages follow the selected file order. Images use a white background."
+          : action.id.startsWith("pdf_")
+            ? "Page ranges keep document order. Rewriting refuses forms and signed PDFs. Extracting pages or removing document metadata is not secure redaction. Text extraction does not perform OCR."
+            : /^(video_|audio_|media_)/.test(action.id)
+              ? "Requires configured FFmpeg and FFprobe. Outputs keep the first selected media streams; video is re-encoded. Originals stay untouched."
+              : "Preview uses the first image. Final dimensions and validation are applied by the native worker."}
       </p>
       <div className="button-row">
         <button type="button" onClick={onCancel} disabled={!!session.busy}>
@@ -832,11 +954,14 @@ function ImagePreview({
   preview,
   action,
   params,
+  onCrop,
 }: {
   preview: Preview;
   action: string;
   params: Record<string, string>;
+  onCrop?: (crop: Record<string, string>) => void;
 }) {
+  const drag = useRef<{ x: number; y: number } | null>(null);
   const { width, height, url } = preview;
   const x = Number(params.x || 0),
     y = Number(params.y || 0);
@@ -844,26 +969,95 @@ function ImagePreview({
     h = Number(params.height || 0);
   const valid =
     x >= 0 && y >= 0 && w > 0 && h > 0 && x + w <= width && y + h <= height;
-  const padding =
-    action === "frame" ? Math.max(0, Number(params.padding || 0)) : 0;
+  const padding = action === "frame" ? previewNumber(params.padding, 2048) : 0;
   const background = /^[0-9a-f]{6}$/i.test(params.background || "")
     ? `#${params.background}`
     : "#F3EBDD";
-  const resultScale =
-    action === "resize" ? Math.min(1, w / width, h / height) : 1;
+  const resized = resizeDimensions(width, height, params);
+  const [fw, fh] = frameDimensions(
+    width,
+    height,
+    padding,
+    params.ratio || "natural",
+  );
+  const ox = (fw - width) / 2,
+    oy = (fh - height) / 2;
+  const secondary = /^[0-9a-f]{6}$/i.test(params.secondary || "")
+    ? `#${params.secondary}`
+    : "#D3B8A0";
   return (
     <figure className="image-preview">
       <svg
-        viewBox={`${-padding} ${-padding} ${width + padding * 2} ${height + padding * 2}`}
+        viewBox={`${-ox} ${-oy} ${fw} ${fh}`}
+        className={action === "crop" ? "crop-canvas" : undefined}
+        onPointerDown={(event) => {
+          if (action !== "crop" || !onCrop || event.button !== 0) return;
+          const matrix = event.currentTarget.getScreenCTM();
+          if (!matrix) return;
+          const point = new DOMPoint(
+            event.clientX,
+            event.clientY,
+          ).matrixTransform(matrix.inverse());
+          drag.current = {
+            x: Math.max(0, Math.min(width - 1, Math.round(point.x))),
+            y: Math.max(0, Math.min(height - 1, Math.round(point.y))),
+          };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          if (!drag.current || !onCrop) return;
+          const matrix = event.currentTarget.getScreenCTM();
+          if (!matrix) return;
+          const point = new DOMPoint(
+            event.clientX,
+            event.clientY,
+          ).matrixTransform(matrix.inverse());
+          const dx = Math.max(0, Math.min(width, Math.round(point.x))),
+            dy = Math.max(0, Math.min(height, Math.round(point.y)));
+          onCrop({
+            x: String(Math.min(dx, drag.current.x)),
+            y: String(Math.min(dy, drag.current.y)),
+            width: String(Math.max(1, Math.abs(dx - drag.current.x))),
+            height: String(Math.max(1, Math.abs(dy - drag.current.y))),
+          });
+        }}
+        onPointerUp={() => {
+          drag.current = null;
+        }}
+        onPointerCancel={() => {
+          drag.current = null;
+        }}
         role="img"
         aria-label={`Approximate ${action} preview of first selected image`}
       >
         <defs>
+          <linearGradient id="frame-gradient" x1="0" y1="0" x2="1" y2="1">
+            <stop stopColor={background} />
+            <stop offset="1" stopColor={secondary} />
+          </linearGradient>
+          <filter
+            id="frame-shadow"
+            x="-100%"
+            y="-100%"
+            width="300%"
+            height="300%"
+          >
+            <feDropShadow
+              dx="0"
+              dy={previewNumber(params.shadow, 64) / 2}
+              stdDeviation={previewNumber(params.shadow, 64) / 2}
+              floodOpacity="0.33"
+            />
+          </filter>
           <clipPath id="image-corners">
             <rect
               width={width}
               height={height}
-              rx={action === "frame" ? Number(params.corners || 0) : 0}
+              rx={
+                action === "frame"
+                  ? previewNumber(params.corners, Math.min(width, height) / 2)
+                  : 0
+              }
             />
           </clipPath>
           {action === "crop" && valid && (
@@ -874,11 +1068,13 @@ function ImagePreview({
         </defs>
         {action === "frame" && (
           <rect
-            x={-padding}
-            y={-padding}
-            width={width + padding * 2}
-            height={height + padding * 2}
-            fill={background}
+            x={-ox}
+            y={-oy}
+            width={fw}
+            height={fh}
+            fill={
+              params.style === "gradient" ? "url(#frame-gradient)" : background
+            }
           />
         )}
         <image
@@ -887,6 +1083,11 @@ function ImagePreview({
           height={height}
           clipPath="url(#image-corners)"
           opacity={action === "crop" ? 0.25 : 1}
+          filter={
+            action === "frame" && Number(params.shadow) > 0
+              ? "url(#frame-shadow)"
+              : undefined
+          }
         />
         {action === "crop" && valid && (
           <>
@@ -915,8 +1116,10 @@ function ImagePreview({
             ? `${w} x ${h} px crop`
             : "Crop extends outside this image"
           : action === "resize"
-            ? `${Math.round(width * resultScale)} x ${Math.round(height * resultScale)} px - no upscaling`
-            : `${width} x ${height} px original`}
+            ? `${resized[0]} x ${resized[1]} px - no upscaling`
+            : action === "frame"
+              ? `${fw} x ${fh} px framed output`
+              : `${width} x ${height} px original`}
       </figcaption>
     </figure>
   );

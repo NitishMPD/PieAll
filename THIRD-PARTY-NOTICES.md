@@ -1,14 +1,16 @@
 # Third-party notices
 Author: Nitish
 
-Windows-target Cargo dependencies (including build tooling) and production JavaScript packages from the current lockfiles. Upstream license/notice files are retained in `licenses/`; existing legacy texts are preserved. This is an inventory, not legal advice or a choice of PieAll's own release license. No Filee source or assets were copied.
+Windows-target Cargo dependencies (including build tooling) and production JavaScript packages from the current lockfiles. Upstream license/notice files are retained in `licenses/`; existing legacy texts are preserved. This is an inventory, not legal advice or a choice of PieAll's own release license.
 
 Regenerate with `python scripts/update-notices.py` after installing dependencies, with Cargo on PATH. No build is performed.
 
 | Package | Version | Declared license | Ecosystem | Text |
 | --- | --- | --- | --- | --- |
 | @tauri-apps/api | 2.12.4 | Apache-2.0 OR MIT | JavaScript | Retained |
+| @types/react | 19.3.0 | MIT | JavaScript | Retained |
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 | Rust | Retained |
+| aes | 0.8.4 | MIT OR Apache-2.0 | Rust | Retained |
 | aho-corasick | 1.1.5 | Unlicense OR MIT | Rust | Retained |
 | alloc-no-stdlib | 3.0.0 | BSD-3-Clause | Rust | Retained |
 | alloc-stdlib | 0.3.0 | BSD-3-Clause | Rust | Retained |
@@ -22,10 +24,12 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | bitflags | 1.3.2 | MIT/Apache-2.0 | Rust | Retained |
 | bitflags | 2.13.2 | MIT OR Apache-2.0 | Rust | Retained |
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 | Rust | Retained |
+| block-padding | 0.3.3 | MIT OR Apache-2.0 | Rust | Retained |
 | brotli | 9.0.0 | BSD-3-Clause AND MIT | Rust | Retained |
 | brotli-decompressor | 6.0.1 | BSD-3-Clause/MIT | Rust | Retained |
 | bs58 | 0.5.1 | MIT/Apache-2.0 | Rust | Retained |
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 | Rust | Retained |
+| bytecount | 0.6.9 | Apache-2.0/MIT | Rust | Retained |
 | bytemuck | 1.25.2 | Zlib OR Apache-2.0 OR MIT | Rust | Retained |
 | byteorder | 1.5.0 | Unlicense OR MIT | Rust | Retained |
 | byteorder-lite | 0.1.0 | Unlicense OR MIT | Rust | Retained |
@@ -34,11 +38,14 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | cargo-platform | 0.1.9 | MIT OR Apache-2.0 | Rust | Retained |
 | cargo_metadata | 0.19.2 | MIT | Rust | Retained |
 | cargo_toml | 1.0.1 | Apache-2.0 OR MIT | Rust | Retained |
+| cbc | 0.1.2 | MIT OR Apache-2.0 | Rust | Retained |
 | cc | 1.9.0 | MIT OR Apache-2.0 | Rust | Retained |
 | cfb | 0.14.0 | MIT | Rust | Retained |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 | Rust | Retained |
 | chrono | 0.4.45 | MIT OR Apache-2.0 | Rust | Retained |
+| cipher | 0.4.4 | MIT OR Apache-2.0 | Rust | Retained |
 | cookie | 0.18.2 | MIT OR Apache-2.0 | Rust | Retained |
+| core_detect | 1.0.0 | MIT/Apache-2.0 | Rust | Retained |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 | Rust | Retained |
 | crc32fast | 1.5.2 | MIT OR Apache-2.0 | Rust | Retained |
 | crossbeam-channel | 0.5.17 | MIT OR Apache-2.0 | Rust | Retained |
@@ -46,6 +53,7 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 | Rust | Retained |
 | cssparser | 0.37.0 | MPL-2.0 | Rust | Retained |
 | cssparser-macros | 0.7.1 | MPL-2.0 | Rust | Retained |
+| csstype | 3.2.3 | MIT | JavaScript | Retained |
 | ctor | 1.0.13 | Apache-2.0 OR MIT | Rust | Retained |
 | darling | 0.24.1 | MIT | Rust | Retained |
 | darling_core | 0.24.1 | MIT | Rust | Retained |
@@ -66,14 +74,19 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | dtoa-short | 0.3.5 | MPL-2.0 | Rust | Retained |
 | dunce | 1.0.5 | CC0-1.0 OR MIT-0 OR Apache-2.0 | Rust | Retained |
 | dyn-clone | 1.0.20 | MIT OR Apache-2.0 | Rust | Retained |
+| ecb | 0.1.2 | MIT | Rust | Retained |
 | embed-resource | 3.0.12 | MIT | Rust | Retained |
+| encoding_rs | 0.8.42 | (Apache-2.0 OR MIT) AND BSD-3-Clause | Rust | Retained |
 | equivalent | 1.0.3 | Apache-2.0 OR MIT | Rust | Retained |
 | erased-serde | 0.4.10 | MIT OR Apache-2.0 | Rust | Retained |
+| fallible-iterator | 0.3.0 | MIT/Apache-2.0 | Rust | Retained |
+| fallible-streaming-iterator | 0.1.9 | MIT/Apache-2.0 | Rust | Retained |
 | fastrand | 2.5.0 | Apache-2.0 OR MIT | Rust | Retained |
 | fdeflate | 0.3.7 | MIT OR Apache-2.0 | Rust | Retained |
 | find-msvc-tools | 0.1.15 | MIT OR Apache-2.0 | Rust | Retained |
 | flate2 | 1.1.10 | MIT OR Apache-2.0 | Rust | Retained |
 | fnv | 1.0.7 | Apache-2.0 / MIT | Rust | Retained |
+| foldhash | 0.1.5 | Zlib | Rust | Retained |
 | foldhash | 0.2.0 | Zlib | Rust | Retained |
 | form_urlencoded | 1.2.2 | MIT OR Apache-2.0 | Rust | Retained |
 | futures-channel | 0.3.34 | MIT OR Apache-2.0 | Rust | Retained |
@@ -89,7 +102,9 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | glob | 0.3.4 | MIT OR Apache-2.0 | Rust | Retained |
 | global-hotkey | 0.8.0 | Apache-2.0 OR MIT | Rust | Retained |
 | hashbrown | 0.12.3 | MIT OR Apache-2.0 | Rust | Retained |
+| hashbrown | 0.15.5 | MIT OR Apache-2.0 | Rust | Retained |
 | hashbrown | 0.17.1 | MIT OR Apache-2.0 | Rust | Retained |
+| hashlink | 0.10.0 | MIT OR Apache-2.0 | Rust | Retained |
 | heck | 0.5.0 | MIT OR Apache-2.0 | Rust | Retained |
 | hex | 0.4.3 | MIT OR Apache-2.0 | Rust | Retained |
 | html5ever | 0.39.0 | MIT OR Apache-2.0 | Rust | Retained |
@@ -116,6 +131,7 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | indexmap | 1.9.3 | Apache-2.0 OR MIT | Rust | Retained |
 | indexmap | 2.14.2 | Apache-2.0 OR MIT | Rust | Retained |
 | infer | 0.22.0 | MIT | Rust | Retained |
+| inout | 0.1.4 | MIT OR Apache-2.0 | Rust | Retained |
 | ipnet | 2.12.2 | MIT OR Apache-2.0 | Rust | Retained |
 | itoa | 1.0.18 | MIT OR Apache-2.0 | Rust | Retained |
 | jiff | 0.2.38 | Unlicense OR MIT | Rust | Retained |
@@ -127,10 +143,14 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | keyboard-types | 0.7.0 | MIT OR Apache-2.0 | Rust | Retained |
 | keyboard-types | 0.8.3 | MIT OR Apache-2.0 | Rust | Retained |
 | libc | 0.2.191 | MIT OR Apache-2.0 | Rust | Retained |
+| libsqlite3-sys | 0.35.0 | MIT | Rust | Retained |
 | litemap | 0.8.3 | Unicode-3.0 | Rust | Retained |
 | lock_api | 0.4.14 | MIT OR Apache-2.0 | Rust | Retained |
 | log | 0.4.34 | MIT OR Apache-2.0 | Rust | Retained |
+| lopdf | 0.38.0 | MIT | Rust | Retained |
+| lucide-react | 1.60.0 | ISC | JavaScript | Retained |
 | markup5ever | 0.39.0 | MIT OR Apache-2.0 | Rust | Retained |
+| md-5 | 0.10.6 | MIT OR Apache-2.0 | Rust | Retained |
 | memchr | 2.8.3 | Unlicense OR MIT | Rust | Retained |
 | mime | 0.3.17 | MIT OR Apache-2.0 | Rust | Retained |
 | minisign-verify | 0.3.0 | MIT | Rust | Retained |
@@ -139,8 +159,11 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | mio | 1.2.4 | MIT | Rust | Retained |
 | moxcms | 0.8.1 | BSD-3-Clause OR Apache-2.0 | Rust | Retained |
 | muda | 0.20.0 | Apache-2.0 OR MIT | Rust | Retained |
+| multiversion_no_op | 1.0.0 | Apache-2.0 OR MIT | Rust | Retained |
 | native-tls | 0.2.18 | MIT OR Apache-2.0 | Rust | Retained |
 | new_debug_unreachable | 1.0.6 | MIT | Rust | Retained |
+| nom | 8.0.0 | MIT | Rust | Retained |
+| nom_locate | 5.0.0 | MIT | Rust | Retained |
 | num-conv | 0.2.2 | MIT OR Apache-2.0 | Rust | Retained |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 | Rust | Retained |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 | Rust | Retained |
@@ -154,17 +177,23 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | phf_macros | 0.13.1 | MIT | Rust | Retained |
 | phf_shared | 0.13.1 | MIT | Rust | Retained |
 | pin-project-lite | 0.2.17 | Apache-2.0 OR MIT | Rust | Retained |
+| pkg-config | 0.3.34 | MIT OR Apache-2.0 | Rust | Retained |
 | plist | 1.10.2 | MIT | Rust | Retained |
 | png | 0.17.16 | MIT OR Apache-2.0 | Rust | Retained |
 | png | 0.18.1 | MIT OR Apache-2.0 | Rust | Retained |
 | potential_utf | 0.1.6 | Unicode-3.0 | Rust | Retained |
 | powerfmt | 0.2.1 | MIT OR Apache-2.0 | Rust | Retained |
+| ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 | Rust | Retained |
 | precomputed-hash | 0.1.1 | MIT | Rust | Retained |
 | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 | Rust | Retained |
 | pxfm | 0.1.30 | BSD-3-Clause OR Apache-2.0 | Rust | Retained |
 | quick-error | 2.0.1 | MIT/Apache-2.0 | Rust | Retained |
 | quick-xml | 0.42.0 | MIT | Rust | Retained |
 | quote | 1.0.47 | MIT OR Apache-2.0 | Rust | Retained |
+| rand | 0.9.5 | MIT OR Apache-2.0 | Rust | Retained |
+| rand_chacha | 0.9.0 | MIT OR Apache-2.0 | Rust | Retained |
+| rand_core | 0.9.5 | MIT OR Apache-2.0 | Rust | Retained |
+| rangemap | 1.8.0 | MIT/Apache-2.0 | Rust | Retained |
 | raw-window-handle | 0.6.2 | MIT OR Apache-2.0 OR Zlib | Rust | Retained |
 | react | 19.3.1 | MIT | JavaScript | Retained |
 | react-dom | 19.3.1 | MIT | JavaScript | Retained |
@@ -174,9 +203,11 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | regex-automata | 0.4.18 | MIT OR Apache-2.0 | Rust | Retained |
 | regex-syntax | 0.8.11 | MIT OR Apache-2.0 | Rust | Retained |
 | reqwest | 0.13.5 | MIT OR Apache-2.0 | Rust | Retained |
+| rusqlite | 0.37.0 | MIT | Rust | Retained |
 | rustc-hash | 2.1.3 | Apache-2.0 OR MIT | Rust | Retained |
 | rustc_version | 0.4.1 | MIT OR Apache-2.0 | Rust | Retained |
 | rustls-pki-types | 1.15.1 | MIT OR Apache-2.0 | Rust | Retained |
+| rustversion | 1.0.23 | MIT OR Apache-2.0 | Rust | Retained |
 | same-file | 1.0.6 | Unlicense/MIT | Rust | Retained |
 | schannel | 0.1.30 | MIT | Rust | Retained |
 | scheduler | 0.28.0 | MIT | JavaScript | Retained |
@@ -203,6 +234,7 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | sha2 | 0.10.9 | MIT OR Apache-2.0 | Rust | Retained |
 | shlex | 2.0.1 | MIT OR Apache-2.0 | Rust | Retained |
 | simd-adler32 | 0.3.10 | MIT | Rust | Retained |
+| simdutf8 | 0.1.5 | MIT OR Apache-2.0 | Rust | Retained |
 | siphasher | 1.0.4 | MIT OR Apache-2.0 | Rust | Retained |
 | slab | 0.4.12 | MIT | Rust | Retained |
 | smallvec | 1.16.3 | MIT OR Apache-2.0 | Rust | Retained |
@@ -212,6 +244,7 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | static_vcruntime | 3.0.0 | MIT OR Apache-2.0 OR Zlib | Rust | Retained |
 | string_cache | 0.9.0 | MIT OR Apache-2.0 | Rust | Retained |
 | string_cache_codegen | 0.6.1 | MIT OR Apache-2.0 | Rust | Retained |
+| stringprep | 0.1.5 | MIT/Apache-2.0 | Rust | Retained |
 | strsim | 0.11.1 | MIT | Rust | Retained |
 | syn | 2.0.119 | MIT OR Apache-2.0 | Rust | Retained |
 | syn | 3.0.9 | MIT OR Apache-2.0 | Rust | Retained |
@@ -255,14 +288,19 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | tracing-core | 0.1.36 | MIT | Rust | Retained |
 | tray-icon | 0.25.1 | MIT OR Apache-2.0 | Rust | Retained |
 | try-lock | 0.2.5 | MIT | Rust | Retained |
+| ttf-parser | 0.25.1 | MIT OR Apache-2.0 | Rust | Retained |
 | typeid | 1.0.3 | MIT OR Apache-2.0 | Rust | Retained |
 | typenum | 1.20.1 | MIT OR Apache-2.0 | Rust | Retained |
+| unicode-bidi | 0.3.18 | MIT OR Apache-2.0 | Rust | Retained |
 | unicode-ident | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 | Rust | Retained |
+| unicode-normalization | 0.1.26 | (MIT OR Apache-2.0) AND Unicode-3.0 | Rust | Retained |
+| unicode-properties | 0.1.4 | MIT/Apache-2.0 | Rust | Retained |
 | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 | Rust | Retained |
 | url | 2.5.8 | MIT OR Apache-2.0 | Rust | Retained |
 | urlpattern | 0.6.0 | MIT | Rust | Retained |
 | utf8_iter | 1.0.4 | Apache-2.0 OR MIT | Rust | Retained |
 | uuid | 1.28.0 | Apache-2.0 OR MIT | Rust | Retained |
+| vcpkg | 0.2.15 | MIT/Apache-2.0 | Rust | Retained |
 | version_check | 0.9.5 | MIT/Apache-2.0 | Rust | Retained |
 | vswhom | 0.1.0 | MIT | Rust | Retained |
 | vswhom-sys | 0.1.3 | MIT | Rust | Retained |
@@ -273,6 +311,7 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | webview2-com | 0.39.1 | MIT | Rust | Retained |
 | webview2-com-macros | 0.8.1 | MIT | Rust | Retained |
 | webview2-com-sys | 0.39.1 | MIT | Rust | Retained |
+| weezl | 0.1.12 | MIT OR Apache-2.0 | Rust | Retained |
 | winapi-util | 0.1.11 | Unlicense OR MIT | Rust | Retained |
 | window-vibrancy | 0.8.1 | Apache-2.0 OR MIT | Rust | Retained |
 | windows | 0.62.2 | MIT OR Apache-2.0 | Rust | Retained |
@@ -298,6 +337,7 @@ Regenerate with `python scripts/update-notices.py` after installing dependencies
 | wry | 0.57.0 | Apache-2.0 OR MIT | Rust | Retained |
 | yoke | 0.8.3 | Unicode-3.0 | Rust | Retained |
 | yoke-derive | 0.8.4 | Unicode-3.0 | Rust | Retained |
+| zerocopy | 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT | Rust | Retained |
 | zerofrom | 0.1.8 | Unicode-3.0 | Rust | Retained |
 | zerofrom-derive | 0.1.8 | Unicode-3.0 | Rust | Retained |
 | zeroize | 1.9.1 | Apache-2.0 OR MIT | Rust | Retained |

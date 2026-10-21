@@ -78,6 +78,23 @@ export const menus: Record<string, MenuItem[]> = {
     ]),
   ],
   files: [
+    sub("pdf-tools", "PDF tools", "pdf", [
+      run("pdf_rotate", "Rotate right", "rotate", { angle: "90" }),
+      run("pdf_compress", "Compress", "compress"),
+      run("pdf_text", "Save text", "text"),
+      run("pdf_strip_metadata", "Remove info", "clean"),
+      run("pdf_details", "Copy details", "info"),
+    ]),
+    sub("media-tools", "Media tools", "play", [
+      run("video_convert", "Make MP4", "convert", { format: "mp4" }),
+      run("video_compress", "Compress video", "compress"),
+      run("video_mute", "Mute video", "mute"),
+      run("video_audio", "Save audio", "volume"),
+      run("video_frame", "Save first frame", "images"),
+      run("audio_convert", "Make MP3", "convert", { format: "mp3" }),
+      run("audio_normalize", "Normalize audio", "volume"),
+      run("media_details", "Copy details", "info"),
+    ]),
     run("copy_paths", "Copy path", "copy"),
     run("create_zip", "Zip", "archives"),
     run("extract_zip", "Extract here", "extract"),

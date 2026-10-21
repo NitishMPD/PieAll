@@ -1,5 +1,11 @@
 pub mod actions;
+pub mod archive_tools;
+pub mod engines;
+pub mod image_tools;
+pub mod jobs;
+pub mod media_tools;
 pub mod output;
+pub mod pdf_tools;
 pub mod platform;
 pub mod shortcuts;
 #[cfg(feature = "legacy-ui")]

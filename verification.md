@@ -1,6 +1,24 @@
 ﻿# Verification record
 Author: Nitish
 
+## Tool expansion, jobs and engines ? 21 October 2026
+
+Implemented code increases the local registry from 44 to 66 commands (seven PDF and 15 optional media commands), adds engine setup, richer image/PDF settings, folder ZIP creation and native job progress/Close/Cancel. Current implementation and limits are documented at the top of project.md; the remaining-work matrix is section 13.15 of PieAll-plan.md.
+
+Passed source checks:
+
+- `cargo test -p pieall --lib --locked`: 29 tests. Covers source/collision preservation, cancellation publication ordering, ZIP traversal/quotas/empty folders/compression choices, PDF ranges/form refusal/extraction/splitting/inherited rotation/metadata, image page settings/resize modes, engine persistence/hash mismatch, compatible inputs and typed media argument rejection.
+- `cargo check --workspace --all-targets --locked` and `cargo clippy --workspace --all-targets --locked -- -D warnings`.
+- `pnpm typecheck` and `pnpm exec vitest run web/editor-fields.test.ts web/menus.test.ts web/action-search.test.ts`: 14 tests.
+- `node scripts/preview-ui.cjs` and `node scripts/preview-ui.cjs --shortcuts`: source-only React static rendering; the latter checks contextual action rows/pagination and no unrelated app leakage. Corrected the preferences server snapshot and deferred title-bar native-window access to effects/click handlers so these checks run without a browser.
+- Changed-file Prettier, `cargo fmt --all --check` and `git diff --check`.
+- Third-party notices regenerated: 343 inventoried dependencies, zero missing license-text reviews; 229 consolidated texts. Bundling normalizes trailing whitespace while original retained license files remain available.
+- Impeccable source detector reported two advisory easing matches in existing ring/toast CSS. The established motion was retained; this is not visual/native acceptance.
+
+No app, engine executable, dev server or build was launched for this work. Real encoding, live cancellation during a codec, actual executable-version/codec support, packaged worker dispatch, native toast Close/Cancel hit testing/focus/accessibility/DPI, crash/forced-kill cleanup, disk-full behavior and PDF fidelity across varied external documents remain unverified.
+
+User-run acceptance command: `pnpm tauri dev`. Configure trusted FFmpeg/FFprobe in Tool engines, exercise each media format with representative video/audio, inspect playback and output size, and test cancellation/Close during encoding and finalization. Exercise PDF page settings/ranges/rotation, a signed/form PDF refusal, duplicate filenames, readonly targets, ZIP folders with links/empty folders and image crop/gradient previews. A complete release build remains user-run: `pnpm package:windows` with the documented signing setup. Browser downloads, boards, advanced editors and the rest of the catalog are still planned, not verified features.
+
 ## Productivity default profiles - 21 October 2026
 
 The current catalog has 3,108 app bindings across 57 profiles, plus 44 local tools. Updated 49 quick lists, preserved existing action IDs and saved layouts, added browser Copy URL and Figma alignment/distribution, and kept recognized app actions primary over selected text. This supersedes the selected-text precedence statements in older records below.

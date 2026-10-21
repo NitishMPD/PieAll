@@ -181,7 +181,7 @@ Transformations preserve originals. Network operations start after user activati
 | 63 | Copy clean URL | Browser | Remove known tracking parameters, preserve functional parameters, show result |
 | 64 | Copy Markdown page link | Browser | Escaped title and URL |
 | 65 | Capture visible tab | Browser | Viewport screenshot, explicitly not full-page capture |
-| 66 | Save selected web image | Browser | Allowed-origin fetch; explain protected/blob/canvas limitations |
+| 66 | Save selected web image | Browser | One-action save of the explicitly targeted image at the best available source resolution to the configured web-download folder; allowed-origin fetch with protected/blob/canvas limitations; see 13.14 |
 | 67 | Copy selected web image | Browser | Fetch/decode/copy pixels under the same access limits |
 | 68 | Search selected text | Browser | Configured provider, correctly encoded query |
 | 69 | Translate selection | Browser | Open configured service; disclose transmitted text before first use |
@@ -199,8 +199,8 @@ Transformations preserve originals. Network operations start after user activati
 | 76 | Remove video audio | Engine: FFmpeg | Silent copy; preserve video without re-encode where possible |
 | 77 | Video clip to GIF | Engine: FFmpeg | Explicit duration/dimension/frame-rate caps |
 | 78 | Extract video frame | Engine: FFmpeg | Time picker, bounded preview, output image |
-| 79 | Download online video | Browser + Engine: yt-dlp/FFmpeg | Explicit URL/destination, supported access only, progress/cancel; no DRM bypass |
-| 80 | Download online audio | Browser + Engine: yt-dlp/FFmpeg | Audio-only from accessible source, same access/tool-update limits |
+| 79 | Download online video | Browser + Engine: yt-dlp/FFmpeg | Invoke over the active supported video page/post and choose Download video; captured URL, best available video plus audio by default, configured destination, background progress/cancel; explicit pasted URL also supported; see 13.14 |
+| 80 | Download online audio | Browser + Engine: yt-dlp/FFmpeg | Same contextual or pasted-URL flow, extracting the best available audio by default; configurable copy/encoding settings, supported access and tool-update limits |
 
 ### Moodboards and collections: 81–90
 
@@ -605,7 +605,7 @@ Every timeline has numeric start/end controls, keyboard seeking, a preview of th
 
 | ID | Tool | Required input, controls and result | Existing overlap / status |
 |---|---|---|---|
-| T01 | Download video | Explicit one/many HTTP(S) links; best available, 1080p, 720p or audio-only; compatible-codec preference; destination; progress, retry and cancel; no DRM bypass. Browser capture is optional when the user pastes a URL. | Extends 79–80; missing |
+| T01 | Download video | Primary flow: invoke PieAll over an active supported video page/post and choose Download video; use the captured URL and yt-dlp in the background, best available video plus audio by default, with FFmpeg merging when necessary. App settings customize quality/format/codec/audio/destination; per-run overrides are optional. Explicit one/many pasted HTTP(S) links remain available without the extension. See 13.14 for targeting and defaults. | Extends 79–80; missing |
 | T02 | Burn in subtitles | Video plus SRT/WebVTT, or a reviewed local transcript; text size/style/position with preview; encode a captioned copy. Parse subtitles as data and restrict referenced fonts/assets. | New; missing |
 | T03 | Change speed | 0.25×–4×, presets and new-duration readout; preserve pitch by default, optional mute; output preset. | New; missing |
 | T04 | Extract frames | One timestamp, every N seconds or N evenly spaced frames; PNG/JPEG, size and count limits; publish a new frame folder. HEIC is available only after its codec gate. | Extends 78; missing |
@@ -795,3 +795,59 @@ Do not promise full-suite completion in a single release or silently turn the or
 Before a tool becomes ready, prove its real handler and frontend route, eligibility reason, malformed input handling, permissions/engine path, original preservation or reviewed system mutation, cancellation/cleanup, output naming, keyboard support and applicable license notices. A rich editor is incomplete if it is only a visual mock or opens an external application instead of carrying out the operation.
 
 Agent-run checks remain TypeScript, formatting, lint and targeted tests. Do not run builds, development servers, apps or the full suite under the current instructions. User-run app command after implementation: `pnpm tauri dev`. User-run executable build: `pnpm tauri build --no-bundle`. Signed package command after signing setup: `pnpm package:windows`. Native keyboard/focus, Narrator, mixed DPI/text scaling, codec/form fidelity, hardware controls, recording consent/device release, real latency/memory and clean-Windows acceptance cannot be established from source alone.
+
+### 13.14 Contextual web downloads and image actions — 21 October 2026
+
+The default video workflow is: a YouTube video is playing in the browser → invoke PieAll over that page → choose Download video → the download starts in the background using saved defaults. No URL copying, dashboard navigation or format dialog is required when the browser bridge identifies one supported target and the engine is installed. The same flow applies to X posts and other yt-dlp-supported platforms. Playback itself is not required if a supported video page or explicitly targeted post/link identifies the media. “Any video” means supported accessible media; unavailable, access-restricted, DRM-protected or unsupported sources get a specific failure, never a screen recording silently substituted as a download.
+
+**Target capture and action placement**
+
+- Extend the planned browser bridge with invocation-scoped page URL/title and an explicit image/link/video/post target, including browser profile/window/tab/frame identity. Capture before PieAll changes focus. A browser executable name, window title or previously active tab is insufficient to choose the URL.
+- For a single-video watch page, Download video acts on that video. On feeds such as X, a media element, post or link explicitly targeted by the invocation identifies its canonical post/media URL. Prefer that target over the feed URL. Never guess from whichever video happens to be playing elsewhere, download every feed item, or select media in another tab/profile.
+- If several videos belong to the captured post, show a small numbered picker with thumbnails and durations; optionally offer Download all in this post. If no unique target can be captured, ask for a target or pasted link instead of downloading a guessed URL. Missing bridge permission/connection offers its setup route and an explicit paste-link fallback.
+- Eligible contextual actions appear directly in the relevant ring, with Download video as the primary video action and Download audio as an alternative. Images expose Save image, Copy image and Add to board; links/pages expose their relevant save/copy/bookmark/reading-list actions. Reuse existing ring customization and overflow rules. Ordinary browser shortcuts remain reachable without displacing the explicitly selected media tools.
+- Run against the reviewed immutable snapshot; reject a stale response before starting. After a download starts, changing tabs or closing the ring does not retarget or cancel it. Do not scrape tabs or poll playback while idle.
+
+**Download defaults and customization**
+
+- Use maintained yt-dlp as the downloader and FFmpeg for compatible stream merging/post-processing. Default to yt-dlp's best available video and best available audio, with a best combined-stream fallback where needed. Separate high-resolution video/audio streams must be considered; selecting only a precombined stream must not silently cap the quality.
+- Best available has no default resolution cap and no forced H.264/MP4 transcode. Choose a container compatible with the selected streams; preserving source quality takes precedence over a familiar extension. Remux without re-encoding where possible. If FFmpeg is required but missing, offer its explicit installation or a clearly labelled lower-quality combined-stream choice; never silently downgrade.
+- App Settings → Downloads owns persistent defaults: Best available or a resolution cap, preferred container, compatibility/codec preference, original audio or an explicit output format/bitrate, subtitle/metadata choices, web-download destination and a policy for handling playlists. Defaults are best available, original audio without lossy re-encoding, no embedded subtitle/metadata extras, single targeted item, and the user's Downloads folder. A playlist URL does not download the entire playlist unless selected explicitly.
+- Add optional Download options in the app/ring to override one job, inspect available formats and choose video-only/audio-only or a supported combination. Ordinary Download video uses saved defaults immediately. User preferences that cap quality or request a transcode remain visible in the job summary; distinguish Highest quality from Most compatible presets.
+- Download audio defaults to the highest available audio stream without an unnecessary lossy re-encode; a saved MP3/M4A/etc. conversion preference is explicit. Show the actual source/output codec and any quality-changing conversion.
+- Use controlled names derived from media title/identity and collision-safe publication; sanitize titles as filenames. Stage video/audio/merge files privately and publish only successful outputs to the configured folder. Provide bounded resource/disk budgets and engine-specific job deadlines appropriate for long downloads; do not apply the current local-transform 120-second timeout unchanged to a large download. Downloads use the shared native job owner and exclusion rules; do not spawn a second unmanaged downloader beside it.
+- The ring closes normally. A non-activating status/toast confirms start/completion/failure; the app's Jobs view shows title/source, actual resolution/codec, bytes/progress when available, processing/merge state, Cancel, Retry, Open file and Reveal. Unknown size/progress stays indeterminate. Do not steal focus, autoplay or open downloaded files automatically.
+- Install/update yt-dlp, its required runtime and FFmpeg through the explicit engine manager. Site changes may require a verified engine update and a retry. Authentication-dependent support needs a separate explicit account/session grant; never silently read browser cookies. No DRM bypass or global security-setting changes.
+
+**Save/copy images and related web actions**
+
+- Save image targets the explicitly selected/context-targeted image. Resolve the best page-provided original/full-resolution candidate when deterministically available and permitted; otherwise use the selected resource's actual resolution. Handle picture/srcset and lazy-loaded images without inventing an original URL or claiming preview pixels are full resolution.
+- One action saves to the configured web-download folder using the shared safe writer and collision naming. Save image as provides an optional native destination/format editor. Preserve the original supported image bytes/format by default after validation; format conversion, metadata stripping and recompression are separate explicit choices. Do not upscale to manufacture a higher-resolution result.
+- Copy image fetches and bounded-decodes the same target into clipboard pixels. Add to board imports permitted bytes into the managed collection store and records source page/image URLs and capture time; it does not rely on a fragile remote-only thumbnail. A default board can make this direct; otherwise use an accessible board chooser/create flow.
+- Cross-origin access requires the bridge's declared permission. Authenticated/blob/canvas resources may be inaccessible: use an explicit supported page-context export when available or explain the restriction. A screenshot fallback is a distinct user-selected action. Animated images retain original bytes when saved; pixel copying/editing requires an explicit frame choice when applicable. SVG content is saved/rendered with its existing active-content/external-resource restrictions.
+- Copy image URL, Copy page/link URL, Copy clean URL, Copy Markdown link, Bookmark, Save for later and Save quote with source share the captured browser identity and existing baseline handlers. Download a linked file only for an explicit link target and supported scheme; the URL must not be executed as a command or opened automatically.
+
+**Implementation and proof**
+
+Implement this as the first vertical browser/media workflow in stage 9, reusing stage 1 engine/job ownership and stage 4 media probing. Planned owners: `extension/background.ts`, `extension/content.ts`, `extension/native.ts`, `src/bridge.rs`, `src/actions/browser.rs`, `src/actions/media.rs`, `src/engines.rs`, `src/jobs.rs`, `src/storage.rs`, `web/menus.ts`, `web/Tools.tsx`, `web/MediaEditor.tsx` and the settings/jobs UI. Settings remain under the versioned native store rather than an independent frontend download-preference store.
+
+Targeted tests must prove active-tab/profile/window matching; stale snapshot rejection; single video vs playlist selection; a targeted X post inside a feed; multi-video ambiguity; best separate streams plus audio selection; missing-FFmpeg no-silent-downgrade behavior; resolution/codec preference overrides; URL/argument/path validation; malicious media titles; redirects and private/local-network handling; size/disk/time limits; cancellation during download/merge/publication; partial-file cleanup and collision-safe retry. Image fixtures cover srcset/lazy loading, unavailable originals, permission denial, corrupt/huge images, animated input, SVG restrictions, clipboard decode and board provenance. Live platform/browser/download acceptance remains user-run and must record tested sites and engine versions rather than assert universal support.
+
+
+### 13.15 Implementation checkpoint ? 21 October 2026
+
+The registry contains 66 local command IDs. This checkpoint records implemented code; native UI and real-codec acceptance remain open. It does not mark all 72 workflows or the original 100 product IDs complete.
+
+| Area | Implemented now | Still required by the plan |
+| --- | --- | --- |
+| Jobs | Worker file counts, duration-based media encoding progress, Close/Cancel, partial outcomes, no-replace publication, Windows process-tree/memory ownership | Durable history, retry/open/reveal actions, crash recovery/cleanup, richer phase/ETA/size reporting |
+| Images | Existing transforms plus crop drag/presets, resize modes, gradient/ratio/shadow framing, quality controls | Layers, masks, background removal, advanced adjustments, annotation and broader codecs |
+| PDF | Images-to-PDF page controls; inspect, extract, split, rotate, stream compression, basic document metadata removal, selectable text export | Merge/reorder/page thumbnails, annotations, password UI, form editing, OCR, secure redaction and broader document conversion |
+| Media | 15 optional FFmpeg/FFprobe handlers for conversion, compression, trim, resize, rotate, mute, GIF/frame/audio extraction, volume, single-pass normalization and inspection | Timeline/waveform editors, stream/track selection, recording, subtitles, concatenation, further catalog workflows and real-codec acceptance |
+| Engines/settings | Native-selected FFmpeg/FFprobe paths and pinned hashes in schema-1 SQLite; missing-engine guidance | Verified install/update/removal of managed binaries, dependency/license/version UX, persistent conversion/download defaults and further engines |
+| Archives | File/folder ZIP with empty directories, Store/Deflate level, bounded traversal/streaming | Other archive formats and remaining file-manager workflows |
+| Browser/downloads | Planned behavior and acceptance requirements in 13.14 | Browser extension/native host, exact tab/frame/post capture, yt-dlp/runtime management, highest-quality background download, settings and web-image tools |
+| Boards/Library | Product and interaction specification | Storage/assets, collection/board UI, notes/tags/provenance, canvas/grid, imports and exports |
+| Remaining catalog | Extracted 72-workflow requirements retained above | Speech/model tools, recording, advanced Windows utilities and other unimplemented rows |
+
+The current setup deliberately uses trusted user-installed FFmpeg/FFprobe instead of an unfinished automatic installer. Media jobs use their own one-hour deadline rather than the earlier 120-second image/file limit. The SQLite database currently owns engine records only; ring preferences retain their existing store until the planned migration. No browser or board implementation is implied by the engine/media work.

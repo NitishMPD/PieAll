@@ -61,6 +61,7 @@ export function usePrefs(): Prefs {
       return () => listeners.delete(fn);
     },
     () => cache,
+    () => defaults,
   );
 }
 

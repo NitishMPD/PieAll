@@ -54,6 +54,10 @@ function targetName(session: Session): string {
 
 type Phase = "closed" | "open" | "closing";
 
+/** The last settled session per app: while a new selection is read, its slices
+ *  show at once, so the ring never waits on a loader. */
+const settled = new Map<string, Session>();
+
 export function Ring({
   session,
   thumbnail,
@@ -84,9 +88,14 @@ export function Ring({
   const reading = session.busy === "capture";
   const blocked = !!session.busy || !!session.editor;
   const prefs = usePrefs();
+  const appKey = session.app ?? "";
+  useEffect(() => {
+    if (!session.busy) settled.set(appKey, session);
+  }, [session, appKey]);
+  const view = reading ? (settled.get(appKey) ?? session) : session;
   const root = useMemo(
-    () => resolve(contextMenu(session, prefs), session.actions, session.names),
-    [session, prefs],
+    () => resolve(contextMenu(view, prefs), view.actions, view.names),
+    [view, prefs],
   );
   let items = root;
   let parent: MenuItem | null = null;
@@ -115,13 +124,16 @@ export function Ring({
   // Releasing the held key always ends the ring: it runs the highlighted action
   // slice, otherwise it closes. The highlight wins over the reported point, which
   // only decides when nothing is highlighted (a flick past the rim). Submenus open
-  // by resting, not by releasing. A release during capture waits for the selection.
-  function release(x: number, y: number) {
+  // by resting, not by releasing. A release during capture waits for the selection,
+  // then goes by the point alone: the highlight was on the cached slices.
+  function release(x: number, y: number, byHighlight = true) {
     if (reading) {
       pending.current = [x, y];
       return;
     }
-    const index = selected ?? sectorAt(x, y, items.length, DEAD_ZONE);
+    const index =
+      (byHighlight ? selected : null) ??
+      sectorAt(x, y, items.length, DEAD_ZONE);
     const item = index !== null ? items[index] : undefined;
     if (item?.browse && !blocked) onBrowse();
     else if (item?.action && !blocked) onRun(item.action, item.params ?? {});
@@ -160,7 +172,7 @@ export function Ring({
     if (reading || !pending.current) return;
     const [x, y] = pending.current;
     pending.current = null;
-    latest.current(x, y);
+    latest.current(x, y, false);
   }, [reading, session.revision]);
 
   // Hover-to-open: rest on a submenu slice, or on the center to go back.
@@ -181,7 +193,7 @@ export function Ring({
 
   function track(clientX: number, clientY: number) {
     const box = svg.current?.getBoundingClientRect();
-    if (!box || !items.length || reading) return;
+    if (!box || !items.length) return;
     const x = ((clientX - box.left) * SIZE) / box.width;
     const y = ((clientY - box.top) * SIZE) / box.height;
     setCentered(Math.hypot(x - SIZE / 2, y - SIZE / 2) < DEAD_ZONE);
@@ -194,14 +206,12 @@ export function Ring({
     () => Array.from({ length: count }, (_, index) => wedgePath(index, count)),
     [count],
   );
-  const caption = reading
-    ? "Reading…"
-    : placeholder
-      ? "Nothing to do here"
-      : current?.children
-        ? "Rest to open"
-        : (current?.hint ??
-          (parent ? "Center to go back" : standalone && !held ? "Esc" : ""));
+  const caption = placeholder
+    ? "Nothing to do here"
+    : current?.children
+      ? "Rest to open"
+      : (current?.hint ??
+        (parent ? "Center to go back" : standalone && !held ? "Esc" : ""));
 
   return (
     <div
@@ -293,107 +303,99 @@ export function Ring({
           </defs>
           <circle className="ring-rim" cx="220" cy="220" r={OUTER + 10} />
           <circle className="ring-well" cx="220" cy="220" r={INNER - 7} />
-          {/* Slices appear only once the selection is read: the previous target's
-              slices would show first and then reshape, which read as a jump. */}
-          {!reading && (
-            <g className="sectors" key={path.join("/")}>
-              {Array.from({ length: count }, (_, index) => {
-                const item = items[index];
-                const angle = (index * 360) / count;
-                const [x, y] = point((OUTER + INNER) / 2, angle);
-                const [px, py] = point(5, angle);
-                const active = !!item && selected === index;
-                return (
+          <g className="sectors" key={path.join("/")}>
+            {Array.from({ length: count }, (_, index) => {
+              const item = items[index];
+              const angle = (index * 360) / count;
+              const [x, y] = point((OUTER + INNER) / 2, angle);
+              const [px, py] = point(5, angle);
+              const active = !!item && selected === index;
+              return (
+                <g key={item?.key ?? `empty-${index}`} className="sector-shell">
                   <g
-                    key={item?.key ?? `empty-${index}`}
-                    className="sector-shell"
+                    className={`sector ${active ? "is-selected" : ""} ${item ? "" : "is-placeholder"}`}
+                    style={
+                      {
+                        "--pop-x": `${px - SIZE / 2}px`,
+                        "--pop-y": `${py - SIZE / 2}px`,
+                      } as CSSProperties
+                    }
+                    role={item ? "menuitem" : undefined}
+                    aria-label={
+                      item
+                        ? [item.label, item.hint].filter(Boolean).join(", ")
+                        : undefined
+                    }
+                    aria-haspopup={item?.children ? "menu" : undefined}
+                    aria-disabled={blocked || undefined}
+                    tabIndex={
+                      item
+                        ? active || (selected === null && index === 0)
+                          ? 0
+                          : -1
+                        : undefined
+                    }
+                    ref={(el) => {
+                      refs.current[index] = el;
+                    }}
+                    onFocus={() => item && setSelected(index)}
+                    onClick={() => item && activate(item)}
                   >
-                    <g
-                      className={`sector ${active ? "is-selected" : ""} ${item ? "" : "is-placeholder"}`}
-                      style={
-                        {
-                          "--pop-x": `${px - SIZE / 2}px`,
-                          "--pop-y": `${py - SIZE / 2}px`,
-                        } as CSSProperties
-                      }
-                      role={item ? "menuitem" : undefined}
-                      aria-label={
-                        item
-                          ? [item.label, item.hint].filter(Boolean).join(", ")
-                          : undefined
-                      }
-                      aria-haspopup={item?.children ? "menu" : undefined}
-                      aria-disabled={blocked || undefined}
-                      tabIndex={
-                        item
-                          ? active || (selected === null && index === 0)
-                            ? 0
-                            : -1
-                          : undefined
-                      }
-                      ref={(el) => {
-                        refs.current[index] = el;
-                      }}
-                      onFocus={() => item && setSelected(index)}
-                      onClick={() => item && activate(item)}
-                    >
-                      {item && (
-                        <title>
-                          {`${item.label}${item.hint ? ` · ${item.hint}` : ""}`}
-                        </title>
-                      )}
-                      <path className="sector-shape" d={shapes[index]} />
-                      <path className="sector-sheen" d={shapes[index]} />
-                      {active && item?.children && !blocked && (
-                        <g key={`dwell-${item.key}`} className="dwell">
-                          <path
-                            className="dwell-track"
-                            d={arcPath(index, count)}
-                          />
-                          <path
-                            className="dwell-fill"
-                            d={arcPath(index, count)}
-                            pathLength={1}
-                            style={
-                              { "--dwell": `${DWELL_MS}ms` } as CSSProperties
-                            }
-                          />
-                        </g>
-                      )}
-                      {item && (
-                        <g
-                          transform={`translate(${x},${y})`}
-                          className="sector-content"
-                        >
-                          <foreignObject x="-14" y="-29" width="28" height="28">
-                            <span className="wedge-icon">
-                              <Icon name={item.icon} size={22} />
-                            </span>
-                          </foreignObject>
-                          <text textAnchor="middle">
-                            {labelLines(item.label).map(
-                              (line, lineIndex, lines) => (
-                                <tspan
-                                  key={lineIndex}
-                                  x="0"
-                                  y={
-                                    (lines.length === 1 ? 15 : 9) +
-                                    lineIndex * 14
-                                  }
-                                >
-                                  {line}
-                                </tspan>
-                              ),
-                            )}
-                          </text>
-                        </g>
-                      )}
-                    </g>
+                    {item && (
+                      <title>
+                        {`${item.label}${item.hint ? ` · ${item.hint}` : ""}`}
+                      </title>
+                    )}
+                    <path className="sector-shape" d={shapes[index]} />
+                    <path className="sector-sheen" d={shapes[index]} />
+                    {active && item?.children && !blocked && (
+                      <g key={`dwell-${item.key}`} className="dwell">
+                        <path
+                          className="dwell-track"
+                          d={arcPath(index, count)}
+                        />
+                        <path
+                          className="dwell-fill"
+                          d={arcPath(index, count)}
+                          pathLength={1}
+                          style={
+                            { "--dwell": `${DWELL_MS}ms` } as CSSProperties
+                          }
+                        />
+                      </g>
+                    )}
+                    {item && (
+                      <g
+                        transform={`translate(${x},${y})`}
+                        className="sector-content"
+                      >
+                        <foreignObject x="-14" y="-29" width="28" height="28">
+                          <span className="wedge-icon">
+                            <Icon name={item.icon} size={22} />
+                          </span>
+                        </foreignObject>
+                        <text textAnchor="middle">
+                          {labelLines(item.label).map(
+                            (line, lineIndex, lines) => (
+                              <tspan
+                                key={lineIndex}
+                                x="0"
+                                y={
+                                  (lines.length === 1 ? 15 : 9) + lineIndex * 14
+                                }
+                              >
+                                {line}
+                              </tspan>
+                            ),
+                          )}
+                        </text>
+                      </g>
+                    )}
                   </g>
-                );
-              })}
-            </g>
-          )}
+                </g>
+              );
+            })}
+          </g>
         </svg>
         <button
           className={`ring-center ${centered && path.length ? "is-dwelling" : ""}`}
@@ -407,9 +409,7 @@ export function Ring({
                 : "Open files"
           }
         >
-          {reading ? (
-            <span className="spinner" />
-          ) : parent ? (
+          {parent ? (
             <Icon name="back" size={22} />
           ) : thumbnail ? (
             <img src={thumbnail} alt="" />

@@ -111,14 +111,15 @@ impl Staged {
                 format!(" ({})", n + 1)
             };
             let dest = parent.join(format!("{base}{suffix}.{extension}"));
-            match fs::hard_link(&self.path, &dest) {
-                Ok(()) => return Ok(dest),
-                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
-                Err(e) => {
-                    return Err(format!(
-                        "Cannot publish output without replacing a file: {e}"
-                    ))
-                }
+            let published = crate::jobs::publish(|| match fs::hard_link(&self.path, &dest) {
+                Ok(()) => Ok(true),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(false),
+                Err(e) => Err(format!(
+                    "Cannot publish output without replacing a file: {e}"
+                )),
+            })?;
+            if published {
+                return Ok(dest);
             }
         }
         Err("Too many output name collisions.".into())

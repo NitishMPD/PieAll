@@ -25,7 +25,7 @@ def bundle(root=ROOT):
             raise ValueError(f"No license texts for {name} {version}")
         packages += 1
         for file in files:
-            text = file.read_text(encoding="utf-8-sig").replace("\r\n", "\n").strip()
+            text = "\n".join(line.rstrip() for line in file.read_text(encoding="utf-8-sig").splitlines()).strip()
             digest = hashlib.sha256(text.encode()).hexdigest()
             entry = groups.setdefault(digest, {"text": text, "packages": []})
             entry["packages"].append(f"{name} {version} / {file.name}")

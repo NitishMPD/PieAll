@@ -18,22 +18,24 @@ export function WindowControls() {
       remove?.();
     };
   }, []);
-  const win = getCurrentWindow();
   return (
     <div className="window-controls">
-      <button aria-label="Minimize" onClick={() => void win.minimize()}>
+      <button
+        aria-label="Minimize"
+        onClick={() => void getCurrentWindow().minimize()}
+      >
         <Icon name="minimize" size={15} />
       </button>
       <button
         aria-label={maximized ? "Restore" : "Maximize"}
-        onClick={() => void win.toggleMaximize()}
+        onClick={() => void getCurrentWindow().toggleMaximize()}
       >
         <Icon name={maximized ? "restore" : "maximize"} size={14} />
       </button>
       <button
         className="close"
         aria-label="Close to tray"
-        onClick={() => void win.close()}
+        onClick={() => void getCurrentWindow().close()}
       >
         <Icon name="close" size={16} />
       </button>

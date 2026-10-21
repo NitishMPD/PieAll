@@ -16,6 +16,14 @@
 - The ring no longer flashes the previous target's slices while reading the selection: it shows the empty tray and "Reading…" hub, then the real slices fade in once.
 - Added a frameless dashboard with a custom title bar (drag region, minimize/maximize/close to tray).
 - Expanded the product plan with all 72 extracted toolkit workflows, Windows adaptations, current implementation gaps, moodboards, open-source engine candidates and phased acceptance gates; synchronized planned scope and UX in project.md/design.md without changing runtime code.
+- Specified contextual browser video/audio downloads with yt-dlp, best-available quality and app-configurable defaults; added direct web-image save/copy/board flows, target disambiguation, background-job behavior and acceptance requirements to the plan and product/design docs.
 
 - Updated 49 default app profiles for repetitive workflows; added browser Copy URL, Figma Align/distribute and app-first selected-text routing while preserving saved layouts and action IDs. Updated research/product/design/verification docs; passed 17 frontend and 3 catalog tests, TypeScript/Rust checks and changed-file formatting. Native target-app acceptance remains user-run.
 - Fixed false "PieAll is busy" after closing the dashboard with an editor open (closing now abandons the editor), stopped toast text clipping (detail wraps under the title) and redrew the submenu dwell progress as a dark bar with a track inside the popped slice.
+- Fixed Windows CI formatting failures with a repository LF checkout rule; confirmed the existing source needs no formatting changes and `pnpm format:check` passes.
+- Built the Windows x64 NSIS installer (PieAll 0.1.0, 1.89 MiB) with a temporary local override disabling updater artifacts; production signing configuration unchanged. Frontend type-check/build and Rust release packaging passed. Installer is unsigned and was not launched.
+- Removed the ring loader: while the selection is read, the ring shows the slices it settled on last time for the same app, so it is usable on its first frame.
+
+- Added native worker progress, Close/Cancel controls, cancellation-safe publication and Windows process-tree/memory ownership; extended image crop/resize/frame and image-to-PDF settings.
+- Added seven bounded PDF commands, 15 optional FFmpeg/FFprobe media commands, native engine selection with SQLite/hash records, contextual quick tools and folder ZIP creation with compression controls; preserved originals and refreshed open-source notices.
+- Verified tool expansion with 29 Rust and 14 targeted frontend tests, workspace checking/strict Clippy, TypeScript, static rendering and formatting; documented runtime acceptance limits and remaining planned work.

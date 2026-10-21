@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},
-        Mutex,
+        Arc, Mutex,
     },
 };
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
@@ -67,6 +67,21 @@ struct Session {
     download: Option<Vec<u8>>,
     update_message: String,
     progress: u8,
+    job: Option<JobView>,
+    cancel: Option<Arc<AtomicBool>>,
+    dismissed_job: Option<u64>,
+    engines: pieall::engines::Engines,
+}
+
+#[derive(Clone, Serialize)]
+struct JobView {
+    id: u64,
+    title: String,
+    detail: String,
+    completed: usize,
+    total: usize,
+    state: &'static str,
+    fraction: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -74,6 +89,7 @@ struct FieldView {
     key: &'static str,
     label: &'static str,
     default: &'static str,
+    options: &'static [(&'static str, &'static str)],
 }
 #[derive(Serialize)]
 struct ActionView {
@@ -85,6 +101,7 @@ struct ActionView {
     shortcut: Option<&'static str>,
     category: Option<&'static str>,
     priority: Option<usize>,
+    unavailable: Option<&'static str>,
 }
 #[derive(Serialize)]
 struct UpdateView {
@@ -108,6 +125,7 @@ struct View {
     result: Option<String>,
     actions: Vec<ActionView>,
     update: UpdateView,
+    job: Option<JobView>,
 }
 
 impl Session {
@@ -165,6 +183,7 @@ impl Session {
             n => format!("{n} selected files"),
         };
         View {
+            job: self.job.clone(),
             revision: self.revision,
             target,
             app: self.source_app.map(|p| p.id.as_str()),
@@ -188,6 +207,7 @@ impl Session {
                 .into_iter()
                 .map(|a| ActionView {
                     eligible: actions::eligible(&a, &self.paths, !self.text.is_empty())
+                        && actions::missing_engine(a.id, &self.engines).is_none()
                         && (a.input != actions::InputKind::Window || self.source != 0),
                     id: a.id,
                     title: a.title,
@@ -195,6 +215,7 @@ impl Session {
                     shortcut: None,
                     category: None,
                     priority: None,
+                    unavailable: actions::missing_engine(a.id, &self.engines),
                     fields: a
                         .fields
                         .into_iter()
@@ -202,6 +223,7 @@ impl Session {
                             key: f.key,
                             label: f.label,
                             default: f.default,
+                            options: f.options,
                         })
                         .collect(),
                 })
@@ -215,6 +237,7 @@ impl Session {
                         shortcut: Some(&a.keys),
                         category: Some(&a.category),
                         priority: a.priority,
+                        unavailable: None,
                     })
                 }))
                 .collect(),
@@ -732,6 +755,82 @@ async fn load_context(window: WebviewWindow, app: AppHandle, kind: String) -> Re
     .map_err(|e| e.to_string())?
 }
 
+#[derive(Serialize)]
+struct EngineView {
+    name: &'static str,
+    path: Option<String>,
+    sha256: Option<String>,
+}
+fn settings_path(app: &AppHandle) -> Result<PathBuf> {
+    Ok(app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("settings.sqlite3"))
+}
+#[tauri::command]
+fn tool_engines(window: WebviewWindow, app: AppHandle) -> Result<Vec<EngineView>> {
+    dashboard_only(&window)?;
+    let s = state(&app);
+    let s = s.lock().unwrap();
+    Ok(pieall::engines::NAMES
+        .iter()
+        .map(|name| {
+            let engine = s.engines.get(*name);
+            EngineView {
+                name,
+                path: engine.map(|e| e.path.to_string_lossy().into_owned()),
+                sha256: engine.map(|e| e.sha256.clone()),
+            }
+        })
+        .collect())
+}
+#[tauri::command]
+async fn configure_engine(
+    window: WebviewWindow,
+    app: AppHandle,
+    name: String,
+    remove: bool,
+) -> Result<()> {
+    dashboard_only(&window)?;
+    if !pieall::engines::NAMES.contains(&name.as_str()) {
+        return Err("Unknown engine.".into());
+    }
+    let lease = Lease::acquire(&app, "engine setup")?;
+    notify(&app);
+    tauri::async_runtime::spawn_blocking(move || {
+        let _lease = lease;
+        let engine = if remove {
+            None
+        } else {
+            let paths = platform::pick_engine()?;
+            let Some(path) = paths.first() else {
+                return Ok(());
+            };
+            Some(pieall::engines::Engine::select(&name, path)?)
+        };
+        pieall::engines::store(&settings_path(&app)?, &name, engine.as_ref())?;
+        let s = state(&app);
+        let mut s = s.lock().unwrap();
+        match engine {
+            Some(engine) => {
+                s.engines.insert(name.clone(), engine);
+            }
+            None => {
+                s.engines.remove(&name);
+            }
+        }
+        s.status = format!(
+            "{} {}.",
+            name,
+            if remove { "removed" } else { "configured" }
+        );
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn prepare(window: WebviewWindow, app: AppHandle, id: Option<String>, revision: u64) -> Result<()> {
     local(&window)?;
@@ -780,7 +879,8 @@ async fn run_action(
     }
     let from_ring = window.label() == "ring";
     let lease;
-    let (paths, text, title, selection, source) = {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let (paths, text, selection, source) = {
         let s = state(&app);
         let mut s = s.lock().unwrap();
         if revision != s.revision {
@@ -790,6 +890,9 @@ async fn run_action(
             .into_iter()
             .find(|a| a.id == id)
             .ok_or("Unknown action")?;
+        if let Some(reason) = actions::missing_engine(action.id, &s.engines) {
+            return Err(reason.into());
+        }
         if !actions::eligible(&action, &s.paths, !s.text.is_empty())
             || (action.input == actions::InputKind::Window && s.source == 0)
         {
@@ -814,14 +917,19 @@ async fn run_action(
         s.editor = None;
         s.result = None;
         s.status = format!("Running {}…", action.title);
+        s.cancel = Some(cancel.clone());
+        s.dismissed_job = None;
+        s.job = Some(JobView {
+            id: s.ticket,
+            title: action.title.into(),
+            detail: "Starting…".into(),
+            completed: 0,
+            total: s.paths.len().max(1),
+            state: "running",
+            fraction: None,
+        });
         let selection = if from_ring { s.selection.take() } else { None };
-        (
-            s.paths.clone(),
-            s.text.clone(),
-            action.title,
-            selection,
-            s.source,
-        )
+        (s.paths.clone(), s.text.clone(), selection, s.source)
     };
     notify(&app);
     if from_ring {
@@ -837,7 +945,7 @@ async fn run_action(
                 s.operation == Some("action") && s.ticket == ticket
             };
             if running {
-                toast(&slow, "busy", format!("{title}…"), "");
+                show_job_toast(&slow);
             }
         });
     } else {
@@ -845,7 +953,38 @@ async fn run_action(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let _lease = lease;
-        let result = actions::execute(&id, &paths, &text, &params);
+        let started = std::time::Instant::now();
+        let ticket = _lease.ticket;
+        let engines = state(&app).lock().unwrap().engines.clone();
+        let result =
+            actions::execute_with_engines(&id, &paths, &text, &params, &engines, &cancel, |p| {
+                {
+                    let state = state(&app);
+                    let mut s = state.lock().unwrap();
+                    let status = if let Some(job) = s.job.as_mut().filter(|j| j.id == ticket) {
+                        job.completed = p.completed.min(p.total);
+                        job.total = p.total;
+                        job.detail = p.item;
+                        job.fraction = p
+                            .fraction
+                            .filter(|f| f.is_finite())
+                            .map(|f| f.clamp(0., 1.));
+                        Some(format!(
+                            "{} · {} of {} · {}",
+                            job.title, job.completed, job.total, job.detail
+                        ))
+                    } else {
+                        None
+                    };
+                    if let Some(status) = status {
+                        s.status = status;
+                    }
+                }
+                notify(&app);
+                if started.elapsed().as_millis() >= 700 {
+                    show_job_toast(&app);
+                }
+            });
         {
             let s = state(&app);
             let mut s = s.lock().unwrap();
@@ -858,9 +997,29 @@ async fn run_action(
                     s.status = error.clone();
                 }
             }
+            s.cancel = None;
+            if let Some(job) = s.job.as_mut() {
+                job.fraction = None;
+                job.state = match &result {
+                    Ok(report) if report.contains("FAILED ") => "partial",
+                    Ok(_) => "complete",
+                    Err(e) if e.starts_with("Cancelled.") => "cancelled",
+                    Err(_) => "failed",
+                };
+                if result.is_ok() {
+                    job.completed = job.total;
+                }
+                job.detail = result.as_ref().map_or_else(
+                    |e| e.clone(),
+                    |r| r.lines().next().unwrap_or("Complete").into(),
+                );
+            }
         }
+        let dismissed = state(&app).lock().unwrap().dismissed_job == Some(ticket);
         if from_ring {
-            finish_in_place(&app, &id, result, selection, source);
+            finish_in_place(&app, &id, result, selection, source, ticket);
+        } else if !from_ring && !dismissed {
+            show_job_toast(&app);
         }
     })
     .await
@@ -875,7 +1034,7 @@ struct ShortcutLibrary {
 #[tauri::command]
 fn set_trigger_key(window: WebviewWindow, vk: u32) -> Result<()> {
     dashboard_only(&window)?;
-    hold::set_trigger(vk).map_err(Into::into)
+    hold::set_trigger(vk)
 }
 #[tauri::command]
 fn shortcut_library(window: WebviewWindow) -> Result<ShortcutLibrary> {
@@ -1072,25 +1231,120 @@ struct Preview {
 
 #[derive(Serialize, Clone)]
 struct ToastView {
+    id: u64,
     tone: &'static str,
     title: String,
     detail: String,
+    job: Option<JobView>,
+}
+static TOAST_GENERATION: AtomicU64 = AtomicU64::new(0);
+static TOAST_GATE: std::sync::Mutex<Option<u64>> = std::sync::Mutex::new(None);
+
+#[tauri::command]
+fn dismiss_toast(window: WebviewWindow, app: AppHandle, id: u64, job: Option<u64>) -> Result<()> {
+    if window.label() != "toast" {
+        return Err("Unknown surface.".into());
+    }
+    let mut current_job = TOAST_GATE.lock().unwrap();
+    // Progress can advance the generation between rendering and clicking Close.
+    // The job identity remains stable; an old notice cannot dismiss a different job.
+    if TOAST_GENERATION.load(Ordering::SeqCst) == id || job.is_some() && *current_job == job {
+        TOAST_GENERATION.fetch_add(1, Ordering::SeqCst);
+        if let Some(job) = job {
+            state(&app).lock().unwrap().dismissed_job = Some(job);
+        }
+        hide_raw(&window);
+        *current_job = None;
+    }
+    Ok(())
 }
 
-/// A small click-through pill where the ring was; it never takes focus.
+#[tauri::command]
+fn cancel_job(window: WebviewWindow, app: AppHandle, id: u64) -> Result<()> {
+    if !matches!(window.label(), "dashboard" | "toast") {
+        return Err("Unknown surface.".into());
+    }
+    let state = state(&app);
+    let mut s = state.lock().unwrap();
+    if s.operation != Some("action") || s.job.as_ref().is_none_or(|j| j.id != id) {
+        return Err("This job has already finished.".into());
+    }
+    if let Some(cancel) = &s.cancel {
+        cancel.store(true, Ordering::SeqCst);
+    }
+    if let Some(job) = s.job.as_mut() {
+        job.state = "cancelling";
+    }
+    s.status = "Cancelling… Completed outputs will be kept.".into();
+    drop(s);
+    notify(&app);
+    show_job_toast(&app);
+    Ok(())
+}
+
+fn show_job_toast(app: &AppHandle) {
+    let s = state(app);
+    let s = s.lock().unwrap();
+    let Some(job) = s.job.as_ref().filter(|j| s.dismissed_job != Some(j.id)) else {
+        return;
+    };
+    let job = job.clone();
+    drop(s);
+    let tone = match job.state {
+        "running" | "cancelling" => "busy",
+        "failed" | "partial" => "error",
+        "cancelled" => "info",
+        _ => "ok",
+    };
+    show_notice(app, tone, job.title.clone(), job.detail.clone(), Some(job));
+}
+
+/// A nonactivating notice with explicit dismiss and cancellation controls.
 fn toast(app: &AppHandle, tone: &'static str, title: impl Into<String>, detail: impl Into<String>) {
-    static GENERATION: AtomicU64 = AtomicU64::new(0);
+    show_notice(app, tone, title.into(), detail.into(), None);
+}
+fn show_notice(
+    app: &AppHandle,
+    mut tone: &'static str,
+    mut title: String,
+    mut detail: String,
+    mut job: Option<JobView>,
+) {
+    let mut current_job = TOAST_GATE.lock().unwrap();
+    if let Some(snapshot) = &job {
+        let s = state(app);
+        let s = s.lock().unwrap();
+        let Some(latest) = s
+            .job
+            .as_ref()
+            .filter(|j| j.id == snapshot.id && s.dismissed_job != Some(j.id))
+        else {
+            return;
+        };
+        tone = match latest.state {
+            "running" | "cancelling" => "busy",
+            "failed" | "partial" => "error",
+            "cancelled" => "info",
+            _ => "ok",
+        };
+        title = latest.title.clone();
+        detail = latest.detail.clone();
+        job = Some(latest.clone());
+    }
     let Some(window) = app.get_webview_window("toast") else {
         return;
     };
-    let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    let generation = TOAST_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    *current_job = job.as_ref().map(|j| j.id);
     let _ = app.emit_to(
         "toast",
         "toast",
         ToastView {
+            id: generation,
             tone,
-            title: title.into(),
-            detail: detail.into(),
+            title,
+            detail,
+            job,
         },
     );
     let mut point = POINT {
@@ -1110,7 +1364,7 @@ fn toast(app: &AppHandle, tone: &'static str, title: impl Into<String>, detail: 
         .ok()
         .flatten()
         .map_or(1.0, |m| m.scale_factor());
-    let (width, height) = (360.0, 112.0);
+    let (width, height) = (400.0, 164.0);
     let (w, h) = ((width * scale) as i32, (height * scale) as i32);
     let work = info.rcWork;
     let x = (point.x - w / 2).clamp(work.left, (work.right - w).max(work.left));
@@ -1119,16 +1373,19 @@ fn toast(app: &AppHandle, tone: &'static str, title: impl Into<String>, detail: 
     let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
     show_inactive(&window);
     if tone != "busy" {
-        let linger = if tone == "error" { 3200 } else { 1400 };
+        let linger = if tone == "error" { 8000 } else { 4500 };
         let app = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(linger));
-            if GENERATION.load(Ordering::SeqCst) != generation {
+            let gate = TOAST_GATE.lock().unwrap();
+            if TOAST_GENERATION.load(Ordering::SeqCst) != generation {
                 return;
             }
             let _ = app.emit_to("toast", "toast-hide", ());
+            drop(gate);
             std::thread::sleep(std::time::Duration::from_millis(OUTRO_MS + 60));
-            if GENERATION.load(Ordering::SeqCst) == generation {
+            let _gate = TOAST_GATE.lock().unwrap();
+            if TOAST_GENERATION.load(Ordering::SeqCst) == generation {
                 hide_raw(&window);
             }
         });
@@ -1137,6 +1394,8 @@ fn toast(app: &AppHandle, tone: &'static str, title: impl Into<String>, detail: 
 
 /// Actions whose answer is text to keep; from the ring it goes to the clipboard.
 const REPORTS: &[&str] = &[
+    "media_details",
+    "pdf_details",
     "sha256",
     "image_details",
     "palette",
@@ -1224,18 +1483,40 @@ fn capitalize(text: &str) -> String {
 }
 
 /// Reports a ring action where the user is: pasted over their selection, copied, or toasted.
+fn action_toast(
+    app: &AppHandle,
+    ticket: u64,
+    tone: &'static str,
+    title: impl Into<String>,
+    detail: impl Into<String>,
+) {
+    {
+        let s = state(app);
+        let mut s = s.lock().unwrap();
+        let Some(job) = s.job.as_mut().filter(|j| j.id == ticket) else {
+            return;
+        };
+        job.title = title.into();
+        job.detail = detail.into();
+        if tone == "error" && job.state != "cancelled" {
+            job.state = "failed";
+        }
+    }
+    show_job_toast(app);
+}
 fn finish_in_place(
     app: &AppHandle,
     id: &str,
     result: Result<String>,
     selection: Option<platform::ClipboardSnapshot>,
     source: usize,
+    ticket: u64,
 ) {
     let report = match result {
         Ok(report) => report,
         Err(error) => {
             let (_, title, detail) = summarize(&error, true);
-            toast(app, "error", title, detail);
+            action_toast(app, ticket, "error", title, detail);
             return;
         }
     };
@@ -1246,8 +1527,8 @@ fn finish_in_place(
             .map_or(report.as_str(), |(_, body)| body);
         let preview: String = body.lines().take(2).collect::<Vec<_>>().join(" · ");
         match platform::set_clipboard_text(body) {
-            Ok(()) => toast(app, "ok", "Copied to clipboard", preview),
-            Err(error) => toast(app, "error", "Couldn't copy the result", error),
+            Ok(()) => action_toast(app, ticket, "ok", "Copied to clipboard", preview),
+            Err(error) => action_toast(app, ticket, "error", "Couldn't copy the result", error),
         }
         return;
     }
@@ -1260,8 +1541,9 @@ fn finish_in_place(
             platform::paste_text(source, &report, &snapshot, owner),
             Ok(true)
         ) {
-            toast(
+            action_toast(
                 app,
+                ticket,
                 "info",
                 "Result copied",
                 "Focus moved before PieAll could paste. Press Ctrl+V to paste it.",
@@ -1270,7 +1552,7 @@ fn finish_in_place(
         return;
     }
     let (tone, title, detail) = summarize(&report, false);
-    toast(app, tone, title, detail);
+    action_toast(app, ticket, tone, title, detail);
 }
 
 fn updates_configured() -> bool {
@@ -1452,9 +1734,17 @@ pub fn run() {
             set_trigger_key,
             copy_result,
             preview,
-            update_action
+            update_action,
+            dismiss_toast,
+            cancel_job,
+            tool_engines,
+            configure_engine
         ])
         .setup(|app| {
+            match settings_path(app.handle()).and_then(|p| pieall::engines::load(&p)) {
+                Ok(engines) => state(app.handle()).lock().unwrap().engines = engines,
+                Err(error) => message(app.handle(), format!("Tool settings unavailable: {error}")),
+            }
             // Parse and index bundled keymaps once, before the first hold invocation.
             let _ = shortcuts::catalog();
             let cwd = std::env::current_dir()?.to_string_lossy().into_owned();
@@ -1486,7 +1776,7 @@ pub fn run() {
                 }
             }
             if let Some(toast_window) = app.get_webview_window("toast") {
-                let _ = toast_window.set_ignore_cursor_events(true);
+                let _ = toast_window.set_ignore_cursor_events(false);
                 if let Ok(hwnd) = toast_window.hwnd() {
                     unsafe {
                         let style = GetWindowLongPtrW(hwnd.0 as _, GWL_EXSTYLE);

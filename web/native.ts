@@ -5,6 +5,7 @@ export interface Field {
   key: string;
   label: string;
   default: string;
+  options?: [string, string][];
 }
 export interface Preview {
   url: string;
@@ -16,6 +17,7 @@ export interface Action {
   title: string;
   group: string;
   eligible: boolean;
+  unavailable?: string | null;
   fields: Field[];
   shortcut?: string | null;
   category?: string | null;
@@ -35,6 +37,7 @@ export interface ShortcutLibrary {
   }[];
 }
 export interface Session {
+  job?: Job | null;
   revision: number;
   target: string;
   names: string[];
@@ -55,6 +58,12 @@ export interface Session {
   };
 }
 export const native = {
+  engines: () => invoke<Engine[]>("tool_engines"),
+  configureEngine: (name: string, remove = false) =>
+    invoke<void>("configure_engine", { name, remove }),
+  dismissToast: (id: number, job?: number) =>
+    invoke<void>("dismiss_toast", { id, job: job ?? null }),
+  cancelJob: (id: number) => invoke<void>("cancel_job", { id }),
   session: () => invoke<Session>("session"),
   shortcutLibrary: () => invoke<ShortcutLibrary>("shortcut_library"),
   setTrigger: (vk: number) => invoke<void>("set_trigger_key", { vk }),
@@ -86,8 +95,25 @@ export const native = {
   onClosing: (fn: () => void) => listen("ring-close", fn),
   onToastHide: (fn: () => void) => listen("toast-hide", fn),
 };
+export interface Engine {
+  name: string;
+  path: string | null;
+  sha256: string | null;
+}
 export interface Toast {
+  id: number;
+  job?: Job | null;
   tone: "ok" | "info" | "error" | "busy";
   title: string;
   detail: string;
+}
+export interface Job {
+  id: number;
+  title: string;
+  detail: string;
+  completed: number;
+  total: number;
+  fraction?: number | null;
+  state:
+    "running" | "cancelling" | "complete" | "partial" | "failed" | "cancelled";
 }

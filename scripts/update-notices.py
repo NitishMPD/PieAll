@@ -80,7 +80,7 @@ def main():
                 if not found:
                     missing.append(f"{package['name']} {version}")
                 rows.append((package["name"], version, license_name, "JavaScript", "Retained" if found else "Review upstream"))
-    content = "# Third-party notices\nAuthor: Nitish\n\nWindows-target Cargo dependencies (including build tooling) and production JavaScript packages from the current lockfiles. Upstream license/notice files are retained in `licenses/`; existing legacy texts are preserved. This is an inventory, not legal advice or a choice of PieAll's own release license. No Filee source or assets were copied.\n\nRegenerate with `python scripts/update-notices.py` after installing dependencies, with Cargo on PATH. No build is performed.\n\n| Package | Version | Declared license | Ecosystem | Text |\n| --- | --- | --- | --- | --- |\n"
+    content = "# Third-party notices\nAuthor: Nitish\n\nWindows-target Cargo dependencies (including build tooling) and production JavaScript packages from the current lockfiles. Upstream license/notice files are retained in `licenses/`; existing legacy texts are preserved. This is an inventory, not legal advice or a choice of PieAll's own release license.\n\nRegenerate with `python scripts/update-notices.py` after installing dependencies, with Cargo on PATH. No build is performed.\n\n| Package | Version | Declared license | Ecosystem | Text |\n| --- | --- | --- | --- | --- |\n"
     content += "".join("| " + " | ".join(row) + " |\n" for row in sorted(rows))
     if missing:
         content += "\n## Texts requiring review\n\n" + "\n".join(f"- {name}" for name in missing) + "\n"

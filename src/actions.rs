@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashSet},
     fs::{self, File},
-    io::{Read, Write},
+    io::{BufRead, Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -19,6 +19,7 @@ pub struct Field {
     pub key: &'static str,
     pub label: &'static str,
     pub default: &'static str,
+    pub options: &'static [(&'static str, &'static str)],
 }
 #[derive(Clone)]
 pub struct Action {
@@ -33,6 +34,20 @@ fn field(key: &'static str, label: &'static str, default: &'static str) -> Field
         key,
         label,
         default,
+        options: &[],
+    }
+}
+fn choice(
+    key: &'static str,
+    label: &'static str,
+    default: &'static str,
+    options: &'static [(&'static str, &'static str)],
+) -> Field {
+    Field {
+        key,
+        label,
+        default,
+        options,
     }
 }
 pub fn catalog() -> Vec<Action> {
@@ -72,14 +87,35 @@ pub fn catalog() -> Vec<Action> {
         title: "Images to PDF",
         group: "PDF",
         input: Images,
-        fields: vec![],
+        fields: vec![
+            choice(
+                "page_size",
+                "Page size",
+                "a4",
+                &[("a4", "A4"), ("letter", "Letter"), ("image", "Fit image")],
+            ),
+            choice(
+                "orientation",
+                "Orientation",
+                "portrait",
+                &[("portrait", "Portrait"), ("landscape", "Landscape")],
+            ),
+            field("margin", "Page margin (points)", "0"),
+            field("quality", "Image quality (1–100)", "90"),
+        ],
     });
     for (id, title, fields) in [
         (
             "convert",
             "Convert image format",
             vec![
-                field("format", "Format: png / jpg / webp", "png"),
+                choice(
+                    "format",
+                    "Output format",
+                    "png",
+                    &[("png", "PNG"), ("jpg", "JPEG"), ("webp", "WebP (lossless)")],
+                ),
+                field("quality", "JPEG quality (1–100)", "92"),
                 field("background", "JPEG background HEX", "FFFFFF"),
             ],
         ),
@@ -87,8 +123,20 @@ pub fn catalog() -> Vec<Action> {
             "resize",
             "Resize image",
             vec![
+                choice(
+                    "mode",
+                    "Resize by",
+                    "bounds",
+                    &[
+                        ("bounds", "Fit within dimensions"),
+                        ("percent", "Percentage"),
+                        ("longest", "Longest side"),
+                    ],
+                ),
                 field("width", "Maximum width (px)", "1200"),
                 field("height", "Maximum height (px)", "1200"),
+                field("percent", "Scale (1–100%)", "50"),
+                field("longest", "Longest side (px)", "1200"),
             ],
         ),
         (
@@ -116,6 +164,25 @@ pub fn catalog() -> Vec<Action> {
                 field("padding", "Padding (px)", "64"),
                 field("background", "Background HEX", "F3EBDD"),
                 field("corners", "Corner radius (px)", "24"),
+                choice(
+                    "style",
+                    "Background style",
+                    "solid",
+                    &[("solid", "Solid color"), ("gradient", "Diagonal gradient")],
+                ),
+                field("secondary", "Gradient end HEX", "D3B8A0"),
+                choice(
+                    "ratio",
+                    "Canvas ratio",
+                    "natural",
+                    &[
+                        ("natural", "Natural"),
+                        ("16:9", "16:9"),
+                        ("4:5", "4:5"),
+                        ("1:1", "Square"),
+                    ],
+                ),
+                field("shadow", "Shadow softness (0–64 px)", "0"),
             ],
         ),
     ] {
@@ -149,7 +216,22 @@ pub fn catalog() -> Vec<Action> {
                 "Files"
             },
             input: Files,
-            fields: vec![],
+            fields: if id == "create_zip" {
+                vec![
+                    choice(
+                        "method",
+                        "Compression method",
+                        "deflate",
+                        &[
+                            ("deflate", "Deflate (smaller)"),
+                            ("store", "Store (faster)"),
+                        ],
+                    ),
+                    field("level", "Compression level (0–9)", "6"),
+                ]
+            } else {
+                vec![]
+            },
         });
     }
     for (id, title) in [
@@ -189,7 +271,168 @@ pub fn catalog() -> Vec<Action> {
             fields: vec![],
         });
     }
+    for (id, title) in [
+        ("pdf_details", "Inspect PDF details"),
+        ("pdf_extract", "Extract PDF pages"),
+        ("pdf_split", "Split PDF into pages"),
+        ("pdf_rotate", "Rotate PDF pages"),
+        ("pdf_compress", "Compress PDF streams"),
+        ("pdf_strip_metadata", "Remove PDF document metadata"),
+        ("pdf_text", "PDF to selectable text"),
+    ] {
+        let mut fields = Vec::new();
+        if matches!(id, "pdf_extract" | "pdf_split" | "pdf_rotate" | "pdf_text") {
+            fields.push(field("pages", "Pages (all, 1-3,5)", "all"));
+        }
+        if id == "pdf_rotate" {
+            fields.push(choice(
+                "angle",
+                "Rotate clockwise",
+                "90",
+                &[("90", "90°"), ("180", "180°"), ("270", "270°")],
+            ));
+        }
+        a.push(Action {
+            id,
+            title,
+            group: "PDF",
+            input: Files,
+            fields,
+        });
+    }
+    for (id, title, mut fields) in [
+        (
+            "video_convert",
+            "Convert video format",
+            vec![choice(
+                "format",
+                "Output format",
+                "mp4",
+                &[
+                    ("mp4", "MP4"),
+                    ("mkv", "MKV"),
+                    ("mov", "MOV"),
+                    ("webm", "WebM"),
+                ],
+            )],
+        ),
+        (
+            "video_compress",
+            "Compress video",
+            vec![field("quality", "CRF quality (0 best, 51 smallest)", "28")],
+        ),
+        (
+            "video_resize",
+            "Resize video",
+            vec![
+                field("width", "Maximum width (px)", "1280"),
+                field("height", "Maximum height (px)", "720"),
+            ],
+        ),
+        (
+            "video_rotate",
+            "Rotate video",
+            vec![choice(
+                "angle",
+                "Rotate clockwise",
+                "90",
+                &[("90", "90°"), ("180", "180°"), ("270", "270°")],
+            )],
+        ),
+        ("video_mute", "Remove video audio", vec![]),
+        (
+            "video_trim",
+            "Trim video",
+            vec![
+                field("start", "Start (seconds)", "0"),
+                field("duration", "Duration (seconds)", "10"),
+            ],
+        ),
+        (
+            "video_gif",
+            "Video to GIF",
+            vec![
+                field("width", "Width (px)", "480"),
+                field("fps", "Frames per second (1–30)", "12"),
+            ],
+        ),
+        (
+            "video_frame",
+            "Extract video frame",
+            vec![field("start", "Time (seconds)", "0")],
+        ),
+        ("video_audio", "Extract video audio", vec![]),
+        ("audio_convert", "Convert audio format", vec![]),
+        (
+            "audio_trim",
+            "Trim audio",
+            vec![
+                field("start", "Start (seconds)", "0"),
+                field("duration", "Duration (seconds)", "10"),
+            ],
+        ),
+        (
+            "audio_compress",
+            "Compress audio to MP3",
+            vec![field("bitrate", "Bitrate (32–320 kbps)", "128")],
+        ),
+        ("audio_normalize", "Normalize audio loudness", vec![]),
+        (
+            "audio_volume",
+            "Change audio volume",
+            vec![field("gain", "Volume multiplier (0–10)", "1.5")],
+        ),
+        ("media_details", "Inspect media details", vec![]),
+    ] {
+        if matches!(
+            id,
+            "video_audio" | "audio_convert" | "audio_normalize" | "audio_volume"
+        ) {
+            fields.insert(
+                0,
+                choice(
+                    "format",
+                    "Output format",
+                    "mp3",
+                    &[
+                        ("mp3", "MP3"),
+                        ("wav", "WAV (PCM)"),
+                        ("flac", "FLAC"),
+                        ("m4a", "M4A"),
+                        ("ogg", "Ogg Vorbis"),
+                        ("opus", "Opus"),
+                    ],
+                ),
+            );
+        }
+        a.push(Action {
+            id,
+            title,
+            group: if id.starts_with("audio_") {
+                "Audio"
+            } else {
+                "Video"
+            },
+            input: Files,
+            fields,
+        });
+    }
     a
+}
+pub fn media_action(id: &str) -> bool {
+    id.starts_with("video_") || id.starts_with("audio_") || id == "media_details"
+}
+pub fn missing_engine(id: &str, engines: &crate::engines::Engines) -> Option<&'static str> {
+    if !media_action(id) {
+        return None;
+    }
+    if !engines.contains_key("ffprobe") {
+        return Some("Choose FFprobe in Tool engines.");
+    }
+    if id != "media_details" && !engines.contains_key("ffmpeg") {
+        return Some("Choose FFmpeg in Tool engines.");
+    }
+    None
 }
 pub fn eligible(a: &Action, paths: &[PathBuf], text: bool) -> bool {
     match a.input {
@@ -211,6 +454,18 @@ pub fn eligible(a: &Action, paths: &[PathBuf], text: bool) -> bool {
                 })
         }
         InputKind::Files => {
+            if media_action(a.id) {
+                return !paths.is_empty()
+                    && paths.iter().all(|p| {
+                        p.is_file() && crate::media_tools::is_media(p, a.id.starts_with("video_"))
+                    });
+            }
+            if a.id.starts_with("pdf_") {
+                return !paths.is_empty()
+                    && paths.iter().all(|p| {
+                        p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+                    });
+            }
             if matches!(a.id, "folder_size" | "find_duplicates") {
                 return !paths.is_empty() && paths.iter().all(|p| p.is_dir());
             }
@@ -218,7 +473,7 @@ pub fn eligible(a: &Action, paths: &[PathBuf], text: bool) -> bool {
                 && paths.iter().all(|p| {
                     if a.id.ends_with("zip") && a.id != "create_zip" {
                         p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))
-                    } else if matches!(a.id, "sha256" | "duplicate" | "create_zip") {
+                    } else if matches!(a.id, "sha256" | "duplicate") {
                         p.is_file()
                     } else {
                         p.exists()
@@ -233,6 +488,8 @@ struct Request {
     paths: Vec<PathBuf>,
     text: String,
     params: BTreeMap<String, String>,
+    #[serde(default)]
+    engines: crate::engines::Engines,
 }
 pub fn execute(
     id: &str,
@@ -240,13 +497,50 @@ pub fn execute(
     text: &str,
     params: &BTreeMap<String, String>,
 ) -> Result<String, String> {
+    execute_controlled(
+        id,
+        paths,
+        text,
+        params,
+        &std::sync::atomic::AtomicBool::new(false),
+        |_| {},
+    )
+}
+pub fn execute_controlled(
+    id: &str,
+    paths: &[PathBuf],
+    text: &str,
+    params: &BTreeMap<String, String>,
+    cancelled: &std::sync::atomic::AtomicBool,
+    progress: impl FnMut(crate::jobs::Progress),
+) -> Result<String, String> {
+    execute_with_engines(
+        id,
+        paths,
+        text,
+        params,
+        &crate::engines::Engines::new(),
+        cancelled,
+        progress,
+    )
+}
+pub fn execute_with_engines(
+    id: &str,
+    paths: &[PathBuf],
+    text: &str,
+    params: &BTreeMap<String, String>,
+    engines: &crate::engines::Engines,
+    cancelled: &std::sync::atomic::AtomicBool,
+    mut progress: impl FnMut(crate::jobs::Progress),
+) -> Result<String, String> {
     let request = Request {
         id: id.into(),
         paths: paths.into(),
         text: text.into(),
         params: params.clone(),
+        engines: engines.clone(),
     };
-    let bytes = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
+    let mut bytes = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
     if bytes.len() > 3 * 1024 * 1024 {
         return Err("Input exceeds worker message limit.".into());
     }
@@ -254,24 +548,45 @@ pub fn execute(
     cmd.arg("--worker")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000);
     }
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
-    let write_result = child
-        .stdin
-        .take()
-        .ok_or("Worker input unavailable")?
-        .write_all(&bytes);
+    #[cfg(windows)]
+    let containment = match crate::jobs::WorkerJob::attach(&child) {
+        Ok(job) => job,
+        Err(e) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(e);
+        }
+    };
+    bytes.push(b'\n');
+    let mut stdin = child.stdin.take().ok_or("Worker input unavailable")?;
+    let write_result = stdin.write_all(&bytes);
     if let Err(e) = write_result {
         let _ = child.kill();
         let _ = child.wait();
         return Err(e.to_string());
     }
     let stdout = child.stdout.take().ok_or("Worker output unavailable")?;
+    let stderr = child.stderr.take().ok_or("Worker progress unavailable")?;
+    let (send, updates) = std::sync::mpsc::sync_channel(32);
+    let progress_reader = std::thread::spawn(move || {
+        let mut input = std::io::BufReader::new(stderr);
+        loop {
+            let mut line = String::new();
+            if input.by_ref().take(4096).read_line(&mut line).unwrap_or(0) == 0 {
+                break;
+            }
+            if let Ok(p) = serde_json::from_str::<crate::jobs::Progress>(&line) {
+                let _ = send.try_send(p);
+            }
+        }
+    });
     let reader = std::thread::spawn(move || {
         let mut data = Vec::new();
         stdout
@@ -279,8 +594,17 @@ pub fn execute(
             .read_to_end(&mut data)
             .map(|_| data)
     });
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    let seconds = if media_action(id) { 3600 } else { 120 };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
+    let mut cancel_sent = None;
     let status = loop {
+        for update in updates.try_iter() {
+            progress(update);
+        }
+        if cancelled.load(std::sync::atomic::Ordering::SeqCst) && cancel_sent.is_none() {
+            let _ = stdin.write_all(b"cancel\n");
+            cancel_sent = Some(std::time::Instant::now());
+        }
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) => {}
@@ -290,14 +614,26 @@ pub fn execute(
                 return Err(e.to_string());
             }
         }
-        if std::time::Instant::now() > deadline {
+        if std::time::Instant::now() > deadline
+            || cancel_sent.is_some_and(|t| t.elapsed().as_secs() >= 5)
+        {
+            #[cfg(windows)]
+            containment.terminate();
             let _ = child.kill();
             let _ = child.wait();
             let _ = reader.join();
-            return Err("Job exceeded its 120-second limit. Check the destination for any completed outputs.".into());
+            let _ = progress_reader.join();
+            if cancel_sent.is_some() {
+                return Err("Cancelled. Previously completed outputs are kept. A slow codec was stopped; temporary files may remain.".into());
+            }
+            return Err(format!("Job exceeded its {seconds}-second limit. Check the destination for any completed outputs."));
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     };
+    let _ = progress_reader.join();
+    for update in updates.try_iter() {
+        progress(update);
+    }
     let data = reader
         .join()
         .map_err(|_| "Worker reader stopped")?
@@ -309,16 +645,25 @@ pub fn execute(
         .map_err(|_| "Invalid worker response".to_string())?
 }
 pub fn worker_main() {
+    crate::jobs::worker_start();
     let result = (|| {
         let mut data = Vec::new();
-        std::io::stdin()
+        let mut input = std::io::BufReader::new(std::io::stdin());
+        input
+            .by_ref()
             .take(3 * 1024 * 1024 + 1)
-            .read_to_end(&mut data)
+            .read_until(b'\n', &mut data)
             .map_err(|e| e.to_string())?;
         if data.len() > 3 * 1024 * 1024 {
             return Err("Input too large".into());
         }
         let r: Request = serde_json::from_slice(&data).map_err(|e| e.to_string())?;
+        std::thread::spawn(move || {
+            let mut command = String::new();
+            if input.take(32).read_line(&mut command).is_ok() && command.trim() == "cancel" {
+                crate::jobs::cancel();
+            }
+        });
         run(&r)
     })();
     let result = result.and_then(|s| {
@@ -356,12 +701,16 @@ fn color(p: &BTreeMap<String, String>) -> Result<[u8; 3], String> {
     Ok([(n >> 16) as u8, (n >> 8) as u8, n as u8])
 }
 fn run(r: &Request) -> Result<String, String> {
+    crate::jobs::check()?;
     let action = catalog()
         .into_iter()
         .find(|a| a.id == r.id)
         .ok_or("Unknown action")?;
     if !eligible(&action, &r.paths, !r.text.is_empty()) {
         return Err("Action does not support every selected target.".into());
+    }
+    if let Some(reason) = missing_engine(&r.id, &r.engines) {
+        return Err(reason.into());
     }
     if r.paths.len() > 256 {
         return Err("Select at most 256 files.".into());
@@ -405,21 +754,32 @@ fn run(r: &Request) -> Result<String, String> {
         return Ok(format!("Copied {} paths.", r.paths.len()));
     }
     if r.id == "create_zip" {
-        return create_zip(&r.paths);
+        return crate::archive_tools::create(&r.paths, &r.params);
     }
     if r.id == "contact_sheet" {
         return contact_sheet(&r.paths, &r.params);
     }
     if r.id == "images_pdf" {
-        return images_pdf(&r.paths);
+        return images_pdf(&r.paths, &r.params);
     }
+    crate::jobs::check()?;
     let mut report = Vec::new();
     let mut succeeded = 0;
-    for path in &r.paths {
+    for (index, path) in r.paths.iter().enumerate() {
+        crate::jobs::check()?;
+        crate::jobs::progress(
+            index,
+            r.paths.len(),
+            path.file_name().unwrap_or_default().to_string_lossy(),
+        );
         let result = (|| {
             output::plain_path(path)?;
             if action.input == InputKind::Images {
                 image_action(&r.id, path, &r.params)
+            } else if r.id.starts_with("pdf_") {
+                crate::pdf_tools::run_with_progress(&r.id, path, &r.params, index, r.paths.len())
+            } else if media_action(&r.id) {
+                crate::media_tools::run(&r.id, path, &r.params, &r.engines, index, r.paths.len())
             } else {
                 file_action(&r.id, path)
             }
@@ -432,6 +792,8 @@ fn run(r: &Request) -> Result<String, String> {
             Err(e) => report.push(format!("FAILED {}: {e}", path.display())),
         }
     }
+    crate::jobs::check()?;
+    crate::jobs::progress(r.paths.len(), r.paths.len(), "Finished");
     let summary = format!(
         "Completed {succeeded} of {} targets.\r\n\r\n{}",
         r.paths.len(),
@@ -444,6 +806,7 @@ fn run(r: &Request) -> Result<String, String> {
     }
 }
 fn load_image(path: &Path) -> Result<image::DynamicImage, String> {
+    crate::jobs::check()?;
     if fs::metadata(path).map_err(|e| e.to_string())?.len() > 128 * 1024 * 1024 {
         return Err("Image file exceeds 128 MiB.".into());
     }
@@ -480,7 +843,7 @@ fn load_image(path: &Path) -> Result<image::DynamicImage, String> {
     Ok(img)
 }
 fn image_action(id: &str, path: &Path, p: &BTreeMap<String, String>) -> Result<String, String> {
-    use image::{DynamicImage, GenericImageView};
+    use image::GenericImageView;
     let mut img = load_image(path)?;
     let (w, h) = img.dimensions();
     // Edits keep the source format; only Convert and Compress choose another one.
@@ -550,8 +913,18 @@ fn image_action(id: &str, path: &Path, p: &BTreeMap<String, String>) -> Result<S
         "grayscale" => img = img.grayscale(),
         "strip_metadata" => {}
         "resize" => {
-            let (nw, nh) = if p.contains_key("scale") {
-                let scale = number(p, "scale", 50, 100)?;
+            let mode = p.get("mode").map_or("bounds", String::as_str);
+            let (nw, nh) = if p.contains_key("scale") || mode == "percent" {
+                let scale = number(
+                    p,
+                    if p.contains_key("scale") {
+                        "scale"
+                    } else {
+                        "percent"
+                    },
+                    50,
+                    100,
+                )?;
                 if scale == 0 {
                     return Err("Scale must be 1–100%.".into());
                 }
@@ -559,16 +932,25 @@ fn image_action(id: &str, path: &Path, p: &BTreeMap<String, String>) -> Result<S
                     (w as u64 * scale as u64 / 100).max(1) as u32,
                     (h as u64 * scale as u64 / 100).max(1) as u32,
                 )
-            } else {
+            } else if mode == "longest" {
+                let side = number(p, "longest", 1200, 16384)?;
+                (side, side)
+            } else if mode == "bounds" {
                 (
                     number(p, "width", 1200, 16384)?,
                     number(p, "height", 1200, 16384)?,
                 )
+            } else {
+                return Err("Choose bounds, percent or longest resize mode.".into());
             };
             if nw == 0 || nh == 0 {
                 return Err("Dimensions must be positive.".into());
             }
-            img = img.resize(nw.min(w), nh.min(h), image::imageops::FilterType::Lanczos3);
+            img = if p.contains_key("scale") || mode == "percent" {
+                img.resize_exact(nw, nh, image::imageops::FilterType::Lanczos3)
+            } else {
+                img.resize(nw.min(w), nh.min(h), image::imageops::FilterType::Lanczos3)
+            };
             label = format!("{}x{}", img.width(), img.height());
         }
         "crop" => {
@@ -602,36 +984,7 @@ fn image_action(id: &str, path: &Path, p: &BTreeMap<String, String>) -> Result<S
             }
         }
         "frame" => {
-            let padding = number(p, "padding", 64, 2048)?;
-            let radius = number(p, "corners", 24, 8192)?.min(w / 2).min(h / 2);
-            let nw = w + padding * 2;
-            let nh = h + padding * 2;
-            if nw as u64 * nh as u64 > 40_000_000 {
-                return Err("Framed output exceeds 40 megapixels.".into());
-            }
-            let bg = color(p)?;
-            let mut canvas =
-                image::RgbaImage::from_pixel(nw, nh, image::Rgba([bg[0], bg[1], bg[2], 255]));
-            let mut source = img.to_rgba8();
-            for (y, row) in source.rows_mut().enumerate() {
-                for (x, px) in row.enumerate() {
-                    let dx = if (x as u32) < radius {
-                        radius - x as u32
-                    } else {
-                        (x as u32).saturating_sub(w - radius - 1)
-                    };
-                    let dy = if (y as u32) < radius {
-                        radius - y as u32
-                    } else {
-                        (y as u32).saturating_sub(h - radius - 1)
-                    };
-                    if dx * dx + dy * dy > radius * radius {
-                        px[3] = 0;
-                    }
-                }
-            }
-            image::imageops::overlay(&mut canvas, &source, padding as i64, padding as i64);
-            img = DynamicImage::ImageRgba8(canvas);
+            img = crate::image_tools::frame(img, p)?;
         }
         _ => return Err("Unsupported image action".into()),
     }
@@ -770,6 +1123,7 @@ fn file_action(id: &str, path: &Path) -> Result<String, String> {
             let mut hash = Sha256::new();
             let mut buf = [0u8; 65536];
             loop {
+                crate::jobs::check()?;
                 let n = file.read(&mut buf).map_err(|e| e.to_string())?;
                 if n == 0 {
                     break;
@@ -800,6 +1154,7 @@ fn archive_action(id: &str, path: &Path) -> Result<String, String> {
     let mut total = 0u64;
     let mut names = HashSet::new();
     for i in 0..zip.len() {
+        crate::jobs::check()?;
         let entry = zip.by_index(i).map_err(|e| e.to_string())?;
         let relative = output::safe_archive_name(entry.name())?;
         if entry.is_symlink() || entry.unix_mode().is_some_and(|m| m & 0o170000 == 0o120000) {
@@ -824,6 +1179,7 @@ fn archive_action(id: &str, path: &Path) -> Result<String, String> {
     if id == "list_zip" {
         let mut lines = Vec::new();
         for i in 0..zip.len() {
+            crate::jobs::check()?;
             let entry = zip.by_index(i).map_err(|e| e.to_string())?;
             lines.push(format!("{}  ({} bytes)", entry.name(), entry.size()));
             if lines.iter().map(String::len).sum::<usize>() > 256 * 1024 {
@@ -853,6 +1209,7 @@ fn archive_action(id: &str, path: &Path) -> Result<String, String> {
     }
     let mut actual_total = 0u64;
     for i in 0..zip.len() {
+        crate::jobs::check()?;
         let mut entry = zip.by_index(i).map_err(|e| e.to_string())?;
         if entry.is_dir() {
             if let Some(t) = &temp {
@@ -900,10 +1257,13 @@ fn archive_action(id: &str, path: &Path) -> Result<String, String> {
                 continue;
             }
             output::plain_path(parent)?;
-            match fs::rename(&t.0, &dest) {
-                Ok(()) => return Ok(format!("Extracted to {}", dest.display())),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(e) => return Err(e.to_string()),
+            let published = crate::jobs::publish(|| match fs::rename(&t.0, &dest) {
+                Ok(()) => Ok(true),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+                Err(e) => Err(e.to_string()),
+            })?;
+            if published {
+                return Ok(format!("Extracted to {}", dest.display()));
             }
         }
         return Err("Too many extraction name collisions.".into());
@@ -912,60 +1272,6 @@ fn archive_action(id: &str, path: &Path) -> Result<String, String> {
         "Verified {} ZIP entries; {} bytes.",
         zip.len(),
         actual_total
-    ))
-}
-fn create_zip(paths: &[PathBuf]) -> Result<String, String> {
-    let source = paths.first().ok_or("No files")?;
-    let stage = output::Staged::new(source.parent().ok_or("No parent")?)?;
-    let mut writer = zip::ZipWriter::new(stage.file.try_clone().map_err(|e| e.to_string())?);
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
-    let mut seen = HashSet::new();
-    let mut total = 0u64;
-    for path in paths {
-        output::plain_path(path)?;
-        let name = path
-            .file_name()
-            .ok_or("No filename")?
-            .to_str()
-            .ok_or("ZIP requires Unicode filenames")?;
-        output::safe_archive_name(name)?;
-        if !seen.insert(name.to_lowercase()) {
-            return Err("Selected files have duplicate names; create separate ZIPs.".into());
-        }
-        let mut file = File::open(path).map_err(|e| e.to_string())?;
-        total += file.metadata().map_err(|e| e.to_string())?.len();
-        if total > 512 * 1024 * 1024 {
-            return Err("ZIP creation limit is 512 MiB.".into());
-        }
-        writer
-            .start_file(name, options)
-            .map_err(|e| e.to_string())?;
-        std::io::copy(&mut file, &mut writer).map_err(|e| e.to_string())?;
-    }
-    writer.finish().map_err(|e| e.to_string())?;
-    // One item zips under its own name; several take their folder's name.
-    let parent = source.parent().ok_or("No parent")?;
-    let base = match paths {
-        [one] => one
-            .file_stem()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .into_owned(),
-        _ => parent
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| {
-                source
-                    .file_stem()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned()
-            }),
-    };
-    Ok(format!(
-        "Saved {}",
-        stage.publish_named(parent, &base, "zip")?.display()
     ))
 }
 fn text_action(id: &str, text: &str) -> Result<String, String> {
@@ -1049,7 +1355,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let p = d.path().join("a.txt");
         fs::write(&p, "hello").unwrap();
-        create_zip(&[p]).unwrap();
+        crate::archive_tools::create(&[p], &BTreeMap::new()).unwrap();
         let z = d.path().join("a.zip");
         assert!(archive_action("test_zip", &z).unwrap().contains("Verified"));
         archive_action("extract_zip", &z).unwrap();
@@ -1073,6 +1379,12 @@ fn contact_sheet(paths: &[PathBuf], params: &BTreeMap<String, String>) -> Result
     }
     let mut sheet = image::RgbaImage::from_pixel(width, height, image::Rgba([243, 235, 221, 255]));
     for (i, path) in paths.iter().enumerate() {
+        crate::jobs::check()?;
+        crate::jobs::progress(
+            i,
+            paths.len(),
+            path.file_name().unwrap_or_default().to_string_lossy(),
+        );
         output::plain_path(path)?;
         let img = load_image(path)?.thumbnail(cell - 16, cell - 16);
         let x = (i as u32 % columns) * cell + (cell - img.width()) / 2;
@@ -1089,10 +1401,22 @@ fn contact_sheet(paths: &[PathBuf], params: &BTreeMap<String, String>) -> Result
         stage.publish(source, "contact-sheet", "png")?.display()
     ))
 }
-fn images_pdf(paths: &[PathBuf]) -> Result<String, String> {
+fn images_pdf(paths: &[PathBuf], params: &BTreeMap<String, String>) -> Result<String, String> {
     // Raster-only PDF: fixed object identities, byte offsets and JPEG streams, no user-supplied PDF syntax.
     if paths.len() > 64 {
         return Err("Images-to-PDF supports at most 64 images.".into());
+    }
+    let page_size = params.get("page_size").map_or("a4", String::as_str);
+    let orientation = params.get("orientation").map_or("portrait", String::as_str);
+    if !matches!(page_size, "a4" | "letter" | "image")
+        || !matches!(orientation, "portrait" | "landscape")
+    {
+        return Err("Invalid page size or orientation.".into());
+    }
+    let margin = number(params, "margin", 0, 144)? as f64;
+    let quality = number(params, "quality", 90, 100)?;
+    if quality == 0 {
+        return Err("Quality must be 1–100.".into());
     }
     let source = &paths[0];
     let mut stage = output::Staged::new(source.parent().ok_or("No parent")?)?;
@@ -1127,6 +1451,12 @@ fn images_pdf(paths: &[PathBuf]) -> Result<String, String> {
         format!("<< /Type /Pages /Count {} /Kids [{kids}] >>", paths.len()).as_bytes(),
     )?;
     for (i, path) in paths.iter().enumerate() {
+        crate::jobs::check()?;
+        crate::jobs::progress(
+            i,
+            paths.len(),
+            path.file_name().unwrap_or_default().to_string_lossy(),
+        );
         output::plain_path(path)?;
         let img = load_image(path)?;
         let rgba = img.to_rgba8();
@@ -1138,24 +1468,38 @@ fn images_pdf(paths: &[PathBuf]) -> Result<String, String> {
             }))
         });
         let mut jpeg = Vec::new();
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 90)
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, quality as u8)
             .encode_image(&rgb)
             .map_err(|e| e.to_string())?;
         let page = 3 + i * 3;
         let image_id = page + 1;
         let content_id = page + 2;
-        let scale = (595.0 / img.width() as f64).min(842.0 / img.height() as f64);
+        let (mut pw, mut ph) = match page_size {
+            "letter" => (612.0, 792.0),
+            "image" => (
+                img.width() as f64 * (14000. / img.width().max(img.height()) as f64).min(1.)
+                    + margin * 2.0,
+                img.height() as f64 * (14000. / img.width().max(img.height()) as f64).min(1.)
+                    + margin * 2.0,
+            ),
+            _ => (595.0, 842.0),
+        };
+        if page_size != "image" && orientation == "landscape" {
+            std::mem::swap(&mut pw, &mut ph);
+        }
+        let scale = ((pw - margin * 2.0) / img.width() as f64)
+            .min((ph - margin * 2.0) / img.height() as f64);
         let w = img.width() as f64 * scale;
         let h = img.height() as f64 * scale;
-        object(&mut stage.file,&mut offsets,page,format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 {image_id} 0 R >> >> /Contents {content_id} 0 R >>").as_bytes())?;
+        object(&mut stage.file,&mut offsets,page,format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {pw:.3} {ph:.3}] /Resources << /XObject << /Im0 {image_id} 0 R >> >> /Contents {content_id} 0 R >>").as_bytes())?;
         let mut body=format!("<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length {} >>\nstream\n",img.width(),img.height(),jpeg.len()).into_bytes();
         body.extend_from_slice(&jpeg);
         body.extend_from_slice(b"\nendstream");
         object(&mut stage.file, &mut offsets, image_id, &body)?;
         let content = format!(
             "q {w:.3} 0 0 {h:.3} {:.3} {:.3} cm /Im0 Do Q",
-            (595.0 - w) / 2.0,
-            (842.0 - h) / 2.0
+            (pw - w) / 2.0,
+            (ph - h) / 2.0
         );
         object(
             &mut stage.file,
@@ -1188,7 +1532,7 @@ fn images_pdf(paths: &[PathBuf]) -> Result<String, String> {
     )
     .map_err(|e| e.to_string())?;
     Ok(format!(
-        "Saved {} (A4 pages, white background, selection order)",
+        "Saved {} (configured pages, white background, selection order)",
         stage
             .publish_named(
                 source.parent().ok_or("No parent")?,
@@ -1206,6 +1550,7 @@ fn folder_report(id: &str, path: &Path) -> Result<String, String> {
     let mut skipped = 0;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     while let Some((dir, depth)) = stack.pop() {
+        crate::jobs::check()?;
         if depth > 64 || std::time::Instant::now() > deadline {
             return Err("Folder scan reached its depth or 30-second time limit.".into());
         }
@@ -1259,6 +1604,7 @@ fn folder_report(id: &str, path: &Path) -> Result<String, String> {
     let mut hashed = 0u64;
     for group in groups.values().filter(|g| g.len() > 1) {
         for p in group {
+            crate::jobs::check()?;
             if std::time::Instant::now() > deadline {
                 return Err("Duplicate scan reached its 30-second time limit.".into());
             }
@@ -1288,6 +1634,7 @@ fn folder_report(id: &str, path: &Path) -> Result<String, String> {
     for group in hashes.values().filter(|g| g.len() > 1) {
         report.push_str("\nMatching SHA-256:\n");
         for p in group {
+            crate::jobs::check()?;
             report.push_str(&format!("{}\n", p.display()));
         }
         if report.len() > 256 * 1024 {
@@ -1302,6 +1649,88 @@ fn folder_report(id: &str, path: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod boundary_tests {
     use super::*;
+    #[test]
+    fn pdf_page_controls_and_resize_modes_preserve_original() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("source.png");
+        image::RgbaImage::from_pixel(101, 67, image::Rgba([255, 0, 0, 255]))
+            .save(&path)
+            .unwrap();
+        let original = fs::read(&path).unwrap();
+        image_action(
+            "resize",
+            &path,
+            &BTreeMap::from([
+                ("mode".into(), "percent".into()),
+                ("percent".into(), "50".into()),
+            ]),
+        )
+        .unwrap();
+        let resized = image::open(dir.path().join("source-50x33.png")).unwrap();
+        assert_eq!((resized.width(), resized.height()), (50, 33));
+        image_action(
+            "resize",
+            &path,
+            &BTreeMap::from([
+                ("mode".into(), "longest".into()),
+                ("longest".into(), "20".into()),
+            ]),
+        )
+        .unwrap();
+        let resized = image::open(dir.path().join("source-20x13.png")).unwrap();
+        assert_eq!((resized.width(), resized.height()), (20, 13));
+        images_pdf(
+            std::slice::from_ref(&path),
+            &BTreeMap::from([
+                ("page_size".into(), "letter".into()),
+                ("orientation".into(), "landscape".into()),
+                ("margin".into(), "36".into()),
+            ]),
+        )
+        .unwrap();
+        let pdf = fs::read(dir.path().join("source.pdf")).unwrap();
+        assert!(String::from_utf8_lossy(&pdf).contains("/MediaBox [0 0 792.000 612.000]"));
+        let before = fs::read_dir(dir.path()).unwrap().count();
+        assert!(images_pdf(
+            std::slice::from_ref(&path),
+            &BTreeMap::from([("quality".into(), "0".into())])
+        )
+        .is_err());
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), before);
+        assert_eq!(fs::read(path).unwrap(), original);
+    }
+    #[test]
+    fn new_tools_require_all_compatible_inputs_and_explicit_engines() {
+        let dir = tempfile::tempdir().unwrap();
+        let pdf = dir.path().join("a.pdf");
+        let video = dir.path().join("b.mp4");
+        let audio = dir.path().join("c.mp3");
+        for path in [&pdf, &video, &audio] {
+            fs::write(path, []).unwrap();
+        }
+        let catalog = catalog();
+        let find = |id| catalog.iter().find(|a| a.id == id).unwrap();
+        assert!(eligible(
+            find("pdf_rotate"),
+            std::slice::from_ref(&pdf),
+            false
+        ));
+        assert!(!eligible(find("pdf_rotate"), &[pdf, video.clone()], false));
+        assert!(eligible(
+            find("video_convert"),
+            std::slice::from_ref(&video),
+            false
+        ));
+        assert!(!eligible(
+            find("video_convert"),
+            std::slice::from_ref(&audio),
+            false
+        ));
+        assert!(eligible(find("audio_convert"), &[audio, video], false));
+        assert!(missing_engine("video_convert", &crate::engines::Engines::new()).is_some());
+        assert!(missing_engine("pdf_rotate", &crate::engines::Engines::new()).is_none());
+        assert_eq!(catalog.len(), 66);
+    }
     #[test]
     fn rejects_malicious_zip() {
         let d = tempfile::tempdir().unwrap();
@@ -1321,7 +1750,7 @@ mod boundary_tests {
         image::RgbaImage::from_pixel(16, 8, image::Rgba([0, 100, 200, 255]))
             .save(&p)
             .unwrap();
-        images_pdf(std::slice::from_ref(&p)).unwrap();
+        images_pdf(std::slice::from_ref(&p), &BTreeMap::new()).unwrap();
         let bytes = fs::read(d.path().join("input.pdf")).unwrap();
         let text = String::from_utf8_lossy(&bytes);
         assert!(text.contains("/Count 1"));

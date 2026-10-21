@@ -80,15 +80,24 @@ fn set_text(s: &str, temporary: bool) -> Result<(), String> {
     }
 }
 pub fn pick_files() -> Result<Vec<PathBuf>, String> {
+    pick_paths("Choose files for PieAll", true)
+}
+pub fn pick_engine() -> Result<Vec<PathBuf>, String> {
+    pick_paths("Choose a trusted tool executable for PieAll", false)
+}
+fn pick_paths(title: &str, multiple: bool) -> Result<Vec<PathBuf>, String> {
     unsafe {
         let mut buffer = vec![0u16; 65536];
         let mut o: OPENFILENAMEW = std::mem::zeroed();
         o.lStructSize = std::mem::size_of::<OPENFILENAMEW>() as u32;
         o.lpstrFile = buffer.as_mut_ptr();
         o.nMaxFile = buffer.len() as u32;
-        let title = wide("Choose files for PieAll");
+        let title = wide(title);
         o.lpstrTitle = title.as_ptr();
-        o.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR;
+        o.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+        if multiple {
+            o.Flags |= OFN_ALLOWMULTISELECT;
+        }
         if GetOpenFileNameW(&mut o) == 0 {
             let code = CommDlgExtendedError();
             return if code == 0 {

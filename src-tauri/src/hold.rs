@@ -193,7 +193,7 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
     let scan = SCAN.get();
     match STATE.get() {
         State::Idle => {
-            if !enabled() || !(backtick && down) || modifiers_down() {
+            if !(enabled() && backtick && down) || modifiers_down() {
                 return false;
             }
             SCAN.set(k.scanCode as u16);
@@ -260,6 +260,17 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
     }
 }
 
+unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code == HC_ACTION as i32 {
+        let k = &*(lparam as *const KBDLLHOOKSTRUCT);
+        let down = matches!(wparam as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
+        if k.flags & LLKHF_INJECTED == 0 && handle(k, down) {
+            return 1;
+        }
+    }
+    CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -287,15 +298,4 @@ mod tests {
         set_enabled(true);
         assert!(enabled());
     }
-}
-
-unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code == HC_ACTION as i32 {
-        let k = &*(lparam as *const KBDLLHOOKSTRUCT);
-        let down = matches!(wparam as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
-        if k.flags & LLKHF_INJECTED == 0 && handle(k, down) {
-            return 1;
-        }
-    }
-    CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
 }
