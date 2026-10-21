@@ -1,5 +1,6 @@
 import type { Action, Session } from "./native";
 import { contextualActions } from "./action-search";
+import { getPrefs, type Prefs } from "./prefs";
 
 /** One ring slice: a preset action or a submenu of them. */
 export interface MenuItem {
@@ -154,23 +155,93 @@ export const menus: Record<string, MenuItem[]> = {
   ],
 };
 
-/** Selection tools take precedence; app commands never become category trees. */
-export function contextMenu(session: Session): MenuItem[] {
-  const base = menus[session.kind] ?? [];
-  if (session.kind !== "window") return base;
-  const shortcuts = contextualActions(session.actions, session.app)
+const KIND_GROUPS: Record<string, string[]> = {
+  images: ["Images", "PDF"],
+  files: ["Files", "Archives", "PDF"],
+  text: ["Text"],
+  window: ["Window"],
+};
+const FIXED_APP_SLOTS = 6;
+
+/** Context a layout is saved under: a file type, or the captured app. */
+export function contextKey(session: Pick<Session, "kind" | "app">): string {
+  return session.kind === "window" && session.app
+    ? `app:${session.app}`
+    : session.kind;
+}
+
+/** An app command as a ring slice. */
+export function shortcutItem(action: Action): MenuItem {
+  return run(
+    action.id,
+    action.title,
+    shortcutIcon(action.id),
+    {},
+    action.shortcut ?? undefined,
+  );
+}
+
+/** App commands in the order the built-in ring ranks them. */
+export function appItems(actions: Action[]): MenuItem[] {
+  return actions
     .filter((action) => action.shortcut)
     .sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity))
-    .slice(0, 6)
-    .map((action) =>
-      run(
-        action.id,
-        action.title,
-        shortcutIcon(action.id),
-        {},
-        action.shortcut ?? undefined,
-      ),
-    );
+    .map(shortcutItem);
+}
+
+/** Every slice a file-type ring can hold: its presets, their choices, and plain registry actions. */
+export function kindPool(kind: string, actions: Action[]): MenuItem[] {
+  const pool = new Map<string, MenuItem>();
+  const add = (item: MenuItem) => {
+    if (!pool.has(item.key)) pool.set(item.key, item);
+    item.children?.forEach(add);
+  };
+  (menus[kind] ?? []).forEach(add);
+  for (const action of actions)
+    if (
+      !action.shortcut &&
+      !action.id.startsWith("app:") &&
+      !action.fields.length &&
+      KIND_GROUPS[kind]?.includes(action.group)
+    )
+      add(run(action.id, action.title, action.group.toLowerCase()));
+  return [...pool.values()];
+}
+
+/** The slice keys a context shows before the user edits it. */
+export function defaultLayout(context: string, actions: Action[]): string[] {
+  return context.startsWith("app:")
+    ? appItems(actions)
+        .slice(0, FIXED_APP_SLOTS)
+        .map((i) => i.key)
+    : (menus[context] ?? []).map((i) => i.key);
+}
+
+function custom(
+  context: string,
+  pool: MenuItem[],
+  prefs: Prefs,
+): MenuItem[] | null {
+  const layout = prefs.layouts[context];
+  if (!layout) return null;
+  const byKey = new Map(pool.map((item) => [item.key, item]));
+  return layout.flatMap((key) => byKey.get(key) ?? []);
+}
+
+/** Selection tools take precedence; app commands never become category trees. */
+export function contextMenu(
+  session: Session,
+  prefs: Prefs = getPrefs(),
+): MenuItem[] {
+  const base =
+    custom(session.kind, kindPool(session.kind, session.actions), prefs) ??
+    menus[session.kind] ??
+    [];
+  if (session.kind !== "window") return base;
+  const appActions = contextualActions(session.actions, session.app);
+  const shortcuts =
+    custom(contextKey(session), appItems(appActions), prefs) ??
+    appItems(appActions).slice(0, FIXED_APP_SLOTS);
   if (!shortcuts.length) return base;
   return [
     ...shortcuts,

@@ -7,6 +7,7 @@ import {
   type MenuItem,
 } from "./menus";
 import type { Session } from "./native";
+import type { Prefs } from "./prefs";
 
 const actions = (eligible: string[]) =>
   [
@@ -134,6 +135,39 @@ describe("context menus", () => {
     expect(contextMenu({ ...session, app: null })).toEqual(menus.window);
     expect(contextMenu({ ...session, app: "photoshop" })[0].action).toBe(
       "app:photoshop:curves",
+    );
+  });
+  it("applies saved layouts per file type and per app, and ignores keys that no longer exist", () => {
+    const shortcut = (n: number) => ({
+      id: `app:figma:${n}`,
+      title: `Shortcut ${n}`,
+      group: "Apps",
+      fields: [],
+      shortcut: "V",
+      priority: n,
+      eligible: true,
+    });
+    const session = {
+      kind: "window",
+      app: "figma",
+      actions: [1, 2, 3].map(shortcut),
+    } as unknown as Session;
+    const prefs: Prefs = {
+      trigger: "Backquote",
+      layouts: {
+        "app:figma": ["app:figma:3", "gone", "app:figma:1"],
+        text: ["lower", "upper"],
+      },
+    };
+    const keys = (items: MenuItem[]) => items.map((i) => i.key);
+    expect(keys(contextMenu(session, prefs)).slice(0, 2)).toEqual([
+      "app:figma:3",
+      "app:figma:1",
+    ]);
+    const text = { ...session, kind: "text", app: null } as Session;
+    expect(keys(contextMenu(text, prefs))).toEqual(["lower", "upper"]);
+    expect(keys(contextMenu(text, { ...prefs, layouts: {} }))).toEqual(
+      keys(menus.text),
     );
   });
   it("bounds long wedge labels without changing their accessible source names", () => {

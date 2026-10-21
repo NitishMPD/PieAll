@@ -15,7 +15,10 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use windows_sys::Win32::{
     Foundation::{HWND, POINT, RECT},
-    Graphics::Gdi::*,
+    Graphics::{
+        Dwm::{DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE},
+        Gdi::*,
+    },
     System::Threading::{AttachThreadInput, GetCurrentThreadId},
     UI::HiDpi::{GetDpiForMonitor, GetDpiForWindow, MDT_EFFECTIVE_DPI},
     UI::WindowsAndMessaging::*,
@@ -840,6 +843,11 @@ struct ShortcutLibrary {
     actions: &'static [shortcuts::Shortcut],
 }
 #[tauri::command]
+fn set_trigger_key(window: WebviewWindow, vk: u32) -> Result<()> {
+    dashboard_only(&window)?;
+    hold::set_trigger(vk).map_err(Into::into)
+}
+#[tauri::command]
 fn shortcut_library(window: WebviewWindow) -> Result<ShortcutLibrary> {
     dashboard_only(&window)?;
     let catalog = shortcuts::catalog();
@@ -1408,6 +1416,7 @@ pub fn run() {
             prepare,
             run_action,
             shortcut_library,
+            set_trigger_key,
             copy_result,
             preview,
             update_action
@@ -1426,6 +1435,22 @@ pub fn run() {
                     app.handle(),
                     format!("Ctrl + ` is unavailable: {error}. Hold ` or use the tray."),
                 );
+            }
+            // Windows 11 draws an accent-colour border on an active undecorated window;
+            // clipped to the ring's circle it showed as a pale arc above the top slice
+            // whenever a click activated the ring. Turn that border off for good.
+            for label in ["ring", "toast"] {
+                if let Some(hwnd) = app.get_webview_window(label).and_then(|w| w.hwnd().ok()) {
+                    let none: u32 = DWMWA_COLOR_NONE;
+                    unsafe {
+                        DwmSetWindowAttribute(
+                            hwnd.0 as _,
+                            DWMWA_BORDER_COLOR as u32,
+                            &none as *const u32 as _,
+                            std::mem::size_of::<u32>() as u32,
+                        );
+                    }
+                }
             }
             if let Some(toast_window) = app.get_webview_window("toast") {
                 let _ = toast_window.set_ignore_cursor_events(true);

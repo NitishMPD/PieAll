@@ -16,7 +16,10 @@ import {
 import { Ring } from "./Ring";
 import { Toast } from "./Toast";
 import { Icon } from "./Icon";
+import { Customize, applyTrigger } from "./Customize";
+import { TRIGGER_KEYS, usePrefs } from "./prefs";
 import "./styles.css";
+import "./dashboard.css";
 
 const surface =
   typeof location !== "undefined"
@@ -44,7 +47,16 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const deferredQuery = useDeferredValue(query);
-  const [updates, setUpdates] = useState(false);
+  const [view, setView] = useState<"actions" | "customize" | "updates">(
+    "actions",
+  );
+  const updates = view === "updates";
+  const setUpdates = useCallback(
+    (open: boolean) => setView(open ? "updates" : "actions"),
+    [],
+  );
+  const prefs = usePrefs();
+  const triggerLabel = TRIGGER_KEYS[prefs.trigger]?.label ?? "`";
   const [confirmInstall, setConfirmInstall] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const sequence = useRef(0);
@@ -78,6 +90,13 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
     setQuery("");
     setPage(0);
   }, [session?.app]);
+  useEffect(() => {
+    // The native hook starts on the backtick; restore a saved choice.
+    if (!standalone && prefs.trigger !== "Backquote")
+      void applyTrigger(prefs.trigger).then(
+        (message) => message && setError(message),
+      );
+  }, [prefs.trigger]);
   const refresh = useCallback(async () => {
     const seq = ++sequence.current;
     const next = await native.session();
@@ -181,12 +200,12 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
       if (session?.editor) {
         event.preventDefault();
         void perform(() => native.prepare(null, session.revision));
-      } else if (updates) setUpdates(false);
+      } else if (view !== "actions") setView("actions");
       else if (!standalone) void perform(() => native.surface("dismiss"));
     }
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [session?.editor, session?.revision, updates, perform]);
+  }, [session?.editor, session?.revision, view, perform]);
   function runPreset(id: string, params: Record<string, string>) {
     const action = session?.actions.find((a) => a.id === id);
     if (action) activate(action, params);
@@ -243,7 +262,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
           onClick={(e) => {
             e.preventDefault();
             setGroup("All actions");
-            setUpdates(false);
+            setView("actions");
           }}
         >
           <img
@@ -259,7 +278,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
         </a>
         <div className="header-actions">
           <span className="local-label">
-            <span /> Local tools. Your files.
+            <span /> Runs on this PC
           </span>
           <button
             className="quiet"
@@ -267,12 +286,13 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
             onClick={() => void perform(() => native.surface("ring"))}
           >
             <Icon name="ring" size={17} />
-            Show ring <kbd>Hold `</kbd>
+            Show ring <kbd>Hold {triggerLabel}</kbd>
           </button>
         </div>
       </header>
       <div className="body-layout">
-        <nav className="sidebar" aria-label="Action categories">
+        <nav className="sidebar" aria-label="Sections">
+          <h2 className="nav-heading">Actions</h2>
           {[
             "All actions",
             "Images",
@@ -286,14 +306,18 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
             <button
               key={name}
               className={
-                group === name && !updates ? "nav-item active" : "nav-item"
+                group === name && view === "actions"
+                  ? "nav-item active"
+                  : "nav-item"
               }
               onClick={() => {
                 setGroup(name);
                 setPage(0);
-                setUpdates(false);
+                setView("actions");
               }}
-              aria-current={group === name && !updates ? "page" : undefined}
+              aria-current={
+                group === name && view === "actions" ? "page" : undefined
+              }
             >
               <Icon name={name === "All actions" ? "ring" : name} />
               {name}
@@ -304,14 +328,19 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               </span>
             </button>
           ))}
+          <h2 className="nav-heading">Personalize</h2>
+          <button
+            className={`nav-item ${view === "customize" ? "active" : ""}`}
+            aria-current={view === "customize" ? "page" : undefined}
+            onClick={() => setView("customize")}
+          >
+            <Icon name="sliders" />
+            Customize ring
+          </button>
           <div className="sidebar-bottom">
-            <p>
-              Made for the work
-              <br />
-              already in your hands.
-            </p>
             <button
               className={`nav-item ${updates ? "active" : ""}`}
+              aria-current={updates ? "page" : undefined}
               onClick={() => setUpdates(true)}
             >
               <Icon name="update" />
@@ -348,7 +377,9 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               </button>
             </div>
           </section>
-          {updates ? (
+          {view === "customize" ? (
+            <Customize session={session} />
+          ) : updates ? (
             <section className="updates-panel">
               <button className="text-button" onClick={() => setUpdates(false)}>
                 <Icon name="back" size={18} />
@@ -442,28 +473,70 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
                 <div className="panel-heading">
                   <h2>
                     {session.kind === "empty"
-                      ? "Bring a file. Find its next step."
+                      ? "Start anywhere."
                       : "What’s next?"}
                   </h2>
                   <p>
                     {session.kind === "empty"
-                      ? "Drop files anywhere in this window to begin."
+                      ? "Select something in Windows, or drop files here."
                       : "A few useful moves, right at your fingertips."}
                   </p>
                 </div>
-                <Ring
-                  session={session}
-                  thumbnail={thumbnail?.url ?? null}
-                  onBrowse={browseActions}
-                  onRun={runPreset}
-                  onClose={() => void perform(() => native.load("files"))}
-                />
+                {session.kind === "empty" ? (
+                  <ol className="steps" aria-label="How PieAll works">
+                    <li>
+                      <b>1</b>
+                      <span>
+                        <strong>Select</strong>
+                        Files in Explorer, text anywhere, or just an app window.
+                      </span>
+                    </li>
+                    <li>
+                      <b>2</b>
+                      <span>
+                        <strong>
+                          Hold <kbd>{triggerLabel}</kbd>
+                        </strong>
+                        The ring opens right at your cursor.
+                      </span>
+                    </li>
+                    <li>
+                      <b>3</b>
+                      <span>
+                        <strong>Release on an action</strong>
+                        Results save beside the original.
+                      </span>
+                    </li>
+                    <li className="steps-cta">
+                      <button
+                        className="primary"
+                        disabled={disabled}
+                        onClick={() => void perform(() => native.load("files"))}
+                      >
+                        <Icon name="open" size={17} />
+                        Choose files
+                      </button>
+                      <button onClick={() => setView("customize")}>
+                        <Icon name="sliders" size={17} />
+                        Customize ring
+                      </button>
+                    </li>
+                  </ol>
+                ) : (
+                  <Ring
+                    session={session}
+                    thumbnail={thumbnail?.url ?? null}
+                    onBrowse={browseActions}
+                    onRun={runPreset}
+                    onClose={() => void perform(() => native.load("files"))}
+                  />
+                )}
                 <div className="radial-caption">
                   <span className="shortcut-mark">
                     <Icon name="ring" size={16} />
                   </span>
                   <p>
-                    Anywhere in Windows, hold <kbd>`</kbd>
+                    Anywhere in Windows, hold <kbd>{triggerLabel}</kbd>
                     <br />
                     <span>
                       {session.app

@@ -14,7 +14,10 @@
 use pieall::platform::INJECTED_MARKER;
 use std::{
     cell::Cell,
-    sync::{mpsc, OnceLock},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        mpsc, OnceLock,
+    },
 };
 use windows_sys::Win32::{
     Foundation::*,
@@ -35,6 +38,18 @@ pub enum Hold {
 }
 
 const HOLD_MS: u32 = 150;
+
+/// Virtual-key code of the hold key; the backtick unless the user picked another.
+static TRIGGER: AtomicU32 = AtomicU32::new(VK_OEM_3 as u32);
+
+/// Changes the hold key. Only keys that have no modifier-only meaning are accepted.
+pub fn set_trigger(vk: u32) -> Result<(), String> {
+    if !matches!(vk, 0xC0 | 0x14 | 0x13 | 0x91 | 0xE2 | 0x70..=0x7B) {
+        return Err("That key cannot open the ring.".into());
+    }
+    TRIGGER.store(vk, Ordering::SeqCst);
+    Ok(())
+}
 
 #[derive(Clone, Copy, PartialEq)]
 enum State {
@@ -164,7 +179,8 @@ fn on_timer(id: usize) {
 
 /// Returns true when the event must be swallowed.
 fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
-    let backtick = k.vkCode == VK_OEM_3 as u32;
+    let trigger = TRIGGER.load(Ordering::SeqCst) as u16;
+    let backtick = k.vkCode == trigger as u32;
     let scan = SCAN.get();
     match STATE.get() {
         State::Idle => {
@@ -188,7 +204,7 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
                 stop_timer();
                 STATE.set(State::Idle);
                 emit(Hold::Tap);
-                send(&[key(VK_OEM_3, scan, 0), key(VK_OEM_3, scan, KEYEVENTF_KEYUP)]);
+                send(&[key(trigger, scan, 0), key(trigger, scan, KEYEVENTF_KEYUP)]);
             }
             true // auto-repeat while undecided
         }
@@ -206,7 +222,7 @@ fn handle(k: &KBDLLHOOKSTRUCT, down: bool) -> bool {
                 0
             };
             send(&[
-                key(VK_OEM_3, scan, 0),
+                key(trigger, scan, 0),
                 key(k.vkCode as u16, k.scanCode as u16, extended),
             ]);
             true

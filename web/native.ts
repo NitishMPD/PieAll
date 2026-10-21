@@ -57,6 +57,7 @@ export interface Session {
 export const native = {
   session: () => invoke<Session>("session"),
   shortcutLibrary: () => invoke<ShortcutLibrary>("shortcut_library"),
+  setTrigger: (vk: number) => invoke<void>("set_trigger_key", { vk }),
   surface: (action: "dashboard" | "ring" | "dismiss" | "search") =>
     invoke<void>("surface", { action }),
   load: (kind: "files" | "clipboard") => invoke<void>("load_context", { kind }),

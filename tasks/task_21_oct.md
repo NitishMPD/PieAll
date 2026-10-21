@@ -8,3 +8,5 @@
 
 - Fixed shortcut context leakage by using captured-session actions in both views, removed the All apps selector and nested app shortcut trees, added direct Search actions and `/` access to flat contextual search, and reset search on app switches. Passed 14 frontend and 5 native shell tests, typecheck, strict desktop Clippy, formatting and the static contextual fixture.
 - Made PieAll open on key-down everywhere (AutoHotPie-speed): quick taps still type ` with the ring vanishing instantly, text capture waits for a confirmed hold, shortcut-only apps confirm immediately, the ring never takes focus while held (hook handles Escape), native-only window placement and release reading, and a 70 ms entrance with no stagger.
+- Turned off the Windows 11 accent border on the ring and toast windows; clicking a slice activated the ring and the border showed as a pale blue arc above the top slice.
+- Redesigned dashboard navigation and empty state; added Customize ring (hold-key choice, per file type and per app ring layouts).

@@ -18,6 +18,7 @@ import {
 import { contextMenu, labelLines, resolve, type MenuItem } from "./menus";
 import { native } from "./native";
 import { Icon } from "./Icon";
+import { usePrefs } from "./prefs";
 
 /** Resting on a "More" slice (or the center, inside a submenu) this long moves level. */
 export const DWELL_MS = 550;
@@ -81,9 +82,10 @@ export function Ring({
 
   const reading = session.busy === "capture";
   const blocked = !!session.busy || !!session.editor;
+  const prefs = usePrefs();
   const root = useMemo(
-    () => resolve(contextMenu(session), session.actions, session.names),
-    [session],
+    () => resolve(contextMenu(session, prefs), session.actions, session.names),
+    [session, prefs],
   );
   let items = root;
   let parent: MenuItem | null = null;
@@ -298,10 +300,7 @@ export function Ring({
               const [px, py] = point(5, angle);
               const active = !!item && selected === index;
               return (
-                <g
-                  key={item?.key ?? `empty-${index}`}
-                  className="sector-shell"
-                >
+                <g key={item?.key ?? `empty-${index}`} className="sector-shell">
                   <g
                     className={`sector ${active ? "is-selected" : ""} ${item ? "" : "is-placeholder"}`}
                     style={

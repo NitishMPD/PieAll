@@ -1,6 +1,12 @@
 # PieAll
 Author: Nitish
 
+## Ring customization — 21 October 2026
+
+The dashboard has a Customize ring section. Users pick the hold key (`, Caps Lock, Pause, Scroll Lock or F1–F12; Esc cancels capture) and edit the ring layout per context: Images, Files, Text, Windows, and any of the 57 app profiles. A layout is an ordered list of ring slices. Slices come from the context's built-in presets, their choices, plain registry actions of the matching groups, or that app's shortcuts. Users can reorder, remove, add and reset. Slices past eight move into More. A saved layout replaces the built-in one; keys that no longer exist are ignored; Reset restores the default. For an app, the saved layout replaces the six quick actions, while Search actions and Window tools stay fixed.
+
+Preferences live in the WebView's `localStorage` (`pieall.prefs`), shared by the dashboard and ring windows, so a change reaches the ring on its next open. The dashboard sends the saved hold key to the native hook through `set_trigger_key` at startup and on change; the hook accepts only the keys listed above, and a quick tap still types the chosen key. Verification gap: the hook change builds under `cargo check` but has not been exercised on real keyboards, and `localStorage` sharing between the two windows has not been tested in WebView2.
+
 ## Contextual app shortcuts — 21 October 2026
 
 App-specific Windows shortcuts are now in product scope. `src/shortcuts.json` supplies 3,079 app-scoped bindings across 57 profiles, alongside the existing 44 local tools (3,123 available bindings/tools across supported contexts). This counts bindings per app, including shared browser/editor defaults; it does not mean 3,079 distinct automation engines or new file transformations. Everyday coverage includes Explorer, Chromium/Firefox browsers, Word/Excel/PowerPoint/Outlook/OneNote, Notepad/Paint, Terminal, Slack/Discord/Teams, Spotify/VLC/Zoom, Notion/Obsidian and Acrobat. Specialist profiles include Figma, Photoshop, Illustrator, Premiere Pro, After Effects, Blender, GIMP, Krita, Inkscape, Audacity, Godot, VS Code derivatives and JetBrains IDEs.

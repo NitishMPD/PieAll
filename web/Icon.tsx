@@ -47,6 +47,12 @@ const paths: Record<string, string> = {
   info: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M12 11v5m0-8h.01",
   center: "M3 5h18v14H3zM9 9h6v6H9z",
   pin: "M9 3h6l-1 6 4 3v2H6v-2l4-3zM12 14v7",
+  up: "m6 15 6-6 6 6",
+  down: "m6 9 6 6 6-6",
+  plus: "M12 5v14M5 12h14",
+  keyboard: "M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10",
+  sliders: "M4 7h9m4 0h3M4 17h3m4 0h9M15 5v4M9 15v4",
+  home: "M4 11 12 4l8 7v9H4z",
 };
 export function Icon({ name, size = 22 }: { name: string; size?: number }) {
   return (
