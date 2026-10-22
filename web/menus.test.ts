@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   contextMenu,
+  defaultLayout,
   labelLines,
   menus,
   resolve,
@@ -34,6 +35,96 @@ const actions = (eligible: string[]) =>
   }));
 
 describe("context menus", () => {
+  it("replaces browser paste and search with two direct capture slices", () => {
+    const profile = "chrome";
+    const quick = [
+      "copy-url",
+      "reopen-closed-tab",
+      "new-private-window",
+      "paste-plain-text",
+      "find-on-page",
+      "bookmark-page",
+    ];
+    const browserActions = [
+      ...quick,
+      "capture-current",
+      "capture-full-page",
+    ].map((id) => ({
+      id: `app:${profile}:${id}`,
+      title:
+        id === "capture-current"
+          ? "Capture current"
+          : id === "capture-full-page"
+            ? "Capture full page"
+            : id,
+      group: "Apps",
+      fields: [],
+      eligible: true,
+      shortcut: "Ctrl+S",
+      category: id.startsWith("capture-")
+        ? "Screenshots"
+        : id === "copy-url"
+          ? "Navigation"
+          : "Editing",
+      priority: quick.includes(id) ? quick.indexOf(id) : undefined,
+    }));
+    const allActions = [
+      ...browserActions,
+      ...[
+        "download_video",
+        "download_audio",
+        "center_window",
+        "always_top",
+        "fit_window",
+        "window_details",
+      ].map((id) => ({
+        id,
+        title: id,
+        group: "Window",
+        fields: [],
+        eligible: true,
+      })),
+    ];
+    for (const kind of ["window", "text"]) {
+      const session = {
+        kind,
+        app: profile,
+        names: [],
+        actions: allActions,
+      } as unknown as Session;
+      const menu = contextMenu(session, { layouts: {} } as Prefs);
+      expect(
+        menu.filter((i) => i.action?.includes(":capture-")).map((i) => i.label),
+      ).toEqual(["Capture current", "Capture full page"]);
+      expect(
+        menu.some((i) => i.browse || i.action?.endsWith(":paste-plain-text")),
+      ).toBe(false);
+      expect(menu.some((i) => i.key === "browser-screenshot")).toBe(false);
+      if (kind === "window") expect(resolve(menu, allActions)).toHaveLength(8);
+    }
+    expect(defaultLayout("app:chrome", allActions)).toContain(
+      "app:chrome:capture-full-page",
+    );
+    const customized = contextMenu(
+      {
+        kind: "window",
+        app: profile,
+        actions: allActions,
+      } as unknown as Session,
+      {
+        layouts: {
+          "app:chrome": [
+            "app:chrome:capture-full-page",
+            "app:chrome:paste-plain-text",
+          ],
+        },
+      } as unknown as Prefs,
+    );
+    expect(customized.slice(0, 2).map((i) => i.action)).toEqual([
+      "app:chrome:capture-full-page",
+      "app:chrome:paste-plain-text",
+    ]);
+  });
   it("puts native video and audio downloads in browser defaults and allows customization", () => {
     const browserActions = [
       {

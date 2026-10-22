@@ -1,6 +1,13 @@
 # PieAll design
 Author: Nitish
 
+
+## Direct browser captures - 22 October 2026
+
+The default browser ring has eight direct slices: Download video, Download audio, Copy URL, Reopen closed tab, New private window, Capture current, Capture full page and Window. Capture current replaces Paste plain text; Capture full page replaces Search actions. Both capture choices use the existing camera icon, labels and keyboard/hold interaction, with no screenshot submenu. Custom layouts retain their selected actions. Other apps keep Search actions, and slash remains the search shortcut.
+
+Capture current requests the page viewport; Capture full page requests the entire document. Firefox leaves its screenshot preview open for Copy or Download. Chromium invokes its native screenshot command through docked DevTools. A request notice directs users to finish saving in the browser; it never claims the screenshot was saved. Unavailable controls produce the existing error notice. Native capture and focus behavior remain unverified.
+
 ## Parallel jobs - 21 October 2026
 
 The dashboard shows jobs as compact in-app toasts in its lower-right corner, above the status footer across all pages. The stack overlays the workspace without shrinking the ring or action browser, and scrolls within half the workspace height, capped at 480 px. Each notice names the action and state, shows progress and Cancel while running, and retains an expandable, selectable View result afterward. Successful downloads retain Open location. Close dismisses only that in-app notice for the current dashboard session without cancelling work; its later updates remain hidden. Notices remain until closed or removed from bounded native history. Long names, paths and controls wrap, and identical title/detail text is shown once. Toasts use existing neutral theme tokens, typography, Lucide icons and keyboard focus styling. Cancellation and progress labels include job identity. Full result text loads when its disclosure opens.

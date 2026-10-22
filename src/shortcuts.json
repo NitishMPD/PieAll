@@ -2,6 +2,18 @@
   "sets": {
     "browser": [
       {
+        "id": "capture-current",
+        "title": "Capture current",
+        "keys": "Ctrl+Shift+J Ctrl+Shift+P",
+        "category": "Screenshots"
+      },
+      {
+        "id": "capture-full-page",
+        "title": "Capture full page",
+        "keys": "Ctrl+Shift+J Ctrl+Shift+P",
+        "category": "Screenshots"
+      },
+      {
         "id": "new-tab",
         "title": "New tab",
         "keys": "Ctrl+T",
@@ -339,6 +351,18 @@
       }
     ],
     "firefox": [
+      {
+        "id": "capture-current",
+        "title": "Capture current",
+        "keys": "Ctrl+Shift+S",
+        "category": "Screenshots"
+      },
+      {
+        "id": "capture-full-page",
+        "title": "Capture full page",
+        "keys": "Ctrl+Shift+S",
+        "category": "Screenshots"
+      },
       {
         "id": "new-tab",
         "title": "New tab",

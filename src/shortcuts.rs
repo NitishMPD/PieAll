@@ -238,6 +238,31 @@ mod tests {
         assert!(find("app:photoshop:arbitrary-command").is_none());
     }
     #[test]
+    fn browser_profiles_offer_both_native_capture_modes() {
+        for profile in &catalog().profiles {
+            if !profile
+                .sets
+                .iter()
+                .any(|set| set == "browser" || set == "firefox")
+            {
+                continue;
+            }
+            for mode in ["capture-current", "capture-full-page"] {
+                let action = find(&format!("app:{}:{mode}", profile.id)).unwrap();
+                assert_eq!(action.category, "Screenshots");
+                assert_eq!(action.priority, None);
+                assert_eq!(
+                    action.keys,
+                    if profile.sets.iter().any(|set| set == "firefox") {
+                        "Ctrl+Shift+S"
+                    } else {
+                        "Ctrl+Shift+J Ctrl+Shift+P"
+                    }
+                );
+            }
+        }
+    }
+    #[test]
     fn parses_sequences_and_rejects_unbounded_or_ambiguous_input() {
         assert_eq!(
             parse_keys("Ctrl+K Ctrl+C").unwrap(),

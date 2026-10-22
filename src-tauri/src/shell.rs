@@ -1441,6 +1441,10 @@ async fn run_app_shortcut(
         Capturing::wait();
         let result = dispatch_app_shortcut(&app, source, pid, action);
         let (tone, status) = match result {
+            Ok(()) if action.category == "Screenshots" => (
+                "ok",
+                format!("{} requested. Finish saving in your browser.", action.title),
+            ),
             Ok(()) => (
                 "ok",
                 format!("Shortcut sent: {} · {}", action.title, action.keys),

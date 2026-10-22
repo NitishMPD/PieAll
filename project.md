@@ -1,6 +1,15 @@
 # PieAll
 Author: Nitish
 
+
+## Browser screenshot actions - 22 October 2026
+
+Default browser rings replace Paste plain text and Search actions with two direct actions: Capture current (the page viewport) and Capture full page. Downloads, Copy URL, Reopen closed tab, New private window and Window remain. Other apps retain Search actions; slash search remains available, and saved custom layouts remain authoritative. Both capture actions are also available to customization and the dashboard app list.
+
+Capture dispatch uses the captured browser HWND/process, existing input lease and foreground/held-key checks. Chromium opens its docked DevTools command menu and sets the fixed screenshot command through Windows UI Automation; it submits only while the same command input retains focus. Firefox opens its screenshot overlay and invokes Save visible or Save full page, leaving its preview for Copy/Download. Neither path reads the clipboard or runs page scripts. The completion notice confirms a request, not a saved file. English accessible browser controls are required. Missing controls time out with an error; undocked DevTools, disabled developer tools, browser dialogs and restricted pages can prevent capture. Docked DevTools can change viewport size; lazy content and browser screenshot limits still apply. Browser-managed saving uses browser preferences, separate from media download defaults.
+
+TypeScript, native type-checks and menu/catalog regression tests cover static dispatch and layout. Native screenshot output, accessibility lookup, browser variants, localization and viewport behavior remain user-run acceptance checks; no app was launched.
+
 ## In-app action notices - 22 October 2026
 
 Dashboard jobs appear as dismissible toast notifications instead of a persistent bottom list. Their native job IDs, per-job Cancel, saved download location and lazy result reports are preserved. Dismissal is local to the current dashboard session and never cancels work. Notifications persist until closed or pruned from native history. While the dashboard is active, all job notices, including saved downloads, suppress the separate floating window to avoid duplicates. Background desktop notices retain their existing behavior.

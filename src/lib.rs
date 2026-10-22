@@ -1,5 +1,6 @@
 pub mod actions;
 pub mod archive_tools;
+mod browser_capture;
 pub mod downloads;
 pub mod engine_install;
 pub mod engine_process;

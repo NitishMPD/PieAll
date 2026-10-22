@@ -137,6 +137,12 @@ const KIND_GROUPS: Record<string, string[]> = {
   window: ["Window"],
 };
 const FIXED_APP_SLOTS = 6;
+function isBrowser(actions: Action[]): boolean {
+  return actions.some(
+    (a) =>
+      a.shortcut && a.id.endsWith(":copy-url") && a.category === "Navigation",
+  );
+}
 /** File-type submenus: when the selection fits only one, its tools become slices. */
 const TYPE_TOOLS = new Set(["pdf-tools", "media-tools"]);
 
@@ -168,10 +174,7 @@ export function appItems(actions: Action[]): MenuItem[] {
 
 /** Figma's related alignment choices share one slice; individual commands stay customizable. */
 export function appPool(actions: Action[]): MenuItem[] {
-  const browser = actions.some(
-    (a) =>
-      a.shortcut && a.id.endsWith(":copy-url") && a.category === "Navigation",
-  );
+  const browser = isBrowser(actions);
   const downloads = browser
     ? [
         run("download_video", "Download video", "download"),
@@ -192,8 +195,26 @@ export function appPool(actions: Action[]): MenuItem[] {
 
 function appDefaults(actions: Action[]): MenuItem[] {
   const pool = appPool(actions);
+  const browser = isBrowser(actions);
   return [
-    ...pool.filter((item) => !item.children).slice(0, FIXED_APP_SLOTS),
+    ...pool
+      .filter(
+        (item) =>
+          !item.children &&
+          (!browser ||
+            (!item.action?.endsWith(":paste-plain-text") &&
+              !actions.some(
+                (a) => a.id === item.action && a.category === "Screenshots",
+              ))),
+      )
+      .slice(0, browser ? FIXED_APP_SLOTS - 1 : FIXED_APP_SLOTS),
+    ...(browser
+      ? pool.filter((item) =>
+          actions.some(
+            (a) => a.id === item.action && a.category === "Screenshots",
+          ),
+        )
+      : []),
     ...pool.filter((item) => item.children),
   ];
 }
@@ -267,13 +288,17 @@ function baseMenu(session: Session, prefs: Prefs): MenuItem[] {
   if (!shortcuts.length) return base;
   return [
     ...shortcuts,
-    {
-      key: "search-actions",
-      label: "Search actions",
-      icon: "search",
-      browse: true,
-      hint: "Search this app's shortcuts",
-    },
+    ...(!isBrowser(appActions)
+      ? [
+          {
+            key: "search-actions",
+            label: "Search actions",
+            icon: "search",
+            browse: true,
+            hint: "Search this app's shortcuts",
+          },
+        ]
+      : []),
     ...(session.kind === "text"
       ? [sub("text-tools", "Text tools", "text", base)]
       : []),

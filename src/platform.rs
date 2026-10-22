@@ -414,7 +414,13 @@ pub fn send_app_shortcut(
     };
     for (index, chord) in sequence.iter().enumerate() {
         if index != 0 {
-            std::thread::sleep(std::time::Duration::from_millis(70));
+            std::thread::sleep(std::time::Duration::from_millis(
+                if action.category == "Screenshots" {
+                    900
+                } else {
+                    70
+                },
+            ));
         }
         validate()?;
         let inputs: Vec<_> = chord
@@ -451,6 +457,9 @@ pub fn send_app_shortcut(
             }
             return Err("Windows blocked shortcut input. The target may be elevated.".into());
         }
+    }
+    if action.category == "Screenshots" {
+        return crate::browser_capture::finish(source, pid, action);
     }
     Ok(())
 }
