@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { native, type Job } from "./native";
+import { Icon } from "./Icon";
 import "./jobs.css";
 
 export function Jobs({
@@ -9,20 +10,58 @@ export function Jobs({
   jobs: Job[];
   perform: (action: () => Promise<unknown>) => Promise<void>;
 }) {
-  if (!jobs.length) return null;
+  const [dismissed, setDismissed] = useState<Set<number>>(() => new Set());
+  const visible = jobs.filter((job) => !dismissed.has(job.id));
+  if (!visible.length) return null;
   const running = jobs.filter((job) =>
     ["running", "cancelling"].includes(job.state),
   );
   return (
-    <section className="jobs" aria-label="Jobs">
-      <h2 aria-live="polite">Jobs · {running.length} running</h2>
+    <section className="jobs" aria-label="Action notifications">
+      <h2 className="sr-only" aria-live="polite">
+        Jobs · {running.length} running
+      </h2>
       <ul className="jobs-list">
-        {jobs.map((job) => {
+        {visible.map((job) => {
           const active = ["running", "cancelling"].includes(job.state);
+          const failed = ["failed", "partial"].includes(job.state);
           return (
-            <li key={job.id}>
+            <li key={job.id} className="job-toast">
+              <span className="job-mark" aria-hidden="true">
+                {active ? (
+                  <span className="spinner" />
+                ) : (
+                  <Icon
+                    name={
+                      failed
+                        ? "alert"
+                        : job.state === "complete"
+                          ? "check"
+                          : "info"
+                    }
+                    size={16}
+                  />
+                )}
+              </span>
               <div className="job-summary">
-                <strong>{job.title}</strong>
+                <strong role={failed ? "alert" : "status"}>{job.title}</strong>
+                <button
+                  className="job-close icon-button"
+                  aria-label={`Close notification for ${job.title}, job ${job.id}`}
+                  title={
+                    active
+                      ? "Close notification (job continues)"
+                      : "Close notification"
+                  }
+                  onClick={() =>
+                    setDismissed((previous) => new Set(previous).add(job.id))
+                  }
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+              {job.detail && job.detail !== job.title && <p>{job.detail}</p>}
+              <div className="job-controls">
                 <span>
                   {job.state === "partial"
                     ? "Completed with errors"
@@ -47,7 +86,6 @@ export function Jobs({
                   </button>
                 )}
               </div>
-              <p>{job.detail}</p>
               {active && (
                 <progress
                   aria-label={`${job.title}, job ${job.id}: files processed`}
@@ -87,10 +125,10 @@ function JobResult({ job }: { job: Job }) {
           .finally(() => setLoading(false));
       }}
     >
-      <summary>Result · {job.title}</summary>
+      <summary>View result</summary>
       {loading && <p role="status">Loading result…</p>}
       {error && <p role="alert">{error}</p>}
-      {report && <pre>{report}</pre>}
+      {report && <pre tabIndex={0}>{report}</pre>}
     </details>
   );
 }

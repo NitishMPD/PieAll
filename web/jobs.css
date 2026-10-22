@@ -1,51 +1,81 @@
 .jobs {
-  flex-shrink: 0;
-  border-top: 1px solid var(--line);
-  padding: 12px 24px;
-  background: var(--paper);
-  color: var(--ink);
-}
-.jobs h2 {
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 600;
+  position: absolute;
+  right: 16px;
+  bottom: 56px;
+  z-index: 10;
+  width: min(384px, calc(100% - 32px));
+  max-height: min(50%, 480px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding: 8px;
+  pointer-events: none;
 }
 .jobs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 180px;
-  overflow: auto;
 }
-.jobs-list li + li {
-  border-top: 1px solid var(--line);
-  margin-top: 10px;
-  padding-top: 10px;
+.job-toast {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 8px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--cream);
+  color: var(--ink);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
+  pointer-events: auto;
+  font-size: 12px;
 }
-.job-summary {
+.job-mark {
+  display: grid;
+  place-items: center;
+  align-self: start;
+  height: 28px;
+}
+.job-toast > :not(.job-mark) {
+  grid-column: 2;
+  min-width: 0;
+}
+.job-summary,
+.job-controls {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
 }
 .job-summary strong {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.4;
 }
-.job-summary > span {
+.job-controls {
+  flex-wrap: wrap;
+}
+.job-controls > span {
+  flex: 1;
   color: var(--muted);
   text-transform: capitalize;
 }
-.job-summary button {
-  padding: 5px 9px;
+.job-controls button {
+  padding: 6px 10px;
   font-size: 12px;
 }
+.job-summary .job-close {
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  flex-shrink: 0;
+}
 .jobs p {
-  margin: 4px 0;
+  margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 .jobs progress {
@@ -53,13 +83,10 @@
   height: 6px;
   accent-color: var(--accent);
 }
-.jobs details {
-  margin-top: 6px;
-  font-size: 12px;
-}
 .jobs summary {
   cursor: pointer;
   width: fit-content;
+  color: var(--muted);
 }
 .jobs pre {
   white-space: pre-wrap;
@@ -67,4 +94,10 @@
   user-select: text;
   max-height: 140px;
   overflow: auto;
+  margin: 8px 0 0;
+}
+@media (forced-colors: active) {
+  .job-toast {
+    outline: 1px solid CanvasText;
+  }
 }

@@ -28,6 +28,12 @@ describe("parallel job controls", () => {
       />,
     );
     expect(html).toContain("Jobs · 3 running");
+    expect(html).toContain('aria-label="Action notifications"');
+    expect(html.match(/class="job-toast"/g)).toHaveLength(3);
+    expect(html).toContain(
+      'aria-label="Close notification for Download video, job 1"',
+    );
+    expect(html).toContain("Close notification (job continues)");
     expect(html).toContain('aria-label="Cancel Download video, job 1"');
     expect(html).toContain('aria-label="Cancel Convert video, job 2"');
     expect(html).toMatch(/<progress[^>]*job 1[^>]*><\/progress>/);
@@ -66,7 +72,24 @@ describe("parallel job controls", () => {
         perform={perform}
       />,
     );
-    expect(html).toContain("<summary>Result · Download video</summary>");
+    expect(html).toContain("<summary>View result</summary>");
     expect(html).not.toContain("<pre>");
+  });
+  it("does not repeat a completed action's title as its detail", () => {
+    const html = renderToStaticMarkup(
+      <Jobs
+        jobs={[
+          {
+            ...job,
+            title: "Copied 1 path.",
+            detail: "Copied 1 path.",
+            state: "complete",
+          },
+        ]}
+        perform={perform}
+      />,
+    );
+    expect(html.match(/>Copied 1 path\.</g)).toHaveLength(1);
+    expect(html).not.toContain('aria-label="Cancel ');
   });
 });

@@ -1,6 +1,10 @@
 # PieAll
 Author: Nitish
 
+## In-app action notices - 22 October 2026
+
+Dashboard jobs appear as dismissible toast notifications instead of a persistent bottom list. Their native job IDs, per-job Cancel, saved download location and lazy result reports are preserved. Dismissal is local to the current dashboard session and never cancels work. Notifications persist until closed or pruned from native history. While the dashboard is active, all job notices, including saved downloads, suppress the separate floating window to avoid duplicates. Background desktop notices retain their existing behavior.
+
 ## Parallel actions - 21 October 2026
 
 The default Tauri shell runs independent jobs concurrently. Downloads, media processing and local file actions no longer hold the app-wide interactive lease for their full lifetime. Each accepted job owns its captured paths/text, parameters, download preferences/destination, cancellation token, progress, output location and result. New selections, ring invocations and actions remain available during background work. The dashboard keeps every active job plus a bounded recent history (completed history is pruned to fewer than 20 entries when another job starts); full reports load on demand rather than travelling with every progress refresh.

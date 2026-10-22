@@ -1755,7 +1755,7 @@ fn show_notice(
         return;
     };
     let has_output = job.as_ref().is_some_and(|j| j.output.is_some());
-    if job.is_some() && !has_output && dashboard_active(app) {
+    if job.is_some() && dashboard_active(app) {
         TOAST_GENERATION.fetch_add(1, Ordering::SeqCst);
         *current_job = None;
         hide_raw(&window);
