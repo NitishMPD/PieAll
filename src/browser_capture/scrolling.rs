@@ -423,6 +423,6 @@ mod tests {
             assert!(bytes.iter().all(|b| *b == row as u8));
         }
         assert!(plan.merge(&mut output, &[], 0, 0).is_err());
-        assert!(plan.merge(&mut output, &vec![0; 3 * 8 * 4], 10, 8).is_err());
+        assert!(plan.merge(&mut output, &[0; 3 * 8 * 4], 10, 8).is_err());
     }
 }
