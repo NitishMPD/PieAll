@@ -369,7 +369,7 @@ pub fn send_app_shortcut(
     source: usize,
     pid: u32,
     action: &crate::shortcuts::Shortcut,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
     let sequence = crate::shortcuts::parse_keys(&action.keys)?;
     let validate = || -> Result<(), String> {
@@ -395,6 +395,9 @@ pub fn send_app_shortcut(
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
+    if action.category == "Screenshots" {
+        return crate::browser_capture::run(source, pid, action);
+    }
     let event = |vk: u16, up: bool| INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
@@ -414,13 +417,7 @@ pub fn send_app_shortcut(
     };
     for (index, chord) in sequence.iter().enumerate() {
         if index != 0 {
-            std::thread::sleep(std::time::Duration::from_millis(
-                if action.category == "Screenshots" {
-                    900
-                } else {
-                    70
-                },
-            ));
+            std::thread::sleep(std::time::Duration::from_millis(70));
         }
         validate()?;
         let inputs: Vec<_> = chord
@@ -458,10 +455,7 @@ pub fn send_app_shortcut(
             return Err("Windows blocked shortcut input. The target may be elevated.".into());
         }
     }
-    if action.category == "Screenshots" {
-        return crate::browser_capture::finish(source, pid, action);
-    }
-    Ok(())
+    Ok(None)
 }
 pub fn send_chord(modifier: u16, key: u16) {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;

@@ -2,11 +2,14 @@
 Author: Nitish
 
 
-## Direct browser captures - 22 October 2026
+## Direct browser captures - 23 October 2026
 
 The default browser ring has eight direct slices: Download video, Download audio, Copy URL, Reopen closed tab, New private window, Capture current, Capture full page and Window. Capture current replaces Paste plain text; Capture full page replaces Search actions. Both capture choices use the existing camera icon, labels and keyboard/hold interaction, with no screenshot submenu. Custom layouts retain their selected actions. Other apps keep Search actions, and slash remains the search shortcut.
 
-Capture current requests the page viewport; Capture full page requests the entire document. Firefox leaves its screenshot preview open for Copy or Download. Chromium invokes its native screenshot command through docked DevTools. A request notice directs users to finish saving in the browser; it never claims the screenshot was saved. Unavailable controls produce the existing error notice. Native capture and focus behavior remain unverified.
+Capture current copies the visible page viewport to the clipboard and reports Current page copied to clipboard. Capture full page remains a direct default slice in Chrome as well as Edge/Firefox. Chrome scrolls the page automatically, captures overlapping views and restores the starting position before reporting completion. Keep the page still during capture; Escape or changed keyboard/mouse-button input stops it. Small results report Full page copied to clipboard; large results are saved as PNG under Downloads/PieAll Screenshots, with the saved path retained in the dashboard result. Neither route automatically pastes the image.
+
+Edge and Firefox continue to open their native screenshot preview for Copy/Save. No screenshot action opens DevTools, installs an extension or changes device emulation. Errors use the existing notice and dashboard status, preserve the clipboard when no complete image is published, and do not claim a partial capture succeeded. Sticky content and animations can still affect stitched results. Native appearance, pixel output, document targeting, restoration, focus and clipboard behavior remain unverified.
+
 
 ## Parallel jobs - 21 October 2026
 

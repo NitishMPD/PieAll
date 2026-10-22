@@ -1,0 +1,5 @@
+# Tasks - 23 October 2026
+
+- Removed screenshot DevTools dispatch: Capture current copies the visible page through native Windows capture; full-page capture uses Edge/Firefox screenshot previews, with unsupported browsers marked unavailable. Updated product/design docs. Six native regression tests, thirteen menu tests and Rust all-target checks passed; native capture remains unverified because the desktop helper was unavailable.
+
+- Restored Chrome Capture full page without extensions or DevTools using native scroll controls and overlapping screen captures, with starting-position restoration and failure guards. Added disk-backed stitching and streamed PNG export to Downloads/PieAll Screenshots for large captures instead of the 32-megapixel clipboard rejection; retained small-image clipboard output and saved-path reports. Updated product/design docs. Five capture/PNG tests, one native Chrome eligibility test, thirteen menu tests and all-target Rust checks passed; successful live capture remains unverified.

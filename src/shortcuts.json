@@ -4,13 +4,13 @@
       {
         "id": "capture-current",
         "title": "Capture current",
-        "keys": "Ctrl+Shift+J Ctrl+Shift+P",
+        "keys": "Ctrl+Shift+S",
         "category": "Screenshots"
       },
       {
         "id": "capture-full-page",
         "title": "Capture full page",
-        "keys": "Ctrl+Shift+J Ctrl+Shift+P",
+        "keys": "Ctrl+Shift+S",
         "category": "Screenshots"
       },
       {

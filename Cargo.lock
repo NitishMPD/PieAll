@@ -2923,6 +2923,7 @@ dependencies = [
  "image",
  "lopdf",
  "minisign-verify",
+ "png 0.18.1",
  "reqwest",
  "rusqlite",
  "semver",

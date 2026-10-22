@@ -119,6 +119,15 @@ pub fn for_profile(profile: &str) -> std::slice::Iter<'static, Shortcut> {
         .iter()
 }
 
+/// Browsers with their own full-page screenshot overlay; no DevTools fallback.
+pub fn native_full_page_supported(profile: &str) -> bool {
+    profile == "edge"
+        || catalog()
+            .profiles
+            .iter()
+            .any(|p| p.id == profile && p.sets.iter().any(|set| set == "firefox"))
+}
+
 /// Small fixed grammar, never supplied by the webview. Plus means the physical '=' key.
 pub fn parse_keys(keys: &str) -> Result<Vec<Vec<u16>>, String> {
     fn key(token: &str) -> Option<u16> {
@@ -251,13 +260,10 @@ mod tests {
                 let action = find(&format!("app:{}:{mode}", profile.id)).unwrap();
                 assert_eq!(action.category, "Screenshots");
                 assert_eq!(action.priority, None);
+                assert_eq!(action.keys, "Ctrl+Shift+S");
                 assert_eq!(
-                    action.keys,
-                    if profile.sets.iter().any(|set| set == "firefox") {
-                        "Ctrl+Shift+S"
-                    } else {
-                        "Ctrl+Shift+J Ctrl+Shift+P"
-                    }
+                    native_full_page_supported(&profile.id),
+                    profile.id == "edge" || profile.sets.iter().any(|set| set == "firefox")
                 );
             }
         }

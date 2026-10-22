@@ -1441,11 +1441,8 @@ async fn run_app_shortcut(
         Capturing::wait();
         let result = dispatch_app_shortcut(&app, source, pid, action);
         let (tone, status) = match result {
-            Ok(()) if action.category == "Screenshots" => (
-                "ok",
-                format!("{} requested. Finish saving in your browser.", action.title),
-            ),
-            Ok(()) => (
+            Ok(Some(report)) => ("ok", report),
+            Ok(None) => (
                 "ok",
                 format!("Shortcut sent: {} · {}", action.title, action.keys),
             ),
@@ -1457,6 +1454,9 @@ async fn run_app_shortcut(
             // A shortcut can change the selection or document. Never reuse its old captured content.
             s.replace(Vec::new(), String::new());
             s.status = status.clone();
+            if action.category == "Screenshots" {
+                s.result = Some(status.clone());
+            }
         }
         toast(&app, tone, status, "");
     })
@@ -1469,7 +1469,7 @@ fn dispatch_app_shortcut(
     source: usize,
     pid: u32,
     action: &shortcuts::Shortcut,
-) -> Result<()> {
+) -> Result<Option<String>> {
     let collision = shortcuts::uses_invocation_shortcut(action)
         && app.global_shortcut().is_registered(INVOCATION);
     if !collision {
@@ -1488,7 +1488,7 @@ fn dispatch_app_shortcut(
     };
     match (result, restore) {
         (result, Ok(())) => result,
-        (Ok(()), Err(error)) => Err(format!(
+        (Ok(_), Err(error)) => Err(format!(
             "Shortcut sent, but Ctrl+` could not be restored: {error}. Hold ` or use the tray."
         )),
         (Err(error), Err(restore)) => Err(format!(
@@ -2558,6 +2558,20 @@ mod tests {
             ),
             (0, 0)
         );
+    }
+    #[test]
+    fn chrome_exposes_both_capture_actions_without_extension_eligibility_gate() {
+        let session = Session {
+            source: 1,
+            source_app: shortcuts::for_executable("chrome.exe"),
+            ..Session::default()
+        };
+        let view = session.view();
+        for id in ["app:chrome:capture-current", "app:chrome:capture-full-page"] {
+            let action = view.actions.iter().find(|action| action.id == id).unwrap();
+            assert!(action.eligible);
+            assert!(action.unavailable.is_none());
+        }
     }
     #[test]
     fn session_only_exposes_the_captured_apps_shortcuts() {
