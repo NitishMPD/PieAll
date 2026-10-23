@@ -57,7 +57,7 @@ struct Session {
     selection: Option<platform::ClipboardSnapshot>,
     source: usize,
     source_pid: u32,
-    source_app: Option<&'static shortcuts::Profile>,
+    source_app: Option<shortcuts::Profile>,
     operation: Option<&'static str>,
     ticket: u64,
     editor: Option<String>,
@@ -108,13 +108,13 @@ struct FieldView {
 }
 #[derive(Serialize)]
 struct ActionView {
-    id: &'static str,
-    title: &'static str,
+    id: String,
+    title: String,
     group: &'static str,
     eligible: bool,
     fields: Vec<FieldView>,
-    shortcut: Option<&'static str>,
-    category: Option<&'static str>,
+    shortcut: Option<String>,
+    category: Option<String>,
     priority: Option<usize>,
     unavailable: Option<&'static str>,
 }
@@ -134,7 +134,7 @@ struct View {
     target: String,
     names: Vec<String>,
     kind: &'static str,
-    app: Option<&'static str>,
+    app: Option<String>,
     /// The captured window is always-on-top, so its pin slice offers Unpin.
     pinned: bool,
     busy: Option<&'static str>,
@@ -152,6 +152,7 @@ impl Session {
         self.source != 0
             && self
                 .source_app
+                .as_ref()
                 .is_some_and(|p| p.sets.iter().any(|s| s == "browser" || s == "firefox"))
     }
     fn cancel_capture(&mut self) {
@@ -254,6 +255,7 @@ impl Session {
                 "{} · {} characters",
                 if self.selection.is_some() {
                     self.source_app
+                        .as_ref()
                         .map_or("Selected text", |profile| profile.name.as_str())
                 } else {
                     "Clipboard text"
@@ -262,6 +264,7 @@ impl Session {
             ),
             0 if self.source != 0 => self
                 .source_app
+                .as_ref()
                 .map_or("Active window", |p| p.name.as_str())
                 .into(),
             0 => "Choose your files".into(),
@@ -273,7 +276,7 @@ impl Session {
             jobs: self.jobs.values().rev().map(|j| j.view.clone()).collect(),
             revision: self.revision,
             target,
-            app: self.source_app.map(|p| p.id.as_str()),
+            app: self.source_app.as_ref().map(|p| p.id.clone()),
             pinned: self.source != 0
                 && unsafe { GetWindowLongPtrW(self.source as _, GWL_EXSTYLE) }
                     & WS_EX_TOPMOST as isize
@@ -300,8 +303,8 @@ impl Session {
                     eligible: (actions::eligible(&a, &self.paths, !self.text.is_empty())
                         || (pieall::downloads::is_download(a.id) && self.browser_source()))
                         && (a.input != actions::InputKind::Window || self.source != 0),
-                    id: a.id,
-                    title: a.title,
+                    id: a.id.into(),
+                    title: a.title.into(),
                     group: a.group,
                     shortcut: None,
                     category: None,
@@ -318,15 +321,15 @@ impl Session {
                         })
                         .collect(),
                 })
-                .chain(self.source_app.into_iter().flat_map(|profile| {
+                .chain(self.source_app.iter().flat_map(|profile| {
                     shortcuts::for_profile(&profile.id).map(|a| ActionView {
-                        id: &a.id,
-                        title: &a.title,
+                        id: a.id,
+                        title: a.title,
                         group: "Apps",
                         eligible: true,
                         fields: vec![],
-                        shortcut: Some(&a.keys),
-                        category: Some(&a.category),
+                        shortcut: Some(a.keys),
+                        category: Some(a.category),
                         priority: a.priority,
                         unavailable: None,
                     })
@@ -788,6 +791,7 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
         .lock()
         .unwrap()
         .source_app
+        .as_ref()
         .is_some_and(|p| !p.capture_text);
     let wants_text = source != 0 && !shell && !skip_text && !platform::is_terminal_window(source);
     // While ` is held the ring never takes focus: the app keeps it, so shortcuts
@@ -846,7 +850,7 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
                         }
                         None => s.replace(paths, String::new()),
                     }
-                    s.status = s.source_app.map_or_else(
+                    s.status = s.source_app.as_ref().map_or_else(
                         || "Choose an action. Your originals stay untouched.".into(),
                         |profile| format!("Choose an action for {}.", profile.name),
                     );
@@ -1094,7 +1098,7 @@ fn prepare(window: WebviewWindow, app: AppHandle, id: Option<String>, revision: 
             .view()
             .actions
             .into_iter()
-            .find(|a| a.id == id)
+            .find(|a| a.id == *id)
             .ok_or("Unknown action")?;
         if !action.eligible {
             return Err("This action does not support the selected target.".into());
@@ -1360,8 +1364,8 @@ async fn run_action(
 
 #[derive(Serialize)]
 struct ShortcutLibrary {
-    profiles: &'static [shortcuts::Profile],
-    actions: &'static [shortcuts::Shortcut],
+    profiles: Vec<shortcuts::Profile>,
+    actions: Vec<shortcuts::Shortcut>,
 }
 #[tauri::command]
 fn set_trigger_key(window: WebviewWindow, vk: u32) -> Result<()> {
@@ -1383,9 +1387,66 @@ fn shortcut_library(window: WebviewWindow) -> Result<ShortcutLibrary> {
     dashboard_only(&window)?;
     let catalog = shortcuts::catalog();
     Ok(ShortcutLibrary {
-        profiles: &catalog.profiles,
-        actions: &catalog.actions,
+        profiles: catalog
+            .profiles
+            .iter()
+            .cloned()
+            .chain(shortcuts::custom::profiles())
+            .collect(),
+        actions: catalog
+            .actions
+            .iter()
+            .cloned()
+            .chain(shortcuts::custom::actions())
+            .collect(),
     })
+}
+
+#[tauri::command]
+fn custom_apps(window: WebviewWindow) -> Result<Vec<shortcuts::custom::App>> {
+    dashboard_only(&window)?;
+    Ok(shortcuts::custom::apps())
+}
+#[tauri::command]
+fn pick_custom_app(window: WebviewWindow) -> Result<Option<String>> {
+    dashboard_only(&window)?;
+    platform::pick_app()
+}
+#[tauri::command]
+fn save_custom_app(
+    window: WebviewWindow,
+    app: AppHandle,
+    profile: shortcuts::custom::App,
+    replacing: Option<String>,
+) -> Result<String> {
+    dashboard_only(&window)?;
+    let state = state(&app);
+    let mut s = state.lock().unwrap();
+    s.idle()?;
+    let id = shortcuts::custom::save(&settings_path(&app)?, profile, replacing.as_deref())?;
+    refresh_custom_profile(&mut s);
+    drop(s);
+    notify(&app);
+    Ok(id)
+}
+#[tauri::command]
+fn remove_custom_app(window: WebviewWindow, app: AppHandle, executable: String) -> Result<()> {
+    dashboard_only(&window)?;
+    let state = state(&app);
+    let mut s = state.lock().unwrap();
+    s.idle()?;
+    shortcuts::custom::remove(&settings_path(&app)?, &executable)?;
+    refresh_custom_profile(&mut s);
+    drop(s);
+    notify(&app);
+    Ok(())
+}
+fn refresh_custom_profile(s: &mut Session) {
+    s.revision += 1;
+    s.editor = None;
+    s.source_app = platform::window_profile(s.source, s.source_pid)
+        .ok()
+        .flatten();
 }
 
 async fn run_app_shortcut(
@@ -1405,6 +1466,7 @@ async fn run_app_shortcut(
         s.cancel_capture();
         s.idle()?;
         if s.source_app
+            .as_ref()
             .is_none_or(|profile| profile.id != action.profile)
             || s.source == 0
         {
@@ -1439,7 +1501,7 @@ async fn run_app_shortcut(
     tauri::async_runtime::spawn_blocking(move || {
         let _lease = lease;
         Capturing::wait();
-        let result = dispatch_app_shortcut(&app, source, pid, action);
+        let result = dispatch_app_shortcut(&app, source, pid, &action);
         let (tone, status) = match result {
             Ok(Some(report)) => ("ok", report),
             Ok(None) => (
@@ -2245,6 +2307,10 @@ pub fn run() {
             prepare,
             run_action,
             shortcut_library,
+            custom_apps,
+            pick_custom_app,
+            save_custom_app,
+            remove_custom_app,
             set_trigger_key,
             autostart_enabled,
             set_autostart,
@@ -2269,6 +2335,11 @@ pub fn run() {
             }
             // Parse and index bundled keymaps once, before the first hold invocation.
             let _ = shortcuts::catalog();
+            if let Err(error) =
+                settings_path(app.handle()).and_then(|p| shortcuts::custom::load(&p))
+            {
+                message(app.handle(), format!("Custom apps unavailable: {error}"));
+            }
             let cwd = std::env::current_dir()?.to_string_lossy().into_owned();
             if let Err(error) =
                 accept_paths(app.handle(), file_args(std::env::args().skip(1), &cwd))
@@ -2582,7 +2653,7 @@ mod tests {
             ..Session::default()
         };
         let view = s.view();
-        assert_eq!(view.app, Some("figma"));
+        assert_eq!(view.app.as_deref(), Some("figma"));
         let shortcuts: Vec<_> = view
             .actions
             .iter()

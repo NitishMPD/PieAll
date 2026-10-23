@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { native, type Session, type ShortcutLibrary } from "./native";
+import {
+  native,
+  type Session,
+  type ShortcutLibrary,
+  type CustomApp,
+} from "./native";
+import { CustomAppEditor } from "./CustomApp";
 import { libraryActions } from "./action-search";
 import { INNER, OUTER, SIZE, point, wedgePath } from "./geometry";
 import {
@@ -56,10 +62,14 @@ export function AppIcon({ id, name }: { id: string; name: string }) {
   );
 }
 
-function HoldKey({ prefs }: { prefs: Prefs }) {
+function HoldKey({ prefs, active }: { prefs: Prefs; active: boolean }) {
   const [listening, setListening] = useState(false);
   const [note, setNote] = useState("");
   useEffect(() => {
+    if (!active) {
+      setListening(false);
+      return;
+    }
     if (!listening) return;
     async function key(event: KeyboardEvent) {
       event.preventDefault();
@@ -75,7 +85,7 @@ function HoldKey({ prefs }: { prefs: Prefs }) {
     }
     window.addEventListener("keydown", key, true);
     return () => window.removeEventListener("keydown", key, true);
-  }, [listening, prefs]);
+  }, [listening, prefs, active]);
   return (
     <div className="cz-hold">
       <span>Hold key</span>
@@ -425,9 +435,17 @@ function Editor({
   );
 }
 
-export function Customize({ session }: { session: Session }) {
+export function Customize({
+  session,
+  active: visible = true,
+}: {
+  session: Session;
+  active?: boolean;
+}) {
   const prefs = usePrefs();
   const [library, setLibrary] = useState<ShortcutLibrary | null>(null);
+  const [customApps, setCustomApps] = useState<CustomApp[]>([]);
+  const [editing, setEditing] = useState<CustomApp | "new" | null>(null);
   const [error, setError] = useState("");
   const [context, setContext] = useState(
     session.app
@@ -437,11 +455,17 @@ export function Customize({ session }: { session: Session }) {
         : session.kind,
   );
   const [appQuery, setAppQuery] = useState("");
+  async function refreshLibrary() {
+    const [library, apps] = await Promise.all([
+      native.shortcutLibrary(),
+      native.customApps(),
+    ]);
+    setLibrary(library);
+    setCustomApps(apps);
+    setError("");
+  }
   useEffect(() => {
-    native
-      .shortcutLibrary()
-      .then(setLibrary)
-      .catch((e) => setError(String(e)));
+    void refreshLibrary().catch((e) => setError(String(e)));
   }, []);
   const profiles = useMemo(() => {
     const words = appQuery.toLowerCase().split(/\s+/).filter(Boolean);
@@ -461,6 +485,9 @@ export function Customize({ session }: { session: Session }) {
     [isApp, appActions, context, session.actions],
   );
   const current = library?.profiles.find((p) => p.id === profile);
+  const custom = customApps.find((app) =>
+    current?.executables?.includes(app.executable),
+  );
   const title = isApp
     ? (current?.name ?? profile)
     : (KINDS.find((k) => k.key === context)?.label ?? context);
@@ -470,6 +497,7 @@ export function Customize({ session }: { session: Session }) {
       key={key}
       className={context === key ? "active" : ""}
       aria-current={context === key ? "true" : undefined}
+      disabled={editing !== null}
       onClick={() => setContext(key)}
     >
       {icon}
@@ -481,8 +509,20 @@ export function Customize({ session }: { session: Session }) {
   return (
     <section className="cz" aria-label="Customize ring">
       <nav className="cz-rail" aria-label="Rings">
-        <HoldKey prefs={prefs} />
+        <HoldKey prefs={prefs} active={visible} />
         <Autostart />
+        {error && (
+          <div className="cz-note" role="alert">
+            <p>{error}</p>
+            <button
+              onClick={() =>
+                void refreshLibrary().catch((e) => setError(String(e)))
+              }
+            >
+              Reload apps
+            </button>
+          </div>
+        )}
         {active && (
           <div className="cz-group">
             <h3>Active app</h3>
@@ -507,6 +547,23 @@ export function Customize({ session }: { session: Session }) {
         </div>
         <div className="cz-group cz-apps">
           <h3>Apps</h3>
+          <div className="cz-app-buttons">
+            <button
+              disabled={editing !== null || !library}
+              onClick={() => setEditing("new")}
+            >
+              <Icon name="plus" size={16} />
+              Add app
+            </button>
+            {custom && (
+              <button
+                disabled={editing !== null}
+                onClick={() => setEditing(custom)}
+              >
+                Edit app
+              </button>
+            )}
+          </div>
           <label className="search">
             <Icon name="search" size={16} />
             <input
@@ -518,7 +575,12 @@ export function Customize({ session }: { session: Session }) {
           </label>
           <div className="cz-app-list">
             {profiles.map((p) =>
-              row(`app:${p.id}`, p.name, <AppIcon id={p.id} name={p.name} />),
+              row(
+                `app:${p.id}`,
+                p.name,
+                <AppIcon id={p.id} name={p.name} />,
+                p.source === "Custom app" ? "Custom" : "",
+              ),
             )}
             {library && !profiles.length && (
               <p className="cz-hint">No app matches</p>
@@ -527,7 +589,24 @@ export function Customize({ session }: { session: Session }) {
           </div>
         </div>
       </nav>
-      {isApp && !library ? (
+      {editing !== null ? (
+        <CustomAppEditor
+          initial={editing === "new" ? null : editing}
+          onCancel={() => setEditing(null)}
+          onSaved={async (id) => {
+            await refreshLibrary().catch((e) =>
+              setError(
+                `Changes saved, but the app list could not refresh: ${String(e)}`,
+              ),
+            );
+            if (editing !== "new" && (!id || id !== profile))
+              setLayout(`app:${profile}`, null);
+            setEditing(null);
+            setAppQuery("");
+            setContext(id ? `app:${id}` : "window");
+          }}
+        />
+      ) : isApp && !library ? (
         <p className="cz-hint cz-wait" role="status">
           {error || "Loading shortcuts…"}
         </p>

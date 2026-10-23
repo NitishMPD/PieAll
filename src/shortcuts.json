@@ -8491,6 +8491,26 @@
       ]
     },
     {
+      "id": "dia",
+      "name": "Dia",
+      "executables": [
+        "dia.exe"
+      ],
+      "sets": [
+        "browser"
+      ],
+      "source": "https://support.google.com/chrome/answer/157179",
+      "capture_text": true,
+      "quick": [
+        "copy-url",
+        "reopen-closed-tab",
+        "new-private-window",
+        "paste-plain-text",
+        "find-on-page",
+        "bookmark-page"
+      ]
+    },
+    {
       "id": "firefox",
       "name": "Firefox",
       "executables": [

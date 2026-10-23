@@ -1,6 +1,14 @@
 # PieAll design
 Author: Nitish
 
+## Custom app profiles - 23 October 2026
+
+Customize ring places Add app above the app search. User-created entries carry a Custom label; selecting one reveals Edit app beside Add app. The form occupies the existing preview/editor area, preserving the app rail. It offers a native executable picker, an app name and labelled Action/Keys rows, Add shortcut, Save app and Cancel. Saved names and keys remain editable; removing an app uses an inline confirmation. Errors are announced inline and keep the draft. Cancel discards unsaved edits. Navigating to another dashboard section preserves the draft until Customize ring is reopened in the same session. Rail app/type navigation is disabled during editing. The form scrolls independently, follows neutral light/dark tokens and existing focus styling, and stacks shortcut fields at narrow widths. Native picker and actual keyboard dispatch still require user-run acceptance.
+
+## Dia browser - 23 October 2026
+
+Dia appears by name in Customize ring's app search and uses the existing browser ring defaults, app monogram and keyboard-accessible customization controls. Saved Dia layouts follow the same per-app behavior as other browsers.
+
 
 ## Direct browser captures - 23 October 2026
 

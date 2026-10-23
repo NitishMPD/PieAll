@@ -92,7 +92,7 @@ pub(crate) fn database(path: &Path) -> Result<Connection, String> {
     let version: u32 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .map_err(|e| e.to_string())?;
-    if version > 3 {
+    if version > 4 {
         return Err("Settings were created by a newer PieAll version.".into());
     }
     if version == 0 {
@@ -108,6 +108,11 @@ pub(crate) fn database(path: &Path) -> Result<Connection, String> {
     if version < 3 {
         let tx = db.transaction().map_err(|e| e.to_string())?;
         tx.execute_batch("CREATE TABLE IF NOT EXISTS browser_hosts (browser TEXT PRIMARY KEY, extension TEXT NOT NULL); CREATE TABLE IF NOT EXISTS browser_requests (id TEXT PRIMARY KEY, captured_at INTEGER NOT NULL); PRAGMA user_version=3;").map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())?;
+    }
+    if version < 4 {
+        let tx = db.transaction().map_err(|e| e.to_string())?;
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS custom_apps (executable TEXT PRIMARY KEY, value TEXT NOT NULL); PRAGMA user_version=4;").map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())?;
     }
     Ok(db)
@@ -178,9 +183,9 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
                 .unwrap(),
-            3
+            4
         );
-        db.pragma_update(None, "user_version", 4).unwrap();
+        db.pragma_update(None, "user_version", 5).unwrap();
         assert!(load(&path).is_err());
     }
     #[test]

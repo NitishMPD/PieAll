@@ -28,6 +28,14 @@ body,
   grid-template-columns: 252px minmax(0, 1fr) 340px;
   overflow: hidden;
 }
+.customize-host {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.customize-host[hidden] {
+  display: none;
+}
 .cz-rail {
   min-height: 0;
   display: flex;
@@ -455,4 +463,132 @@ body,
 }
 .window-controls button:active:not(:disabled) {
   transform: none;
+}
+
+/* App profiles use the editor area so the picker never hides shortcut fields. */
+.cz-app-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.cz-app-buttons button {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.cz-app-editor {
+  grid-column: 2 / -1;
+  grid-row: 1 / -1;
+  min-width: 0;
+  overflow: auto;
+  padding: 24px;
+}
+.cz-app-editor > header,
+.cz-app-shortcut-heading,
+.cz-app-executable,
+.cz-app-save {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.cz-app-editor > header {
+  justify-content: space-between;
+}
+.cz-app-editor h2 {
+  font-size: 20px;
+}
+.cz-app-editor > p {
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 68ch;
+  margin: 12px 0 24px;
+}
+.cz-app-editor form {
+  max-width: 760px;
+}
+.cz-app-editor fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.cz-app-executable strong {
+  overflow-wrap: anywhere;
+}
+.cz-app-editor .cz-hint {
+  margin: 8px 0 16px;
+}
+.cz-app-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+.cz-app-editor input {
+  width: 100%;
+  min-width: 0;
+}
+.cz-app-name {
+  max-width: 360px;
+}
+.cz-app-shortcut-heading {
+  justify-content: space-between;
+  margin-top: 32px;
+}
+.cz-app-shortcut-heading h3 {
+  font-size: 14px;
+}
+.cz-app-shortcut-heading > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.cz-app-shortcuts {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cz-app-shortcuts li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px;
+  align-items: end;
+  gap: 12px;
+}
+.cz-app-shortcuts .icon-button {
+  width: 32px;
+  height: 38px;
+}
+.cz-app-save {
+  margin-top: 32px;
+}
+.cz-app-remove {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.cz-app-remove p {
+  margin-bottom: 12px;
+}
+.cz-app-remove button + button {
+  margin-left: 8px;
+}
+@media (max-width: 860px) {
+  .cz-app-editor {
+    grid-column: 2;
+  }
+  .cz-app-shortcuts li {
+    grid-template-columns: minmax(0, 1fr) 32px;
+  }
+  .cz-app-shortcuts label {
+    grid-column: 1;
+  }
+  .cz-app-shortcuts .icon-button {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: center;
+  }
 }

@@ -85,6 +85,29 @@ pub fn pick_files() -> Result<Vec<PathBuf>, String> {
 pub fn pick_engine() -> Result<Vec<PathBuf>, String> {
     pick_paths("Choose a trusted tool executable for PieAll", false)
 }
+pub fn pick_app() -> Result<Option<String>, String> {
+    let Some(path) = pick_paths("Choose an app executable for PieAll", false)?
+        .into_iter()
+        .next()
+    else {
+        return Ok(None);
+    };
+    crate::output::plain_path(&path)?;
+    if !path.is_file()
+        || !path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("exe"))
+    {
+        return Err("Choose a Windows .exe file.".into());
+    }
+    Ok(Some(
+        path.file_name()
+            .ok_or("Missing executable name")?
+            .to_str()
+            .ok_or("The executable name must be Unicode")?
+            .to_ascii_lowercase(),
+    ))
+}
 pub fn pick_download_folder() -> Result<Option<PathBuf>, String> {
     use windows::Win32::{System::Com::*, UI::Shell::*};
     unsafe {
@@ -349,7 +372,7 @@ pub fn window_executable(source: usize, expected_pid: u32) -> Result<String, Str
 pub fn window_profile(
     source: usize,
     pid: u32,
-) -> Result<Option<&'static crate::shortcuts::Profile>, String> {
+) -> Result<Option<crate::shortcuts::Profile>, String> {
     let executable = window_executable(source, pid)?;
     Ok(
         crate::shortcuts::for_executable(&executable).filter(|profile| {
@@ -599,7 +622,7 @@ pub fn copy_browser_url(source: usize, pid: u32) -> Result<String, String> {
         .ok_or("This browser has no Copy URL shortcut. Paste the URL in Browser downloads.")?;
     let snapshot = ClipboardSnapshot::take(source).ok_or("Clipboard is busy. Try again.")?;
     let before = unsafe { GetClipboardSequenceNumber() };
-    let sent = send_app_shortcut(source, pid, shortcut);
+    let sent = send_app_shortcut(source, pid, &shortcut);
     if sent.is_err() && unsafe { GetClipboardSequenceNumber() } == before {
         return sent.map(|_| String::new());
     }
@@ -832,6 +855,6 @@ mod shortcut_tests {
         assert!(super::window_profile(0, 0).is_err());
         assert!(super::copy_browser_url(0, 0).is_err());
         let action = crate::shortcuts::find("app:figma:frame-tool").unwrap();
-        assert!(super::send_app_shortcut(0, 0, action).is_err());
+        assert!(super::send_app_shortcut(0, 0, &action).is_err());
     }
 }

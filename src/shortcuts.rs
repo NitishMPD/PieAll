@@ -17,7 +17,7 @@ struct Binding {
     keys: String,
     category: String,
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Profile {
     pub id: String,
     pub name: String,
@@ -27,7 +27,7 @@ pub struct Profile {
     pub capture_text: bool,
     pub quick: Vec<String>,
 }
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Shortcut {
     pub id: String,
     pub profile: String,
@@ -94,9 +94,13 @@ pub fn catalog() -> &'static Catalog {
         }
     })
 }
-pub fn find(id: &str) -> Option<&'static Shortcut> {
+pub fn find(id: &str) -> Option<Shortcut> {
     let catalog = catalog();
-    catalog.by_id.get(id).map(|&index| &catalog.actions[index])
+    catalog
+        .by_id
+        .get(id)
+        .map(|&index| catalog.actions[index].clone())
+        .or_else(|| custom::actions().into_iter().find(|a| a.id == id))
 }
 pub fn uses_invocation_shortcut(action: &Shortcut) -> bool {
     action
@@ -104,20 +108,39 @@ pub fn uses_invocation_shortcut(action: &Shortcut) -> bool {
         .split_whitespace()
         .any(|chord| chord == "Ctrl+Backquote")
 }
-pub fn for_executable(executable: &str) -> Option<&'static Profile> {
+pub fn for_executable(executable: &str) -> Option<Profile> {
     let catalog = catalog();
     catalog
         .by_executable
         .get(&executable.to_ascii_lowercase())
-        .map(|&index| &catalog.profiles[index])
+        .map(|&index| catalog.profiles[index].clone())
+        .or_else(|| {
+            custom::profiles().into_iter().find(|p| {
+                p.executables
+                    .iter()
+                    .any(|e| e.eq_ignore_ascii_case(executable))
+            })
+        })
 }
-pub fn for_profile(profile: &str) -> std::slice::Iter<'static, Shortcut> {
+pub fn for_profile(profile: &str) -> std::vec::IntoIter<Shortcut> {
     let c = catalog();
-    c.by_profile
+    let actions = c
+        .by_profile
         .get(profile)
         .map_or(&[][..], |range| &c.actions[range.clone()])
-        .iter()
+        .to_vec();
+    if actions.is_empty() {
+        custom::actions()
+            .into_iter()
+            .filter(|a| a.profile == profile)
+            .collect::<Vec<_>>()
+            .into_iter()
+    } else {
+        actions.into_iter()
+    }
 }
+
+pub mod custom;
 
 /// Browsers with their own full-page screenshot overlay; no DevTools fallback.
 pub fn native_full_page_supported(profile: &str) -> bool {
@@ -128,7 +151,7 @@ pub fn native_full_page_supported(profile: &str) -> bool {
             .any(|p| p.id == profile && p.sets.iter().any(|set| set == "firefox"))
 }
 
-/// Small fixed grammar, never supplied by the webview. Plus means the physical '=' key.
+/// Bounded grammar for bundled and validated custom keymaps. Plus means the physical '=' key.
 pub fn parse_keys(keys: &str) -> Result<Vec<Vec<u16>>, String> {
     fn key(token: &str) -> Option<u16> {
         Some(match token {
@@ -247,6 +270,23 @@ mod tests {
         assert!(find("app:photoshop:arbitrary-command").is_none());
     }
     #[test]
+    fn dia_uses_the_shared_browser_profile() {
+        let profile = for_executable("Dia.exe").unwrap();
+        assert_eq!(profile.id, "dia");
+        assert_eq!(profile.name, "Dia");
+        assert_eq!(profile.sets, ["browser"]);
+        assert!(profile.capture_text);
+        assert_eq!(
+            &find("app:dia:copy-url").unwrap().keys,
+            "Ctrl+L Ctrl+C Escape"
+        );
+        for mode in ["capture-current", "capture-full-page"] {
+            assert!(find(&format!("app:dia:{mode}")).is_some());
+        }
+        assert!(!native_full_page_supported("dia"));
+        assert!(for_executable("not-dia.exe").is_none());
+    }
+    #[test]
     fn browser_profiles_offer_both_native_capture_modes() {
         for profile in &catalog().profiles {
             if !profile
@@ -298,16 +338,16 @@ mod tests {
     #[test]
     fn detects_only_the_global_invocation_collision() {
         assert!(uses_invocation_shortcut(
-            find("app:vscode:focus-terminal").unwrap()
+            &find("app:vscode:focus-terminal").unwrap()
         ));
         assert!(uses_invocation_shortcut(
-            find("app:excel:toggle-formulas").unwrap()
+            &find("app:excel:toggle-formulas").unwrap()
         ));
         assert!(!uses_invocation_shortcut(
-            find("app:vscode:new-terminal").unwrap()
+            &find("app:vscode:new-terminal").unwrap()
         ));
         assert!(!uses_invocation_shortcut(
-            find("app:figma:frame-tool").unwrap()
+            &find("app:figma:frame-tool").unwrap()
         ));
     }
 }

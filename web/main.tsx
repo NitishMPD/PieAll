@@ -66,6 +66,10 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
   const [view, setView] = useState<
     "actions" | "customize" | "updates" | "engines" | "browser"
   >("actions");
+  const [customizeOpened, setCustomizeOpened] = useState(false);
+  useEffect(() => {
+    if (view === "customize") setCustomizeOpened(true);
+  }, [view]);
   const updates = view === "updates";
   const setUpdates = useCallback(
     (open: boolean) => setView(open ? "updates" : "actions"),
@@ -411,13 +415,16 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               </div>
             </section>
           )}
+          {(view === "customize" || customizeOpened) && (
+            <div className="customize-host" hidden={view !== "customize"}>
+              <Customize session={session} active={view === "customize"} />
+            </div>
+          )}
           {view === "browser" ? (
             <BrowserTools session={session} />
           ) : view === "engines" ? (
             <Engines busy={disabled} />
-          ) : view === "customize" ? (
-            <Customize session={session} />
-          ) : updates ? (
+          ) : view === "customize" ? null : updates ? (
             <section className="updates-panel">
               <button className="text-button" onClick={() => setUpdates(false)}>
                 <Icon name="back" size={18} />

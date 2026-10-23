@@ -26,7 +26,12 @@ export interface Action {
   priority?: number | null;
 }
 export interface ShortcutLibrary {
-  profiles: { id: string; name: string; source: string }[];
+  profiles: {
+    id: string;
+    name: string;
+    source: string;
+    executables?: string[];
+  }[];
   actions: {
     id: string;
     profile: string;
@@ -35,6 +40,11 @@ export interface ShortcutLibrary {
     category: string;
     priority?: number | null;
   }[];
+}
+export interface CustomApp {
+  executable: string;
+  name: string;
+  shortcuts: { id: string; title: string; keys: string }[];
 }
 export interface Session {
   job?: Job | null;
@@ -61,6 +71,12 @@ export interface Session {
   };
 }
 export const native = {
+  customApps: () => invoke<CustomApp[]>("custom_apps"),
+  pickCustomApp: () => invoke<string | null>("pick_custom_app"),
+  saveCustomApp: (profile: CustomApp, replacing: string | null) =>
+    invoke<string>("save_custom_app", { profile, replacing }),
+  removeCustomApp: (executable: string) =>
+    invoke<void>("remove_custom_app", { executable }),
   setupTools: () => invoke<void>("setup_tools"),
   downloadSettings: () => invoke<DownloadSettings>("download_settings"),
   configureDownloads: (
