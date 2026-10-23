@@ -1,13 +1,17 @@
 # PieAll design
 Author: Nitish
 
+## Release-note formatting - 23 October 2026
+
+Updates shows formatted release notes with bold emphasis, compact headings, lists, paragraphs and code, superseding the plain-text notes described below. The existing theme tokens, 180 px scroll area and wrapping of long URLs remain. Links display their destination as selectable text; remote images and HTML are not rendered. Static rendering and type checks cover this change; native appearance remains unverified.
+
 ## Custom app profiles - 23 October 2026
 
 Customize ring places Add app above the app search. User-created entries carry a Custom label; selecting one reveals Edit app beside Add app. The form occupies the existing preview/editor area, preserving the app rail. It offers a native executable picker, an app name and labelled Action/Keys rows, Add shortcut, Save app and Cancel. Saved names and keys remain editable; removing an app uses an inline confirmation. Errors are announced inline and keep the draft. Cancel discards unsaved edits. Navigating to another dashboard section preserves the draft until Customize ring is reopened in the same session. Rail app/type navigation is disabled during editing. The form scrolls independently, follows neutral light/dark tokens and existing focus styling, and stacks shortcut fields at narrow widths. Native picker and actual keyboard dispatch still require user-run acceptance.
 
 ## Dia browser - 23 October 2026
 
-Dia appears by name in Customize ring's app search and uses the existing browser ring defaults, app monogram and keyboard-accessible customization controls. Saved Dia layouts follow the same per-app behavior as other browsers.
+Dia appears by name in Customize ring's app search and uses the existing browser ring defaults, native app icon with a monogram fallback and keyboard-accessible customization controls. Saved Dia layouts follow the same per-app behavior as other browsers.
 
 
 ## Direct browser captures - 23 October 2026
@@ -62,7 +66,7 @@ The dashboard is frameless. Its 44px header is the title bar: brand at left, Sho
 
 ## Icons — 21 October 2026
 
-All icons come from Lucide (`lucide-react`, named imports only, so unused icons are tree-shaken). `web/Icon.tsx` holds one name-to-icon map for the UI, file tools and app commands. App commands get their icon from `iconFor(title)`, which matches title keywords in priority order (Save, Undo, Bold, Zoom, Layers, Tabs and so on). Anything it cannot place shows the generic Command key, as does any unknown icon name. Stroke width is 1.7 everywhere. App tiles remain colored monograms because Windows exposes no app icons to the UI.
+Action and interface icons come from Lucide (`lucide-react`, named imports only, so unused icons are tree-shaken). `web/Icon.tsx` holds one name-to-icon map for the UI, file tools and app commands. App commands get their icon from `iconFor(title)`, which matches title keywords in priority order (Save, Undo, Bold, Zoom, Layers, Tabs and so on). Anything it cannot place shows the generic Command key, as does any unknown icon name. Stroke width is 1.7 everywhere. App tiles use locally extracted Windows app icons when available, with stable colored monograms as the fallback. Artwork stays contained in the existing tile and is decorative beside the app name.
 
 ## Tray shortcut control — 21 October 2026
 
@@ -72,7 +76,7 @@ The native tray menu orders Open PieAll, Show action ring, Use shortcut, and Exi
 
 The dashboard fills the window and never scrolls as a whole; the sidebar, lists and panels scroll on their own. Header and selection bar are compact, with no taglines. The sidebar groups Actions and Personalize, with Updates at the bottom. The empty state shows three numbered steps and two buttons.
 
-Customize ring is a fixed three-pane view. Left: hold-key chip with Change, the active app pinned first, the four file types, and a searchable list of all apps with monogram tiles (a stable color per app, since Windows exposes no icons to the UI); a dot marks customized rings. Center: the full ring exactly as it will open (same wedge shapes, icons, labels, More slice for overflow past eight), with a dashed ghost slice to add into and the app or type in the hub. Clicking a slice selects it. Right: tabs Slices (drag to reorder, plus move and remove buttons, selection synced with the ring) and Add action (searchable list). Below 860px the right pane moves under the ring.
+Customize ring is a fixed three-pane view. Left: hold-key chip with Change, the active app pinned first, the four file types, and a searchable list of all apps with native app icons (with stable colored monograms when Windows cannot resolve an icon); a dot marks customized rings. Center: the full ring exactly as it will open (same wedge shapes, icons, labels, More slice for overflow past eight), with a dashed ghost slice to add into and the app or type in the hub. Clicking a slice selects it. Right: tabs Slices (drag to reorder, plus move and remove buttons, selection synced with the ring) and Add action (searchable list). Below 860px the right pane moves under the ring.
 
 
 ## Contextual shortcut browsing — 21 October 2026

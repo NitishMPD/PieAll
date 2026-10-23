@@ -1,6 +1,10 @@
 # PieAll
 Author: Nitish
 
+## Release-note formatting - 23 October 2026
+
+The Updates panel renders release-note Markdown through react-markdown rather than displaying raw syntax. Raw HTML and images are disabled; links retain their labels and destinations as selectable text without navigating the app. Empty notes retain the existing fallback. Update checking, download and install confirmation are unchanged.
+
 ## Custom app profiles - 23 October 2026
 
 Customize ring supports Add app and Edit app for user-created profiles. A native file picker selects an existing .exe; matching uses the captured process's exact executable basename, as for bundled apps, regardless of installation folder. Adding a profile never launches the executable. Bundled executable identities cannot be overridden. Custom profiles contain an app name and 1–32 named keyboard shortcuts; up to 64 profiles are supported. User keys use the existing native grammar: up to three space-separated chords with Ctrl/Alt/Shift modifiers and a supported final key. Unknown keys, duplicate IDs, invalid executable names, empty labels and excessive input are rejected in Rust. No scripts, shell commands or arbitrary action categories are accepted.
@@ -191,3 +195,9 @@ There are 44 implemented commands in the registry. Text formatting/case/encoding
 Explorer receives its selection switch separately from the saved path, preserving filenames with spaces, commas and Unicode. Open location uses the actual completed output's folder (Windows Downloads or the chosen custom destination), even if defaults change afterward.
 
 Successful video/audio downloads expose Open location in their completion toast, including while the dashboard is active. The action uses the completed job ID and its native saved output path to reveal the file in Explorer; web parameters cannot supply a path. Failed, cancelled and running downloads expose no location action. Completion toasts with an output stay eight seconds and can be closed. Files never open automatically.
+
+### Local app icons
+
+Customize ring loads Windows app icons asynchronously for its app list, active app and ring preview hub. Native code resolves executable paths from running windows, App Paths registry entries (both registry views), and a bounded Start Menu shortcut scan (4,096 entries, eight directory levels); it never scans whole drives or launches an executable. Windows Shell produces small icon bitmaps, converted to PNG data URLs with process-lifetime caching. Missing, inaccessible or unresolved apps retain monograms, and lookup failure does not block customization. Network paths and reparse points are excluded from icon extraction. Updating an app icon may require restarting PieAll.
+
+Newly picked custom apps retain an optional executable path solely for icon lookup; profile matching still uses the basename. Existing saved profiles remain readable without that field; use Change executable to retain a location for an older portable app that Windows cannot discover. Missing executable files do not prevent loading or editing custom profiles. Builds predating this optional field reject those newer custom app records rather than silently discarding configuration. Windows icon extraction and shortcut resolution have native unit coverage; rendered dashboard appearance remains a user-run acceptance check.

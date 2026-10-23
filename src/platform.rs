@@ -85,7 +85,7 @@ pub fn pick_files() -> Result<Vec<PathBuf>, String> {
 pub fn pick_engine() -> Result<Vec<PathBuf>, String> {
     pick_paths("Choose a trusted tool executable for PieAll", false)
 }
-pub fn pick_app() -> Result<Option<String>, String> {
+pub fn pick_app() -> Result<Option<(String, String)>, String> {
     let Some(path) = pick_paths("Choose an app executable for PieAll", false)?
         .into_iter()
         .next()
@@ -100,13 +100,14 @@ pub fn pick_app() -> Result<Option<String>, String> {
     {
         return Err("Choose a Windows .exe file.".into());
     }
-    Ok(Some(
+    Ok(Some((
         path.file_name()
             .ok_or("Missing executable name")?
             .to_str()
             .ok_or("The executable name must be Unicode")?
             .to_ascii_lowercase(),
-    ))
+        path.to_string_lossy().into_owned(),
+    )))
 }
 pub fn pick_download_folder() -> Result<Option<PathBuf>, String> {
     use windows::Win32::{System::Com::*, UI::Shell::*};

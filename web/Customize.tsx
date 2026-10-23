@@ -43,8 +43,23 @@ export async function applyTrigger(code: string): Promise<string> {
   }
 }
 
-/** Monogram tile: a stable color per app, since Windows exposes no icon to the UI. */
-export function AppIcon({ id, name }: { id: string; name: string }) {
+/** Local Windows artwork, with a stable monogram when unavailable. */
+export function AppIcon({
+  id,
+  name,
+  src,
+}: {
+  id: string;
+  name: string;
+  src?: string;
+}) {
+  const [failed, setFailed] = useState<string | null>(null);
+  if (src && src !== failed)
+    return (
+      <span className="app-icon app-icon-native" aria-hidden="true">
+        <img src={src} alt="" onError={() => setFailed(src)} />
+      </span>
+    );
   let hash = 0;
   for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   const words = name.replace(/[()]/g, "").split(/\s+/).filter(Boolean);
@@ -444,6 +459,7 @@ export function Customize({
 }) {
   const prefs = usePrefs();
   const [library, setLibrary] = useState<ShortcutLibrary | null>(null);
+  const [icons, setIcons] = useState<Record<string, string>>({});
   const [customApps, setCustomApps] = useState<CustomApp[]>([]);
   const [editing, setEditing] = useState<CustomApp | "new" | null>(null);
   const [error, setError] = useState("");
@@ -462,6 +478,7 @@ export function Customize({
     ]);
     setLibrary(library);
     setCustomApps(apps);
+    void native.appIcons().then(setIcons, () => {});
     setError("");
   }
   useEffect(() => {
@@ -529,7 +546,11 @@ export function Customize({
             {row(
               `app:${active.id}`,
               active.name,
-              <AppIcon id={active.id} name={active.name} />,
+              <AppIcon
+                id={active.id}
+                name={active.name}
+                src={icons[active.id]}
+              />,
             )}
           </div>
         )}
@@ -578,7 +599,7 @@ export function Customize({
               row(
                 `app:${p.id}`,
                 p.name,
-                <AppIcon id={p.id} name={p.name} />,
+                <AppIcon id={p.id} name={p.name} src={icons[p.id]} />,
                 p.source === "Custom app" ? "Custom" : "",
               ),
             )}
@@ -617,7 +638,7 @@ export function Customize({
           title={title}
           badge={
             isApp ? (
-              <AppIcon id={profile} name={title} />
+              <AppIcon id={profile} name={title} src={icons[profile]} />
             ) : (
               <span className="cz-kind">
                 <Icon name={context} size={20} />

@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { AppIcon } from "./Customize";
 import { CustomAppEditor } from "./CustomApp";
 import { libraryActions } from "./action-search";
 import { appPool, defaultLayout } from "./menus";
@@ -65,5 +66,19 @@ describe("custom app profiles", () => {
     );
     expect(appPool(actions).filter((a) => a.action)).toHaveLength(8);
     expect(libraryActions(library, "another-app")).toEqual([]);
+  });
+});
+
+describe("app artwork", () => {
+  it("renders native artwork decoratively and falls back to initials when absent", () => {
+    const native = renderToStaticMarkup(
+      <AppIcon id="dia" name="Dia" src="data:image/png;base64,test" />,
+    );
+    expect(native).toContain('class="app-icon app-icon-native"');
+    expect(native).toContain('alt=""');
+    expect(native).toContain('src="data:image/png;base64,test"');
+    const fallback = renderToStaticMarkup(<AppIcon id="dia" name="Dia" />);
+    expect(fallback).toContain('aria-hidden="true">DI</span>');
+    expect(fallback).not.toContain("<img");
   });
 });

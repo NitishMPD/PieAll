@@ -21,6 +21,7 @@ import { Icon, iconFor } from "./Icon";
 import { Customize, applyTrigger } from "./Customize";
 import { Engines } from "./Engines";
 import { Jobs } from "./Jobs";
+import { ReleaseNotes } from "./ReleaseNotes";
 import { BrowserTools } from "./BrowserTools";
 import { TRIGGER_KEYS, usePrefs } from "./prefs";
 import {
@@ -441,9 +442,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
               {session.update.version && (
                 <>
                   <h3>Version {session.update.version}</h3>
-                  <pre className="release-notes">
-                    {session.update.notes || "No release notes supplied."}
-                  </pre>
+                  <ReleaseNotes notes={session.update.notes} />
                 </>
               )}
               {session.update.busy && (

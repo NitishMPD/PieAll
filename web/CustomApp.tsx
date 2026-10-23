@@ -73,8 +73,9 @@ export function CustomAppEditor({
                   if (executable)
                     setProfile((p) => ({
                       ...p,
-                      executable,
-                      name: p.name || executable.slice(0, -4),
+                      executable: executable[0],
+                      executable_path: executable[1],
+                      name: p.name || executable[0].slice(0, -4),
                     }));
                 })
               }

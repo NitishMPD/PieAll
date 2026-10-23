@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod app_icons;
 pub mod archive_tools;
 mod browser_capture;
 pub mod downloads;

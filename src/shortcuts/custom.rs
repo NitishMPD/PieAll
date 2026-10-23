@@ -7,6 +7,8 @@ use std::{collections::HashSet, path::Path, sync::RwLock};
 #[serde(deny_unknown_fields)]
 pub struct App {
     pub executable: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable_path: Option<String>,
     pub name: String,
     pub shortcuts: Vec<Binding>,
 }
@@ -49,6 +51,17 @@ impl App {
             return Err(
                 "This app already has a bundled profile. Customize its ring instead.".into(),
             );
+        }
+        if let Some(path) = &self.executable_path {
+            if path.chars().any(char::is_control)
+                || path.len() > 32767
+                || !Path::new(path).is_absolute()
+                || !Path::new(path)
+                    .file_name()
+                    .is_some_and(|n| n.eq_ignore_ascii_case(&self.executable))
+            {
+                return Err("Executable path must match the chosen app.".into());
+            }
         }
         if self.name.trim().is_empty()
             || self.name.chars().count() > 80
@@ -155,6 +168,10 @@ pub fn load(path: &Path) -> Result<(), String> {
 }
 pub fn save(path: &Path, app: App, replacing: Option<&str>) -> Result<String, String> {
     app.validate()?;
+    let serialized = serde_json::to_string(&app).map_err(|e| e.to_string())?;
+    if serialized.len() > 32 * 1024 {
+        return Err("Custom app settings exceed their limit.".into());
+    }
     let mut apps = APPS.write().unwrap();
     let mut next = apps.clone();
     if let Some(original) = replacing {
@@ -187,10 +204,7 @@ pub fn save(path: &Path, app: App, replacing: Option<&str>) -> Result<String, St
     }
     tx.execute(
         "INSERT INTO custom_apps(executable,value) VALUES(?1,?2)",
-        rusqlite::params![
-            app.executable,
-            serde_json::to_string(&app).map_err(|e| e.to_string())?
-        ],
+        rusqlite::params![app.executable, serialized],
     )
     .map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())?;
@@ -210,11 +224,25 @@ pub fn remove(path: &Path, executable: &str) -> Result<(), String> {
 mod tests {
     use super::*;
     #[test]
+    fn icon_paths_are_optional_and_do_not_require_an_installed_app() {
+        let mut app: App = serde_json::from_str(r#"{"executable":"portable.exe","name":"Portable","shortcuts":[{"id":"save","title":"Save","keys":"Ctrl+S"}]}"#).unwrap();
+        assert!(app.executable_path.is_none());
+        app.executable_path = Some(r"C:\Missing app\portable.exe".into());
+        app.validate().unwrap();
+        let roundtrip: App = serde_json::from_str(&serde_json::to_string(&app).unwrap()).unwrap();
+        assert_eq!(roundtrip.executable_path, app.executable_path);
+        app.executable_path = Some(r"C:\Missing app\other.exe".into());
+        assert!(app.validate().is_err());
+        app.executable_path = Some("portable.exe".into());
+        assert!(app.validate().is_err());
+    }
+    #[test]
     fn custom_apps_validate_persist_edit_and_remove() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.sqlite3");
         let app = App {
             executable: "test-custom.exe".into(),
+            executable_path: None,
             name: "My editor".into(),
             shortcuts: vec![Binding {
                 id: "save".into(),
@@ -255,6 +283,9 @@ mod tests {
             bad.executable = executable.into();
             assert!(bad.validate().is_err());
         }
+        let mut oversized = app.clone();
+        oversized.executable_path = Some(format!(r"C:\{}test-custom.exe", "a\\".repeat(12000)));
+        assert!(save(&path, oversized, Some(&app.executable)).is_err());
         for keys in ["", "Win+R", "Ctrl+S extra", "Ctrl+Ctrl+S"] {
             let mut bad = app.clone();
             bad.shortcuts[0].keys = keys.into();

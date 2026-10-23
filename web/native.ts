@@ -43,6 +43,7 @@ export interface ShortcutLibrary {
 }
 export interface CustomApp {
   executable: string;
+  executable_path?: string;
   name: string;
   shortcuts: { id: string; title: string; keys: string }[];
 }
@@ -72,7 +73,7 @@ export interface Session {
 }
 export const native = {
   customApps: () => invoke<CustomApp[]>("custom_apps"),
-  pickCustomApp: () => invoke<string | null>("pick_custom_app"),
+  pickCustomApp: () => invoke<[string, string] | null>("pick_custom_app"),
   saveCustomApp: (profile: CustomApp, replacing: string | null) =>
     invoke<string>("save_custom_app", { profile, replacing }),
   removeCustomApp: (executable: string) =>
@@ -102,6 +103,7 @@ export const native = {
   jobReport: (id: number) => invoke<string>("job_report", { id }),
   cancelJob: (id: number) => invoke<void>("cancel_job", { id }),
   session: () => invoke<Session>("session"),
+  appIcons: () => invoke<Record<string, string>>("app_icons"),
   shortcutLibrary: () => invoke<ShortcutLibrary>("shortcut_library"),
   setTrigger: (vk: number) => invoke<void>("set_trigger_key", { vk }),
   autostart: () => invoke<boolean>("autostart_enabled"),

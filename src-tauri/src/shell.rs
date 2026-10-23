@@ -1403,12 +1403,19 @@ fn shortcut_library(window: WebviewWindow) -> Result<ShortcutLibrary> {
 }
 
 #[tauri::command]
+async fn app_icons(window: WebviewWindow) -> Result<std::collections::HashMap<String, String>> {
+    dashboard_only(&window)?;
+    tauri::async_runtime::spawn_blocking(pieall::app_icons::load)
+        .await
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
 fn custom_apps(window: WebviewWindow) -> Result<Vec<shortcuts::custom::App>> {
     dashboard_only(&window)?;
     Ok(shortcuts::custom::apps())
 }
 #[tauri::command]
-fn pick_custom_app(window: WebviewWindow) -> Result<Option<String>> {
+fn pick_custom_app(window: WebviewWindow) -> Result<Option<(String, String)>> {
     dashboard_only(&window)?;
     platform::pick_app()
 }
@@ -2307,6 +2314,7 @@ pub fn run() {
             prepare,
             run_action,
             shortcut_library,
+            app_icons,
             custom_apps,
             pick_custom_app,
             save_custom_app,

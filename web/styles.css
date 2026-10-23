@@ -721,6 +721,37 @@ kbd {
   margin: 0;
   color: var(--muted);
 }
+.release-notes {
+  white-space: normal;
+}
+.release-notes > :first-child {
+  margin-top: 0;
+}
+.release-notes > :last-child {
+  margin-bottom: 0;
+}
+.release-notes p,
+.release-notes ul,
+.release-notes ol,
+.release-notes pre,
+.release-notes blockquote {
+  margin: 0 0 10px;
+}
+.release-notes :is(h1, h2, h3, h4, h5, h6) {
+  margin: 16px 0 6px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.release-notes strong {
+  color: var(--ink);
+}
+.release-notes ul,
+.release-notes ol {
+  padding-left: 22px;
+}
+.release-notes pre {
+  white-space: pre-wrap;
+}
 .editor {
   display: flex;
   flex-direction: column;
