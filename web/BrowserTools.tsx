@@ -72,13 +72,14 @@ export function BrowserTools({ session }: { session: Session }) {
       className="engine-panel browser-panel"
       aria-labelledby="browser-title"
     >
-      <h1 id="browser-title">Save a video. Keep the quality.</h1>
+      <h1 id="browser-title">Save the media from a post.</h1>
       <p>
-        Paste a YouTube video, X post or another supported video link. PieAll
-        saves it to your folder at the highest available quality by default.
+        Paste an X post, Pinterest pin, public LinkedIn post or another media
+        link. PieAll saves discoverable images, GIFs and videos together in a
+        folder. Original images and animation are preserved.
       </p>
       <p className="muted">
-        Or hold your PieAll key in a browser and choose Download video. PieAll
+        Or hold your PieAll key in a browser and choose Download media. PieAll
         copies the current page address and downloads in the background. Open
         the exact video or post first when browsing a feed.
       </p>
@@ -103,7 +104,7 @@ export function BrowserTools({ session }: { session: Session }) {
         >
           <fieldset disabled={disabled}>
             <legend className="sr-only">Download source and format</legend>
-            <label htmlFor="download-url">Video or post URL</label>
+            <label htmlFor="download-url">Post, pin or media URL</label>
             <input
               id="download-url"
               type="url"
@@ -117,8 +118,9 @@ export function BrowserTools({ session }: { session: Session }) {
               aria-describedby="download-source-note"
             />
             <p id="download-source-note" className="muted">
-              Public links only. Login cookies, playlists and protected streams
-              are not supported.
+              Open the exact post or pin first. Login-only, protected and
+              dynamically loaded media may be unavailable. Up to 100 files and 2
+              GiB per job; feeds and boards are not collected.
             </p>
             <div className="download-options">
               <label>
@@ -127,14 +129,16 @@ export function BrowserTools({ session }: { session: Session }) {
                   value={mode}
                   onChange={(e) => setMode(e.target.value as typeof mode)}
                 >
-                  <option value="download_video">Video + audio</option>
+                  <option value="download_video">
+                    Images, GIFs &amp; video
+                  </option>
                   <option value="download_audio">Audio</option>
                 </select>
               </label>
               {mode === "download_video" ? (
                 <>
                   <label>
-                    Quality
+                    Video quality
                     <select
                       value={settings.preferences.quality}
                       onChange={(e) =>
@@ -156,7 +160,7 @@ export function BrowserTools({ session }: { session: Session }) {
                     </select>
                   </label>
                   <label>
-                    Container
+                    Video container
                     <select
                       value={settings.preferences.container}
                       onChange={(e) =>
@@ -201,8 +205,9 @@ export function BrowserTools({ session }: { session: Session }) {
               )}
             </div>
             <p className="muted">
-              Container changes preserve the selected codecs. If they do not
-              fit, the job fails with an engine error; choose MKV. Audio
+              Images, GIFs and directly linked videos keep their original
+              format. Video quality and container choices apply to extracted
+              streams. If codecs do not fit the container, choose MKV. Audio
               conversion cannot improve the source quality.
             </p>
             <div className="download-folder">
@@ -221,7 +226,7 @@ export function BrowserTools({ session }: { session: Session }) {
               <button className="primary" type="submit" disabled={!url.trim()}>
                 <Icon name="download" size={17} />
                 {mode === "download_video"
-                  ? "Download video"
+                  ? "Download media"
                   : "Download audio"}
               </button>
               <button type="button" onClick={() => void save(false)}>

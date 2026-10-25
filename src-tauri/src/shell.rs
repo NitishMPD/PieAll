@@ -1656,6 +1656,7 @@ struct ToastView {
     job: Option<JobView>,
 }
 static TOAST_GENERATION: AtomicU64 = AtomicU64::new(0);
+// Acquire only on the event-loop thread; workers must queue their notice work.
 static TOAST_GATE: std::sync::Mutex<Option<u64>> = std::sync::Mutex::new(None);
 
 #[tauri::command]
@@ -1794,6 +1795,22 @@ fn notice_corner(work: RECT, width: i32, height: i32, margin: i32) -> (i32, i32)
 }
 fn show_notice(
     app: &AppHandle,
+    tone: &'static str,
+    title: String,
+    detail: String,
+    job: Option<JobView>,
+) {
+    // Window handle access can synchronously dispatch to the event loop. Never
+    // hold TOAST_GATE on a worker while that loop can enter hide_job_notice or
+    // dismiss_toast and wait for the same gate.
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        show_notice_on_main(&handle, tone, title, detail, job);
+    });
+}
+
+fn show_notice_on_main(
+    app: &AppHandle,
     mut tone: &'static str,
     mut title: String,
     mut detail: String,
@@ -1908,18 +1925,21 @@ fn show_notice(
         let app = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(linger));
-            let gate = TOAST_GATE.lock().unwrap();
-            if TOAST_GENERATION.load(Ordering::SeqCst) != generation {
-                return;
-            }
-            let _ = app.emit_to("toast", "toast-hide", ());
-            drop(gate);
+            let fade_app = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                let _gate = TOAST_GATE.lock().unwrap();
+                if TOAST_GENERATION.load(Ordering::SeqCst) == generation {
+                    let _ = fade_app.emit_to("toast", "toast-hide", ());
+                }
+            });
             std::thread::sleep(std::time::Duration::from_millis(OUTRO_MS + 60));
-            let mut gate = TOAST_GATE.lock().unwrap();
-            if TOAST_GENERATION.load(Ordering::SeqCst) == generation {
-                hide_raw(&window);
-                *gate = None;
-            }
+            let _ = app.run_on_main_thread(move || {
+                let mut gate = TOAST_GATE.lock().unwrap();
+                if TOAST_GENERATION.load(Ordering::SeqCst) == generation {
+                    hide_raw(&window);
+                    *gate = None;
+                }
+            });
         });
     }
 }

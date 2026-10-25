@@ -12,6 +12,11 @@ Customize ring places Add app above the app search. User-created entries carry a
 ## Dia browser - 23 October 2026
 
 Dia appears by name in Customize ring's app search and uses the existing browser ring defaults, native app icon with a monogram fallback and keyboard-accessible customization controls. Saved Dia layouts follow the same per-app behavior as other browsers.
+## Download media - 25 October 2026
+
+The browser ring's existing download slice now reads Download media, retaining its download icon, placement, stable action ID and keyboard behavior. The dashboard uses the same label, a Post, pin or media URL field, and Images, GIFs & video / Audio modes. Video controls explicitly say Video quality and Video container. Helper text explains opening the exact post/pin, original image/animation preservation, grouped output, the 100-file/2-GiB limit and public/dynamic-media restrictions. Quality/container settings apply to extracted video streams; direct media retains its original format.
+
+One job saves the collection in one uniquely named folder. The existing result and Open location action expose that folder, with file count, saved bytes, source and any fallback or partial-failure notes. Audio keeps its existing separate action. Tool setup includes gallery-dl in Browser downloads readiness, while manual engine paths remain in Advanced. Existing layout, neutral theme, labelled controls, focus states and job cancellation are retained. Source checks and the mechanical UI detector cover this copy-only interface change; native rendering and site downloads require manual acceptance. This supersedes the older Download video label below.
 
 
 ## Direct browser captures - 23 October 2026

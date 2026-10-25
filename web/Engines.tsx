@@ -39,7 +39,7 @@ export function Engines({ busy }: { busy: boolean }) {
   }
   const ready = (names: string[]) =>
     names.every((name) => engines.some((e) => e.name === name && e.path));
-  const allReady = ready(["ffmpeg", "ffprobe", "yt-dlp", "deno"]);
+  const allReady = ready(["ffmpeg", "ffprobe", "yt-dlp", "deno", "gallery-dl"]);
   return (
     <section className="engine-panel" aria-labelledby="tools-title">
       <h1 id="tools-title">Tool setup</h1>
@@ -80,8 +80,8 @@ export function Engines({ busy }: { busy: boolean }) {
           },
           {
             title: "Browser downloads",
-            detail: "Save videos and audio from supported links",
-            names: ["yt-dlp", "deno"],
+            detail: "Save post images, GIFs, videos and audio",
+            names: ["yt-dlp", "deno", "gallery-dl"],
           },
         ].map((group) => (
           <div className="tool-setup-row" key={group.title}>

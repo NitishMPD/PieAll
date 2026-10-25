@@ -618,7 +618,7 @@ impl ClipboardSnapshot {
 pub fn copy_browser_url(source: usize, pid: u32) -> Result<String, String> {
     let profile = window_profile(source, pid)?
         .filter(|p| p.sets.iter().any(|s| s == "browser" || s == "firefox"))
-        .ok_or("Invoke Download video from a supported browser, or paste its URL in Browser downloads.")?;
+        .ok_or("Invoke Download media from a supported browser, or paste its URL in Browser downloads.")?;
     let shortcut = crate::shortcuts::find(&format!("app:{}:copy-url", profile.id))
         .ok_or("This browser has no Copy URL shortcut. Paste the URL in Browser downloads.")?;
     let snapshot = ClipboardSnapshot::take(source).ok_or("Clipboard is busy. Try again.")?;

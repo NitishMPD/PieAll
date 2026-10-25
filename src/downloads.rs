@@ -119,11 +119,7 @@ fn arguments(
         "--no-js-runtimes",
         "--no-cache-dir",
         "--no-playlist",
-        "--max-downloads",
-        "1",
         "--break-per-input",
-        "--playlist-items",
-        "1",
         "--no-overwrites",
         "--restrict-filenames",
         "--windows-filenames",
@@ -156,7 +152,7 @@ fn arguments(
         "--progress-template",
         "download:PIEALL_PROGRESS:%(progress.{status,downloaded_bytes,total_bytes})j",
         "--print",
-        "after_move:PIEALL_RESULT:%(.{id,title,ext,width,height,vcodec,acodec})j",
+        "after_move:PIEALL_RESULT:%(.{id,title,ext,filepath,width,height,vcodec,acodec})j",
         "--no-simulate",
         "--postprocessor-args",
         "ffmpeg_i:-protocol_whitelist file,pipe",
@@ -182,7 +178,30 @@ fn arguments(
             .ok_or("Download folder must be Unicode")?
             .into(),
         "--output".into(),
-        "media.%(ext)s".into(),
+        if id == "download_audio" {
+            "media.%(ext)s"
+        } else {
+            "media.%(autonumber)03d.%(ext)s"
+        }
+        .into(),
+    ]);
+    args.extend([
+        "--playlist-items".into(),
+        // X represents several videos in one post as a playlist. Other pages
+        // retain single-video extraction; explicit HTML players are collected
+        // separately, without expanding channels or arbitrary playlists.
+        if id == "download_video"
+            && matches!(
+                url.host_str(),
+                Some("x.com" | "www.x.com" | "twitter.com" | "www.twitter.com")
+            )
+            && url.path().contains("/status/")
+        {
+            "1:101"
+        } else {
+            "1"
+        }
+        .into(),
     ]);
     if let Some(deno) = engines.get("deno") {
         args.extend([
@@ -273,6 +292,9 @@ fn filename(title: &str, id: &str) -> String {
     )
 }
 pub fn run(id: &str, url: &str, settings: &Settings, engines: &Engines) -> Result<String, String> {
+    if id == "download_video" {
+        return crate::web_media::run(url, settings, engines);
+    }
     crate::web_proxy::web_url(url)?;
     let _folder_guard = output::lock_parent(&settings.destination)?;
     let work = tempfile::Builder::new()
@@ -319,6 +341,61 @@ pub fn run(id: &str, url: &str, settings: &Settings, engines: &Engines) -> Resul
         settings.preferences.quality,
         settings.preferences.audio,
     ))
+}
+pub(crate) fn download_videos(
+    url: &str,
+    settings: &Settings,
+    engines: &Engines,
+    work: &Path,
+    proxy: &str,
+) -> Result<Vec<PathBuf>, String> {
+    // Keep the configured postprocessors and JS runtime pinned for the entire
+    // child execution, just as the separate audio path does.
+    let _guards: Vec<_> = engines
+        .iter()
+        .filter(|(name, _)| ["ffmpeg", "ffprobe", "deno"].contains(&name.as_str()))
+        .map(|(_, engine)| engine.validated_file())
+        .collect::<Result<_, _>>()?;
+    let args = arguments("download_video", url, settings, engines, work, proxy)?;
+    let report = crate::engine_process::run_complete(
+        engine(engines, "yt-dlp")?,
+        &args,
+        Duration::from_secs(3600),
+        Some(work),
+        |line| {
+            if let Some((detail, fraction)) = progress(line) {
+                jobs::progress_fraction(0, 1, detail, fraction);
+            }
+        },
+    )?;
+    let mut files = Vec::new();
+    for line in report
+        .lines()
+        .filter_map(|l| l.strip_prefix("PIEALL_RESULT:"))
+    {
+        let value: serde_json::Value =
+            serde_json::from_str(line).map_err(|_| "Invalid download result")?;
+        let path = PathBuf::from(
+            value["filepath"]
+                .as_str()
+                .ok_or("Missing downloaded path")?,
+        );
+        if path.parent() != Some(work)
+            || !path
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with("media."))
+        {
+            return Err("Unexpected downloaded path. Nothing was published.".into());
+        }
+        output::plain_path(&path)?;
+        if !files.contains(&path) {
+            files.push(path);
+        }
+    }
+    if files.is_empty() {
+        return Err("No completed videos were found.".into());
+    }
+    Ok(files)
 }
 fn publish(
     work: &Path,

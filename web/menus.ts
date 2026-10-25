@@ -177,7 +177,7 @@ export function appPool(actions: Action[]): MenuItem[] {
   const browser = isBrowser(actions);
   const downloads = browser
     ? [
-        run("download_video", "Download video", "download"),
+        run("download_video", "Download media", "download"),
         run("download_audio", "Download audio", "audio"),
       ]
     : [];

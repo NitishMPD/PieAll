@@ -418,7 +418,7 @@ pub fn catalog() -> Vec<Action> {
         });
     }
     for (id, title) in [
-        ("download_video", "Download video from URL"),
+        ("download_video", "Download media from URL"),
         ("download_audio", "Download audio from URL"),
     ] {
         a.push(Action {
@@ -436,6 +436,9 @@ pub fn media_action(id: &str) -> bool {
 }
 pub fn missing_engine(id: &str, engines: &crate::engines::Engines) -> Option<&'static str> {
     if crate::downloads::is_download(id) {
+        if id == "download_video" && !engines.contains_key("gallery-dl") {
+            return Some("Set up browser download tools, including gallery-dl, in Tool setup.");
+        }
         return ["yt-dlp", "ffmpeg", "ffprobe"]
             .iter()
             .find(|name| !engines.contains_key(**name))

@@ -1,6 +1,12 @@
 # PieAll
 Author: Nitish
 
+## Download progress responsiveness - 25 October 2026
+
+Progress notices enqueue their rendering on Tauri's main thread before acquiring the notification gate. Delayed fade/hide callbacks also enqueue main-thread work and recheck the notice generation there. A background tool setup/download must never hold the notification gate while waiting for a native window-handle operation: dashboard focus and notification dismissal use that gate on the event loop, creating a deadlock otherwise. Latest job state, dismissal, dashboard-active suppression and stale-timer protection remain in force.
+
+The reported local app freeze during gallery-dl setup was observed as an unresponsive process. The notification lock/window-dispatch deadlock path was corrected; the 14 desktop tests pass. Live focus changes during an actual tool download still require acceptance. The interrupted local setup was stopped and the app restarted to load the correction.
+
 ## Release-note formatting - 23 October 2026
 
 The Updates panel renders release-note Markdown through react-markdown rather than displaying raw syntax. Raw HTML and images are disabled; links retain their labels and destinations as selectable text without navigating the app. Empty notes retain the existing fallback. Update checking, download and install confirmation are unchanged.
@@ -16,6 +22,19 @@ The first six shortcuts form the default ring; all shortcuts remain available th
 ## Dia browser - 23 October 2026
 
 The exact captured executable `dia.exe` selects the Dia profile, using the existing Chromium browser keymap. Dia is available in Customize ring and inherits browser downloads, Copy URL, tab/private-window shortcuts and both screenshot actions. Full-page capture follows the Chromium scroll-and-stitch path. Matching and dispatch retain the existing captured process/focus checks. Dia-specific AI commands and macOS shortcuts are not included; live Dia shortcut/capture behavior remains unverified.
+## Post and page media downloads - 25 October 2026
+
+The existing `download_video` action is now labelled Download media; its stable ID preserves saved custom layouts. It collects publicly discoverable images, animated GIFs and videos from one opened post, pin or page into a collision-safe folder in the selected Downloads destination. Download audio retains single-item audio extraction. Images and direct video files retain their original bytes and formats; video quality/container preferences apply to yt-dlp stream extraction. X GIFs delivered as MP4 remain MP4, preserving animation without an automatic GIF conversion.
+
+gallery-dl discovers original attachment URLs for its supported sites, including X and Pinterest. X photo/video subpages normalize to their parent post so one action includes the post's attachments, excluding quoted posts and conversation expansion. Known X/LinkedIn feeds and profiles and Pinterest boards/feeds are rejected. LinkedIn uses a public HTML fallback: post-body images, largest srcset candidates, lazy-loaded URLs, direct video sources and JSON-LD attachments, with Open Graph image recovery. Other public pages use the same fallback and yt-dlp for embedded video. Navigation/avatar images are filtered where identifiable. No page scripts run, cookies are not borrowed from the browser, and login-only or dynamically loaded media can be missing. Fallback/partial failures are retained in the result; no universal site support or complete authenticated-post capture is claimed. Pinterest short links remain subject to public extraction and redirect availability.
+
+Each media collection is limited to 100 attachments, 2 GiB of saved files and one hour. Page discovery allows 8 MiB of HTML; complete extractor results allow 1 MiB and fail instead of silently truncating. yt-dlp can collect the multiple videos represented by an X post; other fallback invocations retain single-item extraction and explicit HTML video sources are collected individually. Arbitrary playlists/channels are not expanded. Native HTTP downloads and extractor requests use the per-job public-address proxy; cancellation is checked while awaiting requests and streaming bodies. Failed attachment staging is removed before another attachment is attempted. Publication reserves a unique folder, never replaces existing files and removes its own links on a normal publication failure. Forced worker termination can leave staging or an incomplete reserved folder, as with other worker crash boundaries.
+
+gallery-dl is the fifth optional managed engine. Download media installs it automatically from the fixed `gdl-org/builds` Windows x64 release asset, using the existing bounded download, publisher SHA-256 verification, pinned executable records and serialized setup. The platform-named asset is renamed to `gallery-dl.exe` within its verified package. Audio-only and local media work do not require it. Existing engines and saved settings are preserved.
+
+URL discovery disables gallery-dl's printed lower-resolution alternatives. The parser also ignores legacy `| ` alternative lines rather than treating them as extra attachments or invalid source URLs. Primary URLs still pass public-URL validation; invalid extractor results identify the extractor response in their error. A fixture covers an original X image followed by its size alternatives and a second attachment.
+
+Fixture tests cover post targeting, multi-image/animation discovery, URL deduplication and bounds, rejected private URLs, collision-safe grouped publication and rollback. Static checks and tests do not establish live X/Pinterest/LinkedIn availability, managed gallery-dl installation, native menu labels or actual authenticated browser behavior. No app launch or packaging build was performed. These implemented behaviors supersede the earlier single-video and unfinished web-image-saving limitations below; exact in-feed targeting and boards/Library remain planned.
 
 
 ## Browser screenshot actions - 23 October 2026

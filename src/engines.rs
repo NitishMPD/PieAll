@@ -15,7 +15,7 @@ pub struct Engine {
     pub sha256: String,
 }
 pub type Engines = BTreeMap<String, Engine>;
-pub const NAMES: &[&str] = &["ffmpeg", "ffprobe", "yt-dlp", "deno"];
+pub const NAMES: &[&str] = &["ffmpeg", "ffprobe", "yt-dlp", "deno", "gallery-dl"];
 fn fingerprint(path: &Path) -> Result<String, String> {
     crate::output::plain_path(path)?;
     let mut file = File::open(path).map_err(|e| e.to_string())?;

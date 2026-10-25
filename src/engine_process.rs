@@ -61,7 +61,29 @@ pub fn run(
     args: &[String],
     timeout: Duration,
     destination: Option<&Path>,
+    line: impl FnMut(&str),
+) -> Result<String, String> {
+    run_inner(engine, args, timeout, destination, line, false)
+}
+
+/// Metadata and URL lists must never silently lose their first entries.
+pub fn run_complete(
+    engine: &Engine,
+    args: &[String],
+    timeout: Duration,
+    destination: Option<&Path>,
+    line: impl FnMut(&str),
+) -> Result<String, String> {
+    run_inner(engine, args, timeout, destination, line, true)
+}
+
+fn run_inner(
+    engine: &Engine,
+    args: &[String],
+    timeout: Duration,
+    destination: Option<&Path>,
     mut line: impl FnMut(&str),
+    complete: bool,
 ) -> Result<String, String> {
     jobs::check()?;
     let _engine_guard = engine.validated_file()?;
@@ -85,6 +107,8 @@ pub fn run(
     let out = std::thread::spawn(move || {
         let mut reader = std::io::BufReader::new(stdout);
         let mut result = String::new();
+        let limit = if complete { 1024 * 1024 } else { 128 * 1024 };
+        let mut truncated = false;
         loop {
             let mut s = String::new();
             match reader.by_ref().take(8192).read_line(&mut s) {
@@ -92,8 +116,9 @@ pub fn run(
                 _ => {}
             }
             result.push_str(&s);
-            if result.len() > 128 * 1024 {
-                let mut start = result.len() - 128 * 1024;
+            if result.len() > limit {
+                truncated = true;
+                let mut start = result.len() - limit;
                 while !result.is_char_boundary(start) {
                     start += 1;
                 }
@@ -101,7 +126,7 @@ pub fn run(
             }
             let _ = tx.try_send(s);
         }
-        result
+        (result, truncated)
     });
     let err = std::thread::spawn(move || {
         let mut reader = stderr;
@@ -155,7 +180,7 @@ pub fn run(
         }
         std::thread::sleep(Duration::from_millis(50));
     };
-    let stdout = out.join().map_err(|_| "Engine output reader stopped")?;
+    let (stdout, truncated) = out.join().map_err(|_| "Engine output reader stopped")?;
     let stderr = err.join().map_err(|_| "Engine error reader stopped")?;
     check_output(destination)?;
     for s in rx.try_iter() {
@@ -163,6 +188,11 @@ pub fn run(
     }
     if !status.success() {
         return Err(format!("Engine failed. {}", stderr.trim()));
+    }
+    if complete && truncated {
+        return Err(
+            "Media discovery exceeded its 1 MiB result limit. Nothing was published.".into(),
+        );
     }
     jobs::check()?;
     Ok(stdout)

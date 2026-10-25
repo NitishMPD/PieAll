@@ -45,6 +45,11 @@ const RUNTIME: Package = Package {
     asset: "deno-x86_64-pc-windows-msvc.zip",
     names: &["deno"],
 };
+const GALLERY: Package = Package {
+    repo: "gdl-org/builds",
+    asset: "gallery-dl_windows.exe",
+    names: &["gallery-dl"],
+};
 fn check(cancel: &AtomicBool) -> Result<(), String> {
     if cancel.load(Ordering::SeqCst) {
         Err("Cancelled. Existing tools are kept.".into())
@@ -290,7 +295,13 @@ fn install(
         fs::remove_file(archive).map_err(|e| e.to_string())?;
         paths
     } else {
-        vec![archive]
+        // The publisher's platform-specific asset keeps its verified provenance;
+        // engine selection uses the stable executable name.
+        let executable = stage.path().join(format!("{}.exe", package.names[0]));
+        if archive != executable {
+            fs::rename(&archive, &executable).map_err(|e| e.to_string())?;
+        }
+        vec![executable]
     };
     let mut engines = Engines::new();
     for name in package.names {
@@ -348,7 +359,10 @@ pub fn ensure(
         }
     }
     let mut staged = Vec::new();
-    for package in [&MEDIA, &DOWNLOADER, &RUNTIME] {
+    for package in [&MEDIA, &DOWNLOADER, &RUNTIME, &GALLERY] {
+        if package.repo == GALLERY.repo && id != "download_video" && id != "setup_tools" {
+            continue;
+        }
         if package.repo != MEDIA.repo && !download && id != "setup_tools" {
             continue;
         }
@@ -439,7 +453,10 @@ mod tests {
             engines["ffprobe"].path.parent(),
             engines["ffmpeg"].path.parent()
         );
-        assert_eq!(crate::engines::load(&database).unwrap().len(), 4);
+        assert_eq!(
+            crate::engines::load(&database).unwrap().len(),
+            crate::engines::NAMES.len()
+        );
         assert_eq!(fs::read_dir(dir.path().join("tools")).unwrap().count(), 0);
     }
     #[test]

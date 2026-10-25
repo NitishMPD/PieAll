@@ -15,4 +15,5 @@ pub mod platform;
 pub mod shortcuts;
 #[cfg(feature = "legacy-ui")]
 pub mod updates;
+mod web_media;
 pub mod web_proxy;
