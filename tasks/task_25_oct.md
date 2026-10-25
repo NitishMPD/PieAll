@@ -5,3 +5,4 @@ Author: Nitish
 - Built and launched the updated local desktop app with pnpm tauri dev; the development server is running on port 1420.
 - Fixed the progress-notification lock/window-dispatch deadlock, passed 14 desktop tests, and restarted the local app; Windows reports the new process as responsive.
 - Fixed gallery-dl image-alternative output being mistaken for invalid URLs; six media regression tests pass and the updated local app restarted successfully.
+- Fixed the release-blocking Clippy iterator and cloned-slice warnings; the exact strict workspace CI lint command, formatting checks and six media regression tests pass locally.

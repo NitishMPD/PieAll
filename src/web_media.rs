@@ -711,7 +711,7 @@ pub fn run(input: &str, settings: &Settings, engines: &Engines) -> Result<String
     }
     let id = url
         .path_segments()
-        .and_then(|s| s.filter(|s| !s.is_empty()).next_back())
+        .and_then(|mut s| s.rfind(|s| !s.is_empty()))
         .unwrap_or("page");
     let base = format!(
         "PieAll - {} - {}",
@@ -799,8 +799,8 @@ mod tests {
         let dest = tempfile::tempdir().unwrap();
         let gif = stage.path().join("attachment-001.gif");
         fs::write(&gif, b"GIF89a animation bytes").unwrap();
-        let one = publish(&[gif.clone()], dest.path(), "post").unwrap();
-        let two = publish(&[gif.clone()], dest.path(), "post").unwrap();
+        let one = publish(std::slice::from_ref(&gif), dest.path(), "post").unwrap();
+        let two = publish(std::slice::from_ref(&gif), dest.path(), "post").unwrap();
         assert_ne!(one, two);
         assert_eq!(
             fs::read(one.join("attachment-001.gif")).unwrap(),
