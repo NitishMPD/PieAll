@@ -1,1 +1,2 @@
 - Added public LinkedIn video downloads from full post URLs and lnkd.in share links.
+- Fixed the LinkedIn downloader's Rust formatting and Clippy errors for the Windows release workflow.

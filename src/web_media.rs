@@ -88,16 +88,15 @@ fn post_url(input: &str) -> Result<Url, String> {
                 "Open a specific Pinterest pin first. Boards and feeds are not downloaded.".into(),
             );
         }
-    } else if host_is(&url, "linkedin.com") {
-        if !matches!(
+    } else if host_is(&url, "linkedin.com")
+        && !matches!(
             parts.as_slice(),
             ["posts", slug] | ["feed", "update", slug] if !slug.is_empty()
-        ) {
-            return Err(
-                "Open the specific LinkedIn post first. Feeds and profiles are not downloaded."
-                    .into(),
-            );
-        }
+        )
+    {
+        return Err(
+            "Open the specific LinkedIn post first. Feeds and profiles are not downloaded.".into(),
+        );
     }
     url.set_fragment(None);
     Ok(url)
@@ -107,7 +106,10 @@ fn linkedin_post_target(url: &Url) -> Result<Url, String> {
     if url.scheme() == "https" && host_is(url, "linkedin.com") {
         return post_url(url.as_str());
     }
-    Err("This LinkedIn link did not resolve to a public LinkedIn post. Try the full post URL.".into())
+    Err(
+        "This LinkedIn link did not resolve to a public LinkedIn post. Try the full post URL."
+            .into(),
+    )
 }
 
 fn gallery_arguments(url: &Url, proxy: &str) -> Vec<String> {
@@ -845,7 +847,9 @@ mod tests {
         let short = post_url("https://lnkd.in/p/example").unwrap();
         assert!(linkedin_short(&short));
         let destination = short
-            .join("https://www.linkedin.com/posts/example-ugcPost-123-wa_O/?origin=SOCIAL_SHARE#post")
+            .join(
+                "https://www.linkedin.com/posts/example-ugcPost-123-wa_O/?origin=SOCIAL_SHARE#post",
+            )
             .unwrap();
         assert_eq!(
             linkedin_post_target(&destination).unwrap().as_str(),
