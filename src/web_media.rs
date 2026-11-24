@@ -53,6 +53,9 @@ fn host_is(url: &Url, domain: &str) -> bool {
     url.host_str()
         .is_some_and(|h| h == domain || h.ends_with(&format!(".{domain}")))
 }
+fn linkedin_short(url: &Url) -> bool {
+    matches!(url.host_str(), Some("lnkd.in" | "www.lnkd.in"))
+}
 fn social(url: &Url) -> bool {
     host_is(url, "x.com")
         || host_is(url, "twitter.com")
@@ -85,15 +88,26 @@ fn post_url(input: &str) -> Result<Url, String> {
                 "Open a specific Pinterest pin first. Boards and feeds are not downloaded.".into(),
             );
         }
-    } else if host_is(&url, "linkedin.com")
-        && !(url.path().starts_with("/posts/") || url.path().starts_with("/feed/update/"))
-    {
-        return Err(
-            "Open the specific LinkedIn post first. Feeds and profiles are not downloaded.".into(),
-        );
+    } else if host_is(&url, "linkedin.com") {
+        if !matches!(
+            parts.as_slice(),
+            ["posts", slug] | ["feed", "update", slug] if !slug.is_empty()
+        ) {
+            return Err(
+                "Open the specific LinkedIn post first. Feeds and profiles are not downloaded."
+                    .into(),
+            );
+        }
     }
     url.set_fragment(None);
     Ok(url)
+}
+
+fn linkedin_post_target(url: &Url) -> Result<Url, String> {
+    if url.scheme() == "https" && host_is(url, "linkedin.com") {
+        return post_url(url.as_str());
+    }
+    Err("This LinkedIn link did not resolve to a public LinkedIn post. Try the full post URL.".into())
 }
 
 fn gallery_arguments(url: &Url, proxy: &str) -> Vec<String> {
@@ -260,9 +274,25 @@ fn page_media(html: &str, base: &Url) -> PageMedia {
             add_url(&mut media.images, base, url);
         }
     }
-    for video in scope.select(&selector("video[src], video source[src]")) {
+    let video_sources = selector("source[src]");
+    for video in scope.select(&selector("video")) {
+        if host_is(base, "linkedin.com") {
+            if let Some(url) = video
+                .value()
+                .attr("data-sources")
+                .and_then(|sources| linkedin_video_source(sources, base))
+            {
+                add_url(&mut media.videos, base, url.as_str());
+                continue;
+            }
+        }
         if let Some(url) = video.value().attr("src") {
             add_url(&mut media.videos, base, url);
+        }
+        for source in video.select(&video_sources) {
+            if let Some(url) = source.value().attr("src") {
+                add_url(&mut media.videos, base, url);
+            }
         }
     }
     // Structured post attachments can include carousel images absent from the HTML.
@@ -282,6 +312,31 @@ fn page_media(html: &str, base: &Url) -> PageMedia {
     }
     media
 }
+
+fn linkedin_video_source(sources: &str, base: &Url) -> Option<Url> {
+    #[derive(serde::Deserialize)]
+    struct Source {
+        src: Option<String>,
+        #[serde(rename = "type")]
+        mime: Option<String>,
+        #[serde(rename = "data-bitrate")]
+        bitrate: Option<u64>,
+    }
+    serde_json::from_str::<Vec<Source>>(sources)
+        .ok()?
+        .into_iter()
+        .filter_map(|source| {
+            let url = base.join(source.src?.trim()).ok()?;
+            if source.mime.as_deref() != Some("video/mp4") && extension(&url) != "mp4" {
+                return None;
+            }
+            let url = web_proxy::web_url(url.as_str()).ok()?;
+            Some((source.bitrate.unwrap_or(0), url))
+        })
+        .max_by_key(|(bitrate, _)| *bitrate)
+        .map(|(_, url)| url)
+}
+
 fn json_media(value: &serde_json::Value, base: &Url, media: &mut PageMedia, depth: usize) {
     if depth > 24 {
         return;
@@ -540,7 +595,7 @@ fn publish(files: &[PathBuf], destination: &Path, base: &str) -> Result<PathBuf,
 }
 
 pub fn run(input: &str, settings: &Settings, engines: &Engines) -> Result<String, String> {
-    let url = post_url(input)?;
+    let mut url = post_url(input)?;
     settings.preferences.validate()?;
     let _guard = output::lock_parent(&settings.destination)?;
     let work = tempfile::Builder::new()
@@ -552,9 +607,19 @@ pub fn run(input: &str, settings: &Settings, engines: &Engines) -> Result<String
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
+    let redirect_limit = reqwest::redirect::Policy::limited(8);
     let client = reqwest::Client::builder().tls_backend_native().no_proxy()
         .proxy(reqwest::Proxy::all(proxy.url()).map_err(|e| e.to_string())?)
-        .redirect(reqwest::redirect::Policy::limited(8))
+        .redirect(reqwest::redirect::Policy::custom(move |attempt| {
+            if attempt.previous().first().is_some_and(linkedin_short)
+                && !linkedin_short(attempt.url())
+            {
+                // Validate the destination before sending a request to it.
+                attempt.stop()
+            } else {
+                redirect_limit.redirect(attempt)
+            }
+        }))
         .connect_timeout(Duration::from_secs(15)).read_timeout(Duration::from_secs(30)).timeout(Duration::from_secs(180))
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36")
         .build().map_err(|e| e.to_string())?;
@@ -568,6 +633,18 @@ pub fn run(input: &str, settings: &Settings, engines: &Engines) -> Result<String
     let mut warnings = Vec::new();
     let mut urls = Vec::new();
     jobs::progress(0, 1, "Finding post attachments…");
+    if linkedin_short(&url) {
+        url = runtime.block_on(async {
+            let response = collector.response(&url, &url).await?;
+            let target = response
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .filter(|_| response.status().is_redirection())
+                .and_then(|value| value.to_str().ok())
+                .and_then(|location| response.url().join(location).ok());
+            linkedin_post_target(target.as_ref().unwrap_or(response.url()))
+        })?;
+    }
     // Extractors find original image/GIF/video URLs; all file IO stays native.
     if !host_is(&url, "linkedin.com") && !media_extension(&extension(&url)) {
         if let Some(engine) = engines.get("gallery-dl") {
@@ -593,7 +670,11 @@ pub fn run(input: &str, settings: &Settings, engines: &Engines) -> Result<String
     if !gallery_found {
         let page_result: Result<(), String> = runtime.block_on(async {
             let mut response = collector.response(&url, &url).await?;
-            let final_url = post_url(response.url().as_str())?;
+            let final_url = if host_is(&url, "linkedin.com") {
+                linkedin_post_target(response.url())?
+            } else {
+                post_url(response.url().as_str())?
+            };
             let content_type = response
                 .headers()
                 .get(reqwest::header::CONTENT_TYPE)
@@ -758,6 +839,51 @@ mod tests {
         }
         assert!(post_url("https://www.linkedin.com/feed/update/urn:li:activity:123").is_ok());
         assert!(post_url("https://www.pinterest.com/pin/123/").is_ok());
+    }
+    #[test]
+    fn linkedin_share_target_must_be_a_linkedin_post() {
+        let short = post_url("https://lnkd.in/p/example").unwrap();
+        assert!(linkedin_short(&short));
+        let destination = short
+            .join("https://www.linkedin.com/posts/example-ugcPost-123-wa_O/?origin=SOCIAL_SHARE#post")
+            .unwrap();
+        assert_eq!(
+            linkedin_post_target(&destination).unwrap().as_str(),
+            "https://www.linkedin.com/posts/example-ugcPost-123-wa_O/?origin=SOCIAL_SHARE"
+        );
+        for url in [
+            "https://www.linkedin.com/posts/",
+            "https://www.linkedin.com/feed/",
+            "https://www.linkedin.com/authwall",
+            "https://example.com/posts/example",
+            "http://www.linkedin.com/posts/example",
+        ] {
+            assert!(
+                linkedin_post_target(&Url::parse(url).unwrap()).is_err(),
+                "{url}"
+            );
+        }
+    }
+    #[test]
+    fn linkedin_native_player_downloads_one_valid_source_per_player() {
+        let page = page_media(
+            r#"<article>
+                <video src="/low.mp4" data-sources="[
+                    {&quot;src&quot;:&quot;/low.mp4&quot;,&quot;data-bitrate&quot;:58062},
+                    {&quot;src&quot;:&quot;https://media.licdn.com/dms/video/asset?e=1&amp;t=signed&quot;,&quot;type&quot;:&quot;video/mp4&quot;,&quot;data-bitrate&quot;:142650},
+                    {&quot;src&quot;:&quot;http://127.0.0.1/private.mp4&quot;,&quot;data-bitrate&quot;:999999}
+                ]"><source src="/low.mp4"></video>
+                <video data-sources="invalid"><source src="/another.mp4"></video>
+            </article><video src="/outside.mp4"></video>"#,
+            &Url::parse("https://www.linkedin.com/posts/example").unwrap(),
+        );
+        assert_eq!(
+            page.videos.iter().map(Url::as_str).collect::<Vec<_>>(),
+            [
+                "https://media.licdn.com/dms/video/asset?e=1&t=signed",
+                "https://www.linkedin.com/another.mp4",
+            ]
+        );
     }
     #[test]
     fn public_post_collects_carousel_and_animation_without_avatars_or_recommendations() {

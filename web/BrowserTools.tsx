@@ -74,9 +74,10 @@ export function BrowserTools({ session }: { session: Session }) {
     >
       <h1 id="browser-title">Save the media from a post.</h1>
       <p>
-        Paste an X post, Pinterest pin, public LinkedIn post or another media
-        link. PieAll saves discoverable images, GIFs and videos together in a
-        folder. Original images and animation are preserved.
+        Paste an X post, Pinterest pin, public LinkedIn post (full URL or
+        lnkd.in share link) or another media link. PieAll saves discoverable
+        images, GIFs and videos together in a folder. Original images and
+        animation are preserved.
       </p>
       <p className="muted">
         Or hold your PieAll key in a browser and choose Download media. PieAll

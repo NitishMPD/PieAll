@@ -1,0 +1,1 @@
+- Added public LinkedIn video downloads from full post URLs and lnkd.in share links.
