@@ -1,2 +1,12 @@
 - Added public LinkedIn video downloads from full post URLs and lnkd.in share links.
 - Fixed the LinkedIn downloader's Rust formatting and Clippy errors for the Windows release workflow.
+- Added a media scan with Videos, Images and GIFs selection, and support for Playtester game trailers and full-size carousel screenshots.
+- Added optional review before multi-item downloads and bulk selection for all media or one type.
+- Replaced the inline picker with a preview modal, used YouTube video titles for saved names, and removed avoidable waits from browser URL actions.
+- Bounded media scan waits and gave download preparation a separate progress message.
+- Added per-file download names with original extensions and collision-safe saving.
+- Moved rename controls beside filenames and cleaned up thumbnail corners in the media picker.
+- Fixed Reddit scans to show the post video alongside screenshots and use its poster as a preview.
+- Showed progress throughout selected downloads and skipped redundant gallery setup.
+- Removed the post-save wait on proxy connections and showed percentages for fragmented video transfers.
+- Used Pinterest’s direct MP4 for normal downloads and the media picker, including regional pin URLs.

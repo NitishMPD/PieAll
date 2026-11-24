@@ -25,6 +25,11 @@ export function Jobs({
         {visible.map((job) => {
           const active = ["running", "cancelling"].includes(job.state);
           const failed = ["failed", "partial"].includes(job.state);
+          const total = Math.max(job.total, 1);
+          const progress =
+            job.total <= 1 && job.fraction == null && job.completed === 0
+              ? undefined
+              : Math.min(total, job.completed + (job.fraction ?? 0));
           return (
             <li key={job.id} className="job-toast">
               <span className="job-mark" aria-hidden="true">
@@ -65,7 +70,9 @@ export function Jobs({
                 <span>
                   {job.state === "partial"
                     ? "Completed with errors"
-                    : job.state}
+                    : active && progress !== undefined
+                      ? `${Math.floor((progress / total) * 100)}%`
+                      : job.state}
                 </span>
                 {active && (
                   <button
@@ -89,12 +96,8 @@ export function Jobs({
               {active && (
                 <progress
                   aria-label={`${job.title}, job ${job.id}: files processed`}
-                  max={job.total || 1}
-                  value={
-                    job.total === 1 && job.fraction == null
-                      ? undefined
-                      : job.completed + (job.fraction ?? 0)
-                  }
+                  max={total}
+                  value={progress}
                 />
               )}
               {!active && (job.has_report || job.report) && (

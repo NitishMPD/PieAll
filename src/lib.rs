@@ -16,4 +16,8 @@ pub mod shortcuts;
 #[cfg(feature = "legacy-ui")]
 pub mod updates;
 mod web_media;
+pub use web_media::{
+    media_thumbnail, scan as scan_media, scan_cancellable as scan_media_cancellable, single_video,
+    MediaItem, MediaSelection,
+};
 pub mod web_proxy;

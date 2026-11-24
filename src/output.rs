@@ -104,26 +104,34 @@ impl Staged {
         self.file.flush().map_err(|e| e.to_string())?;
         self.file.sync_all().map_err(|e| e.to_string())?;
         plain_path(parent)?;
-        for n in 0..10000 {
-            let suffix = if n == 0 {
-                String::new()
-            } else {
-                format!(" ({})", n + 1)
-            };
-            let dest = parent.join(format!("{base}{suffix}.{extension}"));
-            let published = crate::jobs::publish(|| match fs::hard_link(&self.path, &dest) {
-                Ok(()) => Ok(true),
-                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(false),
-                Err(e) => Err(format!(
-                    "Cannot publish output without replacing a file: {e}"
-                )),
-            })?;
-            if published {
-                return Ok(dest);
-            }
-        }
-        Err("Too many output name collisions.".into())
+        link_named(&self.path, parent, base, extension)
     }
+}
+pub(crate) fn link_named(
+    source: &Path,
+    parent: &Path,
+    base: &str,
+    extension: &str,
+) -> Result<PathBuf, String> {
+    for n in 0..10000 {
+        let suffix = if n == 0 {
+            String::new()
+        } else {
+            format!(" ({})", n + 1)
+        };
+        let dest = parent.join(format!("{base}{suffix}.{extension}"));
+        let published = crate::jobs::publish(|| match fs::hard_link(source, &dest) {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(false),
+            Err(e) => Err(format!(
+                "Cannot publish output without replacing a file: {e}"
+            )),
+        })?;
+        if published {
+            return Ok(dest);
+        }
+    }
+    Err("Too many output name collisions.".into())
 }
 fn is_dimensions(s: &str) -> bool {
     s.split_once('x').is_some_and(|(w, h)| {

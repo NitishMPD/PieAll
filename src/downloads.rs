@@ -57,6 +57,8 @@ impl Preferences {
 pub struct Settings {
     pub destination: PathBuf,
     pub preferences: Preferences,
+    #[serde(default)]
+    pub review_multiple: bool,
 }
 pub fn load(database: &Path, default_folder: &Path) -> Result<Settings, String> {
     let db = crate::engines::database(database)?;
@@ -71,6 +73,7 @@ pub fn load(database: &Path, default_folder: &Path) -> Result<Settings, String> 
         None => Settings {
             destination: default_folder.to_owned(),
             preferences: Preferences::default(),
+            review_multiple: false,
         },
     };
     settings.preferences.validate()?;
@@ -93,6 +96,14 @@ fn engine<'a>(engines: &'a Engines, name: &str) -> Result<&'a Engine, String> {
     engines
         .get(name)
         .ok_or_else(|| format!("Choose {name} in Tool engines first."))
+}
+fn is_manifest(url: &str) -> bool {
+    url::Url::parse(url).is_ok_and(|url| {
+        Path::new(url.path())
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "mpd" | "m3u8"))
+    })
 }
 fn arguments(
     id: &str,
@@ -136,7 +147,7 @@ fn arguments(
         "--fragment-retries",
         "3",
         "--concurrent-fragments",
-        "1",
+        "4",
         "--max-filesize",
         "2G",
         "--no-write-thumbnail",
@@ -146,11 +157,13 @@ fn arguments(
         "--newline",
         "--no-quiet",
         "--no-colors",
+        "--encoding",
+        "utf-8",
         "--progress",
         "--progress-delta",
         "0.25",
         "--progress-template",
-        "download:PIEALL_PROGRESS:%(progress.{status,downloaded_bytes,total_bytes})j",
+        "download:PIEALL_PROGRESS:%(progress.{status,downloaded_bytes,total_bytes,fragment_index,fragment_count})j",
         "--print",
         "after_move:PIEALL_RESULT:%(.{id,title,ext,filepath,width,height,vcodec,acodec})j",
         "--no-simulate",
@@ -203,7 +216,7 @@ fn arguments(
         }
         .into(),
     ]);
-    if let Some(deno) = engines.get("deno") {
+    if let Some(deno) = engines.get("deno").filter(|_| !is_manifest(url.as_str())) {
         args.extend([
             "--js-runtimes".into(),
             format!(
@@ -252,11 +265,16 @@ fn progress(line: &str) -> Option<(String, Option<f64>)> {
     let total = value["total_bytes"]
         .as_f64()
         .filter(|n| n.is_finite() && *n > 0.);
-    // Estimated totals can move backwards; show their bytes without a percentage.
+    let fragments = value["fragment_index"]
+        .as_u64()
+        .zip(value["fragment_count"].as_u64().filter(|count| *count > 0));
+    // Estimated byte totals can move backwards. Use fragment counts when available.
     let fraction = if value["status"] == "finished" {
         None
     } else {
-        total.map(|n| (bytes / n).clamp(0., 1.))
+        total
+            .map(|n| (bytes / n).clamp(0., 1.))
+            .or_else(|| fragments.map(|(done, count)| done.min(count) as f64 / count as f64))
     };
     let detail = if value["status"] == "finished" {
         "Stream downloaded; preparing file…".into()
@@ -269,7 +287,7 @@ fn progress(line: &str) -> Option<(String, Option<f64>)> {
     };
     Some((detail, fraction))
 }
-fn filename(title: &str, id: &str) -> String {
+pub(crate) fn filename(title: &str, id: &str) -> String {
     let clean = |s: &str, limit: usize| -> String {
         s.chars()
             .filter(|c| !c.is_control() && !"<>:\"/\\|?*".contains(*c))
@@ -291,9 +309,15 @@ fn filename(title: &str, id: &str) -> String {
         }
     )
 }
-pub fn run(id: &str, url: &str, settings: &Settings, engines: &Engines) -> Result<String, String> {
+pub fn run(
+    id: &str,
+    url: &str,
+    settings: &Settings,
+    engines: &Engines,
+    selected_media: Option<&[crate::MediaSelection]>,
+) -> Result<String, String> {
     if id == "download_video" {
-        return crate::web_media::run(url, settings, engines);
+        return crate::web_media::run(url, settings, engines, selected_media);
     }
     crate::web_proxy::web_url(url)?;
     let _folder_guard = output::lock_parent(&settings.destination)?;
@@ -329,7 +353,6 @@ pub fn run(id: &str, url: &str, settings: &Settings, engines: &Engines) -> Resul
         .ok_or("Downloader did not report a completed file. Nothing was published.")?;
     let dest = publish(work.path(), &metadata, &settings.destination)?;
     let ext = metadata["ext"].as_str().unwrap_or("unknown");
-    jobs::progress(1, 1, "Download saved");
     // The toast takes Open location from the first line's absolute path; only that line may start with "Saved ".
     Ok(format!(
         "Saved {}\r\nSource video: {}×{} · {} · Source audio: {}\r\nFormat: {ext} · Quality: {} · Audio preference: {}",
@@ -342,21 +365,31 @@ pub fn run(id: &str, url: &str, settings: &Settings, engines: &Engines) -> Resul
         settings.preferences.audio,
     ))
 }
+pub(crate) struct DownloadedVideo {
+    pub path: PathBuf,
+    pub title: Option<String>,
+}
+
 pub(crate) fn download_videos(
     url: &str,
     settings: &Settings,
     engines: &Engines,
     work: &Path,
     proxy: &str,
-) -> Result<Vec<PathBuf>, String> {
+) -> Result<Vec<DownloadedVideo>, String> {
+    jobs::progress(0, 1, "Checking video tools…");
     // Keep the configured postprocessors and JS runtime pinned for the entire
     // child execution, just as the separate audio path does.
     let _guards: Vec<_> = engines
         .iter()
-        .filter(|(name, _)| ["ffmpeg", "ffprobe", "deno"].contains(&name.as_str()))
+        .filter(|(name, _)| {
+            matches!(name.as_str(), "ffmpeg" | "ffprobe")
+                || name.as_str() == "deno" && !is_manifest(url)
+        })
         .map(|(_, engine)| engine.validated_file())
         .collect::<Result<_, _>>()?;
     let args = arguments("download_video", url, settings, engines, work, proxy)?;
+    jobs::progress(0, 1, "Connecting to the video source…");
     let report = crate::engine_process::run_complete(
         engine(engines, "yt-dlp")?,
         &args,
@@ -388,8 +421,11 @@ pub(crate) fn download_videos(
             return Err("Unexpected downloaded path. Nothing was published.".into());
         }
         output::plain_path(&path)?;
-        if !files.contains(&path) {
-            files.push(path);
+        if !files.iter().any(|file: &DownloadedVideo| file.path == path) {
+            files.push(DownloadedVideo {
+                path,
+                title: value["title"].as_str().map(str::to_owned),
+            });
         }
     }
     if files.is_empty() {
@@ -447,6 +483,15 @@ fn publish(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn older_download_settings_default_to_direct_downloads() {
+        let settings: Settings = serde_json::from_str(
+            r#"{"destination":"Downloads","preferences":{"quality":"best","container":"mkv","audio":"original"}}"#,
+        )
+        .unwrap();
+        assert!(!settings.review_multiple);
+    }
     #[test]
     fn publication_is_controlled_non_replacing_and_bounded() {
         let dir = tempfile::tempdir().unwrap();
@@ -481,11 +526,11 @@ mod tests {
         let mut s = load(&db, dir.path()).unwrap();
         assert_eq!(s.preferences.quality, "best");
         s.preferences.quality = "1080".into();
+        s.review_multiple = true;
         store(&db, &s).unwrap();
-        assert_eq!(
-            load(&db, Path::new("ignored")).unwrap().preferences.quality,
-            "1080"
-        );
+        let saved = load(&db, Path::new("ignored")).unwrap();
+        assert_eq!(saved.preferences.quality, "1080");
+        assert!(saved.review_multiple);
         s.preferences.container = "../evil".into();
         assert!(store(&db, &s).is_err());
     }
@@ -530,6 +575,7 @@ mod tests {
         let s = Settings {
             destination: "C:/Downloads".into(),
             preferences: Preferences::default(),
+            review_multiple: false,
         };
         let args = arguments(
             "download_video",
@@ -552,5 +598,11 @@ mod tests {
             assert!(args.iter().any(|a| a == value), "{value}");
         }
         assert_eq!(args.last().unwrap(), "https://example.com/watch?v=1");
+    }
+
+    #[test]
+    fn progress_reports_fragment_fraction_without_a_byte_total() {
+        let message = r#"PIEALL_PROGRESS:{"status":"downloading","downloaded_bytes":1024,"fragment_index":3,"fragment_count":12}"#;
+        assert_eq!(progress(message).unwrap().1, Some(0.25));
     }
 }

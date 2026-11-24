@@ -70,6 +70,15 @@ struct Session {
     progress: u8,
     jobs: BTreeMap<u64, Job>,
     engines: pieall::engines::Engines,
+    media_review: Option<MediaReview>,
+}
+
+#[derive(Clone, Serialize)]
+struct MediaReview {
+    id: u64,
+    url: String,
+    items: Vec<pieall::MediaItem>,
+    preferences: pieall::downloads::Preferences,
 }
 
 struct Job {
@@ -145,6 +154,7 @@ struct View {
     update: UpdateView,
     job: Option<JobView>,
     jobs: Vec<JobView>,
+    media_review: Option<MediaReview>,
 }
 
 impl Session {
@@ -272,6 +282,7 @@ impl Session {
             n => format!("{n} selected files"),
         };
         View {
+            media_review: self.media_review.clone(),
             job: self.jobs.values().next_back().map(|j| j.view.clone()),
             jobs: self.jobs.values().rev().map(|j| j.view.clone()).collect(),
             revision: self.revision,
@@ -457,12 +468,18 @@ fn engine_setup(cancel: &AtomicBool) -> Result<std::sync::MutexGuard<'static, ()
 
 #[tauri::command]
 fn session(window: WebviewWindow, app: AppHandle) -> Result<View> {
-    local(&window)?;
+    if window.label() != "media-review" {
+        local(&window)?;
+    }
     Ok(state(&app).lock().unwrap().view())
 }
 
 /// Hiding the dashboard abandons its open editor; otherwise every later invoke is refused as busy.
 fn close_window(app: &AppHandle, window: &tauri::Window) -> Result<()> {
+    if window.label() == "media-review" {
+        state(app).lock().unwrap().media_review = None;
+        notify(app);
+    }
     if window.label() == "dashboard" && state(app).lock().unwrap().editor.take().is_some() {
         notify(app);
     }
@@ -762,7 +779,7 @@ fn invoke_ring(app: &AppHandle, held: bool) -> Result<()> {
     }
     let lease = Lease::acquire(app, "capture")?;
     let source = unsafe { GetForegroundWindow() } as usize;
-    let own_window = ["dashboard", "ring", "toast"]
+    let own_window = ["dashboard", "ring", "toast", "media-review"]
         .iter()
         .filter_map(|label| app.get_webview_window(label))
         .any(|w| w.hwnd().is_ok_and(|h| h.0 as usize == source));
@@ -959,17 +976,25 @@ fn download_settings(window: WebviewWindow, app: AppHandle) -> Result<pieall::do
 async fn configure_downloads(
     window: WebviewWindow,
     app: AppHandle,
-    preferences: pieall::downloads::Preferences,
+    preferences: Option<pieall::downloads::Preferences>,
     choose_folder: bool,
+    review_multiple: Option<bool>,
 ) -> Result<pieall::downloads::Settings> {
     dashboard_only(&window)?;
-    preferences.validate()?;
+    if let Some(preferences) = &preferences {
+        preferences.validate()?;
+    }
     let lease = Lease::acquire(&app, "download setup")?;
     notify(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let _lease = lease;
         let mut settings = download_defaults(&app)?;
-        settings.preferences = preferences;
+        if let Some(preferences) = preferences {
+            settings.preferences = preferences;
+        }
+        if let Some(enabled) = review_multiple {
+            settings.review_multiple = enabled;
+        }
         if choose_folder {
             let Some(folder) = platform::pick_download_folder()? else {
                 return download_defaults(&app);
@@ -983,18 +1008,126 @@ async fn configure_downloads(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+fn dismiss_media_review(window: WebviewWindow, app: AppHandle, id: u64) -> Result<()> {
+    if window.label() != "media-review" {
+        return Err("Open the media picker first.".into());
+    }
+    let state = state(&app);
+    let mut session = state.lock().unwrap();
+    if session
+        .media_review
+        .as_ref()
+        .is_some_and(|review| review.id == id)
+    {
+        session.media_review = None;
+        drop(session);
+        window.hide().map_err(|error| error.to_string())?;
+        notify(&app);
+    }
+    Ok(())
+}
+#[tauri::command]
+async fn media_thumbnail(window: WebviewWindow, source: String, referer: String) -> Result<String> {
+    if window.label() != "media-review" {
+        dashboard_only(&window)?;
+    }
+    tauri::async_runtime::spawn_blocking(move || pieall::media_thumbnail(&source, &referer))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
+async fn scan_media(window: WebviewWindow, url: String) -> Result<Vec<pieall::MediaItem>> {
+    dashboard_only(&window)?;
+    tauri::async_runtime::spawn_blocking(move || pieall::scan_media(&url))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
 async fn download_url(
     window: WebviewWindow,
     app: AppHandle,
     id: String,
     url: String,
     preferences: pieall::downloads::Preferences,
+    selected_media: Option<Vec<pieall::MediaSelection>>,
 ) -> Result<()> {
     dashboard_only(&window)?;
+    start_download_url(window, app, id, url, preferences, selected_media).await
+}
+
+#[tauri::command]
+async fn confirm_media_review(
+    window: WebviewWindow,
+    app: AppHandle,
+    id: u64,
+    selected_media: Vec<pieall::MediaSelection>,
+) -> Result<()> {
+    if window.label() != "media-review" {
+        return Err("Open the media picker first.".into());
+    }
+    let review = {
+        let app_state = state(&app);
+        let mut session = app_state.lock().unwrap();
+        let review = session
+            .media_review
+            .as_ref()
+            .filter(|review| review.id == id)
+            .ok_or("This media selection has expired.")?;
+        if selected_media.is_empty()
+            || selected_media.len() > review.items.len()
+            || !selected_media
+                .iter()
+                .all(|selection| review.items.iter().any(|item| item.url == selection.url))
+        {
+            return Err("Choose media from this scan.".into());
+        }
+        session.media_review.take().unwrap()
+    };
+    let result = start_download_url(
+        window.clone(),
+        app.clone(),
+        "download_video".into(),
+        review.url.clone(),
+        review.preferences.clone(),
+        Some(selected_media),
+    )
+    .await;
+    if result.is_err() {
+        state(&app)
+            .lock()
+            .unwrap()
+            .media_review
+            .get_or_insert(review);
+    } else {
+        let review_complete = state(&app).lock().unwrap().media_review.is_none();
+        if review_complete {
+            let _ = window.hide();
+        }
+    }
+    notify(&app);
+    result
+}
+
+async fn start_download_url(
+    window: WebviewWindow,
+    app: AppHandle,
+    id: String,
+    url: String,
+    preferences: pieall::downloads::Preferences,
+    selected_media: Option<Vec<pieall::MediaSelection>>,
+) -> Result<()> {
     if !pieall::downloads::is_download(&id) {
         return Err("Unknown download action.".into());
     }
     preferences.validate()?;
+    if let Some(items) = &selected_media {
+        if id != "download_video" || items.is_empty() || items.len() > 100 {
+            return Err("Choose between 1 and 100 media items.".into());
+        }
+        for item in items {
+            item.validate()?;
+        }
+    }
     let url = pieall::web_proxy::web_url(&url)?.to_string();
     let revision = {
         let state = state(&app);
@@ -1011,7 +1144,7 @@ async fn download_url(
         ("container".into(), preferences.container),
         ("audio".into(), preferences.audio),
     ]);
-    run_action(window, app, id, revision, params).await
+    run_action_with_media(window, app, id, revision, params, selected_media).await
 }
 #[tauri::command]
 fn tool_engines(window: WebviewWindow, app: AppHandle) -> Result<Vec<EngineView>> {
@@ -1119,9 +1252,24 @@ async fn run_action(
     app: AppHandle,
     id: String,
     revision: u64,
-    mut params: BTreeMap<String, String>,
+    params: BTreeMap<String, String>,
 ) -> Result<()> {
     local(&window)?;
+    run_action_with_media(window, app, id, revision, params, None).await
+}
+
+async fn run_action_with_media(
+    window: WebviewWindow,
+    app: AppHandle,
+    id: String,
+    revision: u64,
+    mut params: BTreeMap<String, String>,
+    selected_media: Option<Vec<pieall::MediaSelection>>,
+) -> Result<()> {
+    let from_media_review = window.label() == "media-review";
+    if !from_media_review {
+        local(&window)?;
+    }
     if id == "setup_tools" {
         dashboard_only(&window)?;
     }
@@ -1241,7 +1389,16 @@ async fn run_action(
     notify(&app);
     if from_ring {
         hide_ring(&app, true)?;
-        // Most actions finish before a progress notice would be worth seeing.
+    } else if let Some((source, _)) = browser_source {
+        window.hide().map_err(|e| e.to_string())?;
+        unsafe {
+            SetForegroundWindow(source as _);
+        }
+    } else if !from_media_review {
+        show_dashboard(&app)?;
+    }
+    if from_ring || browser_source.is_some() || pieall::downloads::is_download(&id) {
+        // A slow setup or network response might not emit any progress yet.
         let slow = app.clone();
         let ticket = lease.ticket;
         std::thread::spawn(move || {
@@ -1250,18 +1407,13 @@ async fn run_action(
                 show_job_toast(&slow, ticket);
             }
         });
-    } else if let Some((source, _)) = browser_source {
-        window.hide().map_err(|e| e.to_string())?;
-        unsafe {
-            SetForegroundWindow(source as _);
-        }
-    } else {
-        show_dashboard(&app)?;
     }
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = guard;
         let mut input_lease = Some(lease);
-        Capturing::wait();
+        if input_action || browser_source.is_some() {
+            Capturing::wait();
+        }
         let started = std::time::Instant::now();
         let ticket = _guard.id;
         let progress = |p: pieall::jobs::Progress| {
@@ -1294,7 +1446,8 @@ async fn run_action(
                 show_job_toast(&app, ticket);
             }
         };
-        let result = (|| {
+        let mut media_review = None;
+        let mut result = (|| {
             if cancel.load(Ordering::SeqCst) {
                 return Err("Cancelled. Nothing was started.".into());
             }
@@ -1308,11 +1461,50 @@ async fn run_action(
             if !input_action {
                 drop(input_lease.take());
             }
+            if id == "download_video"
+                && selected_media.is_none()
+                && !pieall::single_video(&text)
+                && download_settings
+                    .as_ref()
+                    .is_some_and(|settings| settings.review_multiple)
+            {
+                progress(pieall::jobs::Progress {
+                    completed: 0,
+                    total: 1,
+                    item: "Scanning the page for media…".into(),
+                    fraction: None,
+                });
+                let items = pieall::scan_media_cancellable(&text, &cancel);
+                if cancel.load(Ordering::SeqCst) {
+                    return Err("Cancelled. Media scan stopped.".into());
+                }
+                if let Some(items) = items.ok().filter(|items| items.len() > 1) {
+                    media_review = Some(MediaReview {
+                        id: ticket,
+                        url: text,
+                        items,
+                        preferences: download_settings.as_ref().unwrap().preferences.clone(),
+                    });
+                    return Ok(String::new());
+                }
+                progress(pieall::jobs::Progress {
+                    completed: 0,
+                    total: 1,
+                    item: "Preparing the download…".into(),
+                    fraction: None,
+                });
+            }
             let mut engines = state(&app).lock().unwrap().engines.clone();
             let needs_engines = pieall::downloads::is_download(&id)
                 || actions::media_action(&id)
                 || id == "setup_tools";
             let setup = if needs_engines {
+                progress(pieall::jobs::Progress {
+                    completed: 0,
+                    total: 1,
+                    item: "Preparing tools…".into(),
+                    fraction: None,
+                });
                 Some(engine_setup(&cancel)?)
             } else {
                 None
@@ -1326,6 +1518,7 @@ async fn run_action(
                 &mut engines,
                 &cancel,
                 &progress,
+                selected_media.is_none() && !pieall::single_video(&text),
             )?;
             if needs_engines {
                 state(&app).lock().unwrap().engines = engines.clone();
@@ -1334,13 +1527,65 @@ async fn run_action(
             if id == "setup_tools" {
                 Ok("Tools ready. Video, audio and downloads are available.".into())
             } else if let Some(settings) = download_settings {
-                actions::execute_download(&id, &text, &settings, &engines, &cancel, progress)
+                actions::execute_download(
+                    &id,
+                    &text,
+                    &settings,
+                    &engines,
+                    selected_media,
+                    &cancel,
+                    progress,
+                )
             } else {
                 actions::execute_with_engines(
                     &id, &paths, &text, &params, &engines, &cancel, progress,
                 )
             }
         })();
+        if let Some(review) = media_review {
+            let app_state = state(&app);
+            let mut session = app_state.lock().unwrap();
+            if cancel.load(Ordering::SeqCst) {
+                result = Err("Cancelled. Media scan stopped.".into());
+            } else {
+                session.jobs.remove(&ticket);
+                let latest = session
+                    .media_review
+                    .as_ref()
+                    .is_none_or(|current| current.id < ticket);
+                if latest {
+                    session.media_review = Some(review);
+                    if session.ticket == ticket && session.revision == job_revision {
+                        session.status = "Choose which media to download.".into();
+                    }
+                }
+                drop(session);
+                if latest {
+                    let handle = app.clone();
+                    let _ = app.run_on_main_thread(move || {
+                        let current = state(&handle)
+                            .lock()
+                            .unwrap()
+                            .media_review
+                            .as_ref()
+                            .map(|review| review.id);
+                        if let Some(picker) = handle
+                            .get_webview_window("media-review")
+                            .filter(|_| current == Some(ticket))
+                        {
+                            let has_scan_notice = *TOAST_GATE.lock().unwrap() == Some(ticket);
+                            if has_scan_notice {
+                                hide_job_notice(&handle);
+                            }
+                            let _ = picker.show();
+                            let _ = picker.set_focus();
+                            notify(&handle);
+                        }
+                    });
+                }
+                return;
+            }
+        }
         {
             let s = state(&app);
             let mut s = s.lock().unwrap();
@@ -1838,8 +2083,18 @@ fn show_notice_on_main(
         detail = latest.detail.clone();
         job = Some(latest.clone());
     }
-    if tone == "busy" && current_job.is_some() && job.as_ref().map(|j| j.id) != *current_job {
-        return;
+    if let Some(current) =
+        current_job.filter(|id| tone == "busy" && job.as_ref().map(|j| j.id) != Some(*id))
+    {
+        if state(app)
+            .lock()
+            .unwrap()
+            .jobs
+            .get(&current)
+            .is_some_and(Job::running)
+        {
+            return;
+        }
     }
     let Some(window) = app.get_webview_window("toast") else {
         return;
@@ -2354,6 +2609,10 @@ pub fn run() {
             download_settings,
             configure_downloads,
             download_url,
+            scan_media,
+            media_thumbnail,
+            dismiss_media_review,
+            confirm_media_review,
             setup_tools
         ])
         .setup(|app| {

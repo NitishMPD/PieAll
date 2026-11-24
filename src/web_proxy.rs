@@ -135,9 +135,8 @@ impl Proxy {
                     let _ = socket.shutdown(Shutdown::Both);
                 }
             }
-            for worker in workers {
-                let _ = worker.join();
-            }
+            // The sockets are closed and the stop flag prevents new forwarding.
+            // OS DNS and connect calls may still be unwinding on their own threads.
         });
         Ok(Self {
             address,

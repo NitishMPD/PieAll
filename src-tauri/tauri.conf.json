@@ -37,6 +37,19 @@
         "skipTaskbar": true
       },
       {
+        "label": "media-review",
+        "title": "Choose media to download",
+        "url": "index.html?surface=media-review",
+        "width": 760,
+        "height": 620,
+        "minWidth": 420,
+        "minHeight": 340,
+        "visible": false,
+        "center": true,
+        "focus": false,
+        "skipTaskbar": true
+      },
+      {
         "label": "toast",
         "title": "PieAll notice",
         "url": "index.html?surface=toast",

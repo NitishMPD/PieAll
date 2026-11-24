@@ -32,6 +32,22 @@ Each media collection is limited to 100 attachments, 2 GiB of saved files and on
 
 Download media resolves lnkd.in share links through the per-job proxy and requires an HTTPS LinkedIn post destination. Public LinkedIn native players can list MP4 variants in their `data-sources` attribute. The collector saves the original MP4 from the highest advertised bitrate per player and retains ordinary HTML video sources as a fallback.
 
+Browser downloads can scan an explicit URL for publicly discoverable videos, images and GIFs before starting a download. The scan uses the bounded public HTML discovery path and does not run download engines. Selected items enter one existing media job with the same proxy, publication, cancellation and output limits. Download media without a scan retains extractor discovery. Playtester game pages use their structured trailer sources and full-size carousel screenshots, excluding related games, cover art and article media. A LinkedIn feed still requires a specific post link.
+
+The optional Ask which media to download setting starts a cancellable public-page scan from both the browser ring and Browser downloads. Two or more discovered items open a compact picker window before engine setup. A single item, an empty scan or an unavailable scan continues through normal extraction. Known single-video YouTube links go straight to yt-dlp, which supplies the title for the saved folder and video file. The review setting is off by default and applies to Download media.
+
+Media scans have a six-second network deadline across redirects and page reads. Discovery closes its proxy sockets without waiting for outstanding operating-system DNS or connect calls. After an automatic scan falls through to normal extraction, the progress notice shows download preparation.
+
+The media picker supports an optional filename for each selected attachment. Names are validated as single Windows filename components. The saved file keeps its actual extension, and name collisions receive numbered suffixes without overwriting other attachments.
+
+Confirmed media selections skip gallery-dl setup and discovery. Download notices show preparation, transfer and saving stages. Direct transfers report bytes as they arrive, and yt-dlp progress is forwarded from either output stream. A percentage uses byte totals or completed fragment counts when available. The downloader can fetch up to four fragments concurrently, and requested names are applied during publication after transfer. Completion is shown only after the worker returns its file report. Closing the proxy shuts down its sockets immediately without joining workers that are waiting on the operating system's DNS or connect calls.
+
+Reddit scans read the post’s public player and can recover the DASH stream from a Reddit CDN video thumbnail. The picker uses that thumbnail as the video preview and lists the post’s screenshots separately.
+
+Pinterest video pins with a public direct MP4 use it for both the picker and the normal download. The normal download tries this page discovery before invoking gallery-dl. The video thumbnail is a preview and unrelated pin-page images are excluded when the structured video metadata is available.
+
+Picker thumbnail requests load on demand through the public-address proxy with bounded time and size. Images and GIFs use the discovered image source, and videos use public poster metadata where available. LinkedIn excludes comment images and treats the structured metadata for a native video as information for its existing player. The browser Copy URL sequence uses the clipboard change to advance from Ctrl+C to Escape.
+
 gallery-dl is the fifth optional managed engine. Download media installs it automatically from the fixed `gdl-org/builds` Windows x64 release asset, using the existing bounded download, publisher SHA-256 verification, pinned executable records and serialized setup. The platform-named asset is renamed to `gallery-dl.exe` within its verified package. Audio-only and local media work do not require it. Existing engines and saved settings are preserved.
 
 URL discovery disables gallery-dl's printed lower-resolution alternatives. The parser also ignores legacy `| ` alternative lines rather than treating them as extra attachments or invalid source URLs. Primary URLs still pass public-URL validation; invalid extractor results identify the extractor response in their error. A fixture covers an original X image followed by its size alternatives and a second attachment.

@@ -43,7 +43,7 @@ export function Toast() {
   const job = notice.job;
   // Unknown for one item with no reported fraction: the bar then sweeps instead.
   const percent =
-    !job || (job.total === 1 && job.fraction == null)
+    !job || (job.total <= 1 && job.fraction == null && job.completed === 0)
       ? undefined
       : ((job.completed + (job.fraction ?? 0)) / Math.max(job.total, 1)) * 100;
   return (

@@ -16,6 +16,10 @@ Dia appears by name in Customize ring's app search and uses the existing browser
 
 The dashboard's URL guidance includes public LinkedIn posts and their lnkd.in share links.
 
+Browser downloads opens a modal after a manual media scan. An automatic review opens a compact, separate picker window. The picker shows a grid of thumbnails and video posters with readable titles or numbered labels. Every result starts selected. The All, Videos, Images and GIFs checkboxes select or deselect their group and show partial selections. The download button and selection count stay visible while the grid scrolls. Escape dismisses the picker.
+
+Each tile has a pencil icon beside its name. The icon opens an inline filename field. Enter or leaving the field applies the name. Escape discards the current edit, and clearing the field restores the default name.
+
 The browser ring's existing download slice now reads Download media, retaining its download icon, placement, stable action ID and keyboard behavior. The dashboard uses the same label, a Post, pin or media URL field, and Images, GIFs & video / Audio modes. Video controls explicitly say Video quality and Video container. Helper text explains opening the exact post/pin, original image/animation preservation, grouped output, the 100-file/2-GiB limit and public/dynamic-media restrictions. Quality/container settings apply to extracted video streams; direct media retains its original format.
 
 One job saves the collection in one uniquely named folder. The existing result and Open location action expose that folder, with file count, saved bytes, source and any fallback or partial-failure notes. Audio keeps its existing separate action. Tool setup includes gallery-dl in Browser downloads readiness, while manual engine paths remain in Advanced. Existing layout, neutral theme, labelled controls, focus states and job cancellation are retained. Source checks and the mechanical UI detector cover this copy-only interface change; native rendering and site downloads require manual acceptance. This supersedes the older Download video label below.

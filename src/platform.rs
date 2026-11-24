@@ -396,6 +396,7 @@ pub fn send_app_shortcut(
 ) -> Result<Option<String>, String> {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
     let sequence = crate::shortcuts::parse_keys(&action.keys)?;
+    let copy_url = action.id.ends_with(":copy-url") && action.keys == "Ctrl+L Ctrl+C Escape";
     let validate = || -> Result<(), String> {
         if unsafe { GetForegroundWindow() } as usize != source {
             return Err("Focus changed. No further shortcut keys were sent.".into());
@@ -439,8 +440,9 @@ pub fn send_app_shortcut(
             },
         },
     };
+    let mut clipboard_changed = true;
     for (index, chord) in sequence.iter().enumerate() {
-        if index != 0 {
+        if index != 0 && !(copy_url && index == 2) {
             std::thread::sleep(std::time::Duration::from_millis(70));
         }
         validate()?;
@@ -452,6 +454,8 @@ pub fn send_app_shortcut(
         if (1..=254).any(|key| unsafe { GetAsyncKeyState(key) } < 0) {
             return Err("Input changed. No further shortcut keys were sent.".into());
         }
+        let copying = copy_url && index == 1;
+        let before = copying.then(|| unsafe { GetClipboardSequenceNumber() });
         let sent = unsafe {
             SendInput(
                 inputs.len() as u32,
@@ -478,6 +482,28 @@ pub fn send_app_shortcut(
             }
             return Err("Windows blocked shortcut input. The target may be elevated.".into());
         }
+        if let Some(before) = before {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+            clipboard_changed = loop {
+                if unsafe { GetClipboardSequenceNumber() } != before {
+                    let mut owner = 0;
+                    unsafe { GetWindowThreadProcessId(GetClipboardOwner(), &mut owner) };
+                    if owner == pid {
+                        break true;
+                    }
+                }
+                if unsafe { GetForegroundWindow() } as usize != source {
+                    return Err("Focus changed. No further shortcut keys were sent.".into());
+                }
+                if std::time::Instant::now() >= deadline {
+                    break false;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            };
+        }
+    }
+    if !clipboard_changed {
+        return Err("The browser did not copy its address. Try again.".into());
     }
     Ok(None)
 }

@@ -1,0 +1,379 @@
+/* Preview-first media picker: shared by the dashboard dialog and the
+   compact media-review window. Neutral tokens only. Selectors that style
+   labels and inputs are scoped under .media-review so they win over the
+   Browser downloads form rules around the dialog. */
+.media-dialog {
+  width: min(860px, calc(100vw - 32px));
+  height: min(720px, calc(100vh - 48px));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
+  overflow: hidden;
+}
+.media-dialog[open] {
+  animation: media-dialog-in 0.18s ease-out;
+}
+.media-dialog::backdrop {
+  background: rgb(0 0 0 / 0.42);
+}
+@keyframes media-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+}
+
+.media-review {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.media-review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 14px 2px 20px;
+}
+.media-review-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.media-review-source {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.media-review-close {
+  flex-shrink: 0;
+  margin: -4px 0 0;
+  border-color: transparent;
+}
+
+.media-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.media-review .media-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--cream);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+}
+.media-filter:hover {
+  background: var(--hover);
+}
+.media-review .media-filter input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.media-filter:has(input:focus-visible) {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.media-filter input:focus-visible {
+  outline: none;
+}
+.media-filter-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.media-review-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 20px 18px;
+}
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 14px 10px;
+  align-items: start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.media-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.media-review .media-tile {
+  position: relative;
+  display: block;
+  cursor: pointer;
+  font-weight: 400;
+}
+/* Checkbox sits on a small plate so it reads on light and dark pictures. */
+.media-review .media-tile > input {
+  position: absolute;
+  z-index: 2;
+  top: 6px;
+  left: 6px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px rgb(0 0 0 / 0.38);
+}
+.media-tile > input:focus-visible {
+  outline: none;
+}
+.media-thumb {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--chip);
+  transition:
+    opacity 0.16s,
+    filter 0.16s;
+}
+.media-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.media-thumb[data-state="ready"] img {
+  opacity: 1;
+}
+.media-thumb-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--chip-ink);
+}
+.media-thumb[data-state="waiting"] .media-thumb-fallback {
+  animation: media-thumb-wait 1.4s ease-in-out infinite alternate;
+}
+@keyframes media-thumb-wait {
+  to {
+    opacity: 0.45;
+  }
+}
+.media-kind {
+  position: absolute;
+  z-index: 1;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.66);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+.media-kind svg {
+  fill: currentColor;
+}
+
+/* Name row: the file name and a quiet pencil share one line box, so every
+   tile's text starts on the same baseline under its picture. */
+.media-name-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  min-height: 24px;
+}
+.media-review .media-title {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  padding-top: 3px;
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.media-review button.media-rename-button {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.75;
+}
+.media-review button.media-rename-button:hover:not(:disabled),
+.media-review button.media-rename-button:focus-visible {
+  background: var(--hover);
+  color: var(--ink);
+  opacity: 1;
+}
+.media-review button.media-rename-button:focus-visible {
+  outline-offset: 1px;
+}
+/* A custom name marks its pencil so edited files are easy to spot. */
+.media-title[data-renamed="true"] + .media-rename-button {
+  color: var(--accent);
+  opacity: 1;
+}
+.media-review input.media-name-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  margin: 0;
+  padding: 2px 7px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+}
+.media-review input.media-name-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Selection reads from the picture: chosen tiles get a solid ring, others
+   step back so the download set is obvious at a glance. */
+.media-item[data-selected="true"] .media-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--accent);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.media-item[data-selected="false"] .media-thumb {
+  opacity: 0.45;
+  filter: grayscale(0.85);
+}
+.media-item[data-selected="false"] .media-title {
+  color: var(--muted);
+}
+.media-item[data-selected="false"]:hover .media-thumb {
+  opacity: 0.75;
+  filter: grayscale(0.3);
+}
+.media-tile:has(> input:focus-visible) .media-thumb {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.media-review-footer {
+  position: sticky;
+  bottom: 0;
+  padding: 10px 14px 12px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+.media-review-error {
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+.media-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.media-review-count {
+  flex: 1 1 180px;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.media-review-count strong {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.media-review-note {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Compact native window (?surface=media-review). */
+html[data-surface="media-review"],
+html[data-surface="media-review"] body {
+  overflow: hidden;
+}
+.media-review-window {
+  height: 100%;
+  background: var(--paper);
+}
+.media-review-window .media-review-header {
+  padding-top: 14px;
+}
+.media-review-empty {
+  margin: 0;
+  padding: 32px 22px;
+  color: var(--muted);
+}
+
+@media (max-width: 480px) {
+  .media-review-header,
+  .media-filters,
+  .media-review-body {
+    padding-inline: 16px;
+  }
+  .media-review-footer {
+    padding-inline: 16px;
+  }
+  .media-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  }
+  .media-review-actions > button {
+    flex: 1 1 auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .media-dialog[open],
+  .media-thumb[data-state="waiting"] .media-thumb-fallback {
+    animation: none;
+  }
+  .media-thumb,
+  .media-thumb img {
+    transition: none;
+  }
+}

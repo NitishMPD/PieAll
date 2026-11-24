@@ -1,7 +1,7 @@
 {
   "identifier": "local",
   "description": "Local PieAll surfaces receive native state changes only.",
-  "windows": ["dashboard", "ring", "toast"],
+  "windows": ["dashboard", "ring", "toast", "media-review"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",

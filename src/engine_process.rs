@@ -104,6 +104,7 @@ fn run_inner(
     let stdout = child.stdout.take().ok_or("Engine output unavailable")?;
     let stderr = child.stderr.take().ok_or("Engine errors unavailable")?;
     let (tx, rx) = std::sync::mpsc::sync_channel(64);
+    let error_progress = tx.clone();
     let out = std::thread::spawn(move || {
         let mut reader = std::io::BufReader::new(stdout);
         let mut result = String::new();
@@ -129,14 +130,21 @@ fn run_inner(
         (result, truncated)
     });
     let err = std::thread::spawn(move || {
-        let mut reader = stderr;
+        let mut reader = std::io::BufReader::new(stderr);
         let mut tail = Vec::new();
-        let mut chunk = [0u8; 4096];
+        let mut chunk = Vec::new();
         loop {
-            match reader.read(&mut chunk) {
+            chunk.clear();
+            match reader.by_ref().take(8192).read_until(b'\n', &mut chunk) {
                 Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    tail.extend_from_slice(&chunk[..n]);
+                Ok(_) => {
+                    if chunk.starts_with(b"PIEALL_PROGRESS:") {
+                        if let Ok(report) = std::str::from_utf8(&chunk) {
+                            let _ = error_progress.try_send(report.to_string());
+                        }
+                        continue;
+                    }
+                    tail.extend_from_slice(&chunk);
                     if tail.len() > 16384 {
                         tail.drain(..tail.len() - 16384);
                     }

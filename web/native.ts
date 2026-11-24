@@ -50,6 +50,12 @@ export interface CustomApp {
 export interface Session {
   job?: Job | null;
   jobs?: Job[];
+  media_review?: {
+    id: number;
+    url: string;
+    items: MediaItem[];
+    preferences: DownloadPreferences;
+  } | null;
   revision: number;
   target: string;
   names: string[];
@@ -81,18 +87,29 @@ export const native = {
   setupTools: () => invoke<void>("setup_tools"),
   downloadSettings: () => invoke<DownloadSettings>("download_settings"),
   configureDownloads: (
-    preferences: DownloadPreferences,
+    preferences: DownloadPreferences | null,
     chooseFolder = false,
+    reviewMultiple: boolean | null = null,
   ) =>
     invoke<DownloadSettings>("configure_downloads", {
       preferences,
       chooseFolder,
+      reviewMultiple,
     }),
   downloadUrl: (
     id: "download_video" | "download_audio",
     url: string,
     preferences: DownloadPreferences,
-  ) => invoke<void>("download_url", { id, url, preferences }),
+    selectedMedia: MediaSelection[] | null = null,
+  ) => invoke<void>("download_url", { id, url, preferences, selectedMedia }),
+  scanMedia: (url: string) => invoke<MediaItem[]>("scan_media", { url }),
+  dismissMediaReview: (id: number) =>
+    invoke<void>("dismiss_media_review", { id }),
+  confirmMediaReview: (id: number, selectedMedia: MediaSelection[]) =>
+    invoke<void>("confirm_media_review", { id, selectedMedia }),
+  /** A data URL thumbnail fetched natively; the web view never loads remote media. */
+  mediaThumbnail: (source: string, referer: string) =>
+    invoke<string>("media_thumbnail", { source, referer }),
   engines: () => invoke<Engine[]>("tool_engines"),
   configureEngine: (name: string, remove = false) =>
     invoke<void>("configure_engine", { name, remove }),
@@ -150,6 +167,7 @@ export interface DownloadPreferences {
 export interface DownloadSettings {
   destination: string;
   preferences: DownloadPreferences;
+  review_multiple: boolean;
 }
 export interface Toast {
   id: number;
@@ -171,3 +189,12 @@ export interface Job {
   state:
     "running" | "cancelling" | "complete" | "partial" | "failed" | "cancelled";
 }
+export type MediaItem = {
+  url: string;
+  kind: "video" | "image" | "gif";
+  name: string | null;
+  /** Poster or preview source for the native thumbnail helper. */
+  preview: string | null;
+};
+
+export type MediaSelection = { url: string; name: string | null };

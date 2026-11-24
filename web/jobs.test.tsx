@@ -38,6 +38,7 @@ describe("parallel job controls", () => {
     expect(html).toContain('aria-label="Cancel Convert video, job 2"');
     expect(html).toMatch(/<progress[^>]*job 1[^>]*><\/progress>/);
     expect(html).toMatch(/<progress[^>]*job 2[^>]*value="0.5"/);
+    expect(html).toContain(">50%</span>");
     expect(html).toMatch(/aria-label="Cancel Download video, job 3" disabled/);
   });
 

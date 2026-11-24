@@ -334,6 +334,7 @@ pub fn ensure(
     engines: &mut Engines,
     cancel: &AtomicBool,
     progress: &impl Fn(Progress),
+    discover_gallery: bool,
 ) -> Result<(), String> {
     let download = crate::downloads::is_download(id);
     if !download && !crate::actions::media_action(id) && id != "setup_tools" {
@@ -360,7 +361,10 @@ pub fn ensure(
     }
     let mut staged = Vec::new();
     for package in [&MEDIA, &DOWNLOADER, &RUNTIME, &GALLERY] {
-        if package.repo == GALLERY.repo && id != "download_video" && id != "setup_tools" {
+        if package.repo == GALLERY.repo
+            && id != "setup_tools"
+            && !(id == "download_video" && discover_gallery)
+        {
             continue;
         }
         if package.repo != MEDIA.repo && !download && id != "setup_tools" {
@@ -376,7 +380,9 @@ pub fn ensure(
         staged.push(stage);
     }
     check(cancel)?;
-    crate::engines::store_all(database, &next)?;
+    if !staged.is_empty() || engines.len() != next.len() {
+        crate::engines::store_all(database, &next)?;
+    }
     for stage in staged {
         let _ = stage.keep();
     }
@@ -446,6 +452,7 @@ mod tests {
             &mut engines,
             &AtomicBool::new(false),
             &|_| {},
+            true,
         )
         .unwrap();
         assert_eq!(engines["ffmpeg"].path, original);
@@ -458,6 +465,17 @@ mod tests {
             crate::engines::NAMES.len()
         );
         assert_eq!(fs::read_dir(dir.path().join("tools")).unwrap().count(), 0);
+        engines.remove("gallery-dl");
+        ensure(
+            &database,
+            "download_video",
+            &mut engines,
+            &AtomicBool::new(false),
+            &|_| {},
+            false,
+        )
+        .unwrap();
+        assert!(!engines.contains_key("gallery-dl"));
     }
     #[test]
     fn refuses_zip_escape_and_cancelled_setup_without_records() {
@@ -476,7 +494,8 @@ mod tests {
             "setup_tools",
             &mut engines,
             &AtomicBool::new(true),
-            &|_| {}
+            &|_| {},
+            true,
         )
         .is_err());
         assert!(engines.is_empty());

@@ -436,9 +436,6 @@ pub fn media_action(id: &str) -> bool {
 }
 pub fn missing_engine(id: &str, engines: &crate::engines::Engines) -> Option<&'static str> {
     if crate::downloads::is_download(id) {
-        if id == "download_video" && !engines.contains_key("gallery-dl") {
-            return Some("Set up browser download tools, including gallery-dl, in Tool setup.");
-        }
         return ["yt-dlp", "ffmpeg", "ffprobe"]
             .iter()
             .find(|name| !engines.contains_key(**name))
@@ -513,6 +510,8 @@ struct Request {
     engines: crate::engines::Engines,
     #[serde(default)]
     download: Option<crate::downloads::Settings>,
+    #[serde(default)]
+    selected_media: Option<Vec<crate::MediaSelection>>,
 }
 pub fn execute(
     id: &str,
@@ -563,6 +562,7 @@ pub fn execute_with_engines(
         params: params.clone(),
         engines: engines.clone(),
         download: None,
+        selected_media: None,
     };
     // Launchers start apps that must outlive the call: the sandboxed worker's job
     // kills every descendant when it exits, and a child holding the worker's pipes
@@ -577,6 +577,7 @@ pub fn execute_download(
     url: &str,
     settings: &crate::downloads::Settings,
     engines: &crate::engines::Engines,
+    selected_media: Option<Vec<crate::MediaSelection>>,
     cancelled: &std::sync::atomic::AtomicBool,
     progress: impl FnMut(crate::jobs::Progress),
 ) -> Result<String, String> {
@@ -587,6 +588,7 @@ pub fn execute_download(
         params: BTreeMap::new(),
         engines: engines.clone(),
         download: Some(settings.clone()),
+        selected_media,
     };
     execute_request(request, cancelled, progress)
 }
@@ -689,6 +691,10 @@ fn execute_request(
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     };
+    // The worker is finished. Close any inherited pipes held by its descendants
+    // before joining the readers.
+    #[cfg(windows)]
+    containment.terminate();
     let _ = progress_reader.join();
     for update in updates.try_iter() {
         progress(update);
@@ -783,6 +789,7 @@ fn run(r: &Request) -> Result<String, String> {
                     .as_ref()
                     .ok_or("Open Browser tools to set up downloads.")?,
                 &r.engines,
+                r.selected_media.as_deref(),
             );
         }
         return text_action(&r.id, &r.text);

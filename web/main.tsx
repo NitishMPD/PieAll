@@ -23,6 +23,7 @@ import { Engines } from "./Engines";
 import { Jobs } from "./Jobs";
 import { ReleaseNotes } from "./ReleaseNotes";
 import { BrowserTools } from "./BrowserTools";
+import { MediaReviewWindow } from "./MediaReviewWindow";
 import { TRIGGER_KEYS, usePrefs } from "./prefs";
 import {
   fieldVisible,
@@ -42,7 +43,10 @@ const surface =
 const standalone = surface === "ring";
 if (typeof document !== "undefined")
   document.documentElement.dataset.surface =
-    surface === "ring" || surface === "toast" || surface === "splash"
+    surface === "ring" ||
+    surface === "toast" ||
+    surface === "splash" ||
+    surface === "media-review"
       ? surface
       : "dashboard";
 
@@ -53,6 +57,7 @@ export function App({
 }) {
   if (surface === "toast") return <Toast />;
   if (surface === "splash") return <Splash />;
+  if (surface === "media-review") return <MediaReviewWindow />;
   return <Shell initialSession={initialSession} />;
 }
 
@@ -217,7 +222,7 @@ function Shell({ initialSession }: { initialSession: Session | null }) {
         document.getElementById("action-search")?.focus();
         return;
       }
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       if (session?.editor) {
         event.preventDefault();
         void perform(() => native.prepare(null, session.revision));
